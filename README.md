@@ -1,3 +1,7 @@
+# lzhen's dotfiles
+
+Well, Unfortunately, i don't like bash. Migrating the install script into zsh configs
+
 # Mathias’s dotfiles
 
 ![Screenshot of my shell prompt](https://i.imgur.com/EkEtphC.png)
