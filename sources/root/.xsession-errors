@@ -1,0 +1,575 @@
+Xsession: X session started for lz at Tue 28 Feb 2023 10:33:28 PM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting SHELL=/bin/bash
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting SHLVL=0
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting DEBUGINFOD_URLS=https://debuginfod.ubuntu.com 
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:/var/lib/snapd/desktop
+dbus-update-activation-environment: setting PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+QIODevice::read (QFile, "/home/lz/.config/kdedefaults/package"): device not open
+kf.service.services: The desktop entry file "/usr/share/applications/kcm_krunnersettings.desktop" has Type= "Application" but no Exec line
+kf.service.sycoca: Invalid Service :  "/usr/share/applications/kcm_krunnersettings.desktop"
+QDBusConnection: error: could not send signal to service "" path "//home/lz/.config/kdedefaults/kdeglobals" interface "org.kde.kconfig.notify" member "ConfigChanged": Invalid object path: //home/lz/.config/kdedefaults/kdeglobals
+QDBusConnection: error: could not send signal to service "" path "//home/lz/.config/kdedefaults/kdeglobals" interface "org.kde.kconfig.notify" member "ConfigChanged": Invalid object path: //home/lz/.config/kdedefaults/kdeglobals
+QDBusConnection: error: could not send signal to service "" path "//home/lz/.config/kdedefaults/kdeglobals" interface "org.kde.kconfig.notify" member "ConfigChanged": Invalid object path: //home/lz/.config/kdedefaults/kdeglobals
+QDBusConnection: error: could not send signal to service "" path "//home/lz/.config/kdedefaults/kcminputrc" interface "org.kde.kconfig.notify" member "ConfigChanged": Invalid object path: //home/lz/.config/kdedefaults/kcminputrc
+QDBusConnection: error: could not send signal to service "" path "//home/lz/.config/kdedefaults/kwinrc" interface "org.kde.kconfig.notify" member "ConfigChanged": Invalid object path: //home/lz/.config/kdedefaults/kwinrc
+QPixmap: QGuiApplication must be created before calling defaultDepth().
+QPixmap: QGuiApplication must be created before calling defaultDepth().
+Xsession: X session started for lz at Tue 28 Feb 2023 10:52:04 PM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting SHELL=/bin/bash
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting SHLVL=0
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting DEBUGINFOD_URLS=https://debuginfod.ubuntu.com 
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:/var/lib/snapd/desktop
+dbus-update-activation-environment: setting PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+Xsession: X session started for lz at Tue 28 Feb 2023 11:35:52 PM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting SHELL=/bin/bash
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man:
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting SHLVL=0
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting DEBUGINFOD_URLS=https://debuginfod.ubuntu.com 
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:/var/lib/snapd/desktop
+dbus-update-activation-environment: setting PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+Xsession: X session started for lz at Wed Mar  1 08:16:21 AM +08 2023
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting SHELL=/bin/bash
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting HISTCONTROL=ignoreboth
+dbus-update-activation-environment: setting HISTSIZE=32768
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting NODE_REPL_HISTORY_SIZE=32768
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting GPG_TTY=not a tty
+dbus-update-activation-environment: setting EDITOR=vim
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting LANG=en_US.UTF-8
+dbus-update-activation-environment: setting LS_COLORS=no=00:fi=00:di=01;31:ln=01;36:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arj=01;31:*.taz=01;31:*.lzh=01;31:*.zip=01;31:*.z=01;31:*.Z=01;31:*.gz=01;31:*.bz2=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.jpg=01;35:*.jpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.avi=01;35:*.fli=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.ogg=01;35:*.mp3=01;35:*.wav=01;35:
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting BASH_SILENCE_DEPRECATION_WARNING=1
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting TERM=xterm-256color
+dbus-update-activation-environment: setting LESS_TERMCAP_md=[38;5;136m
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting PYTHONIOENCODING=UTF-8
+dbus-update-activation-environment: setting MANPAGER=less -X
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting SHLVL=0
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting PS2=\[[38;5;136m\]→ \[(B[m\]
+dbus-update-activation-environment: setting PS1=\[\033]0;\W\007\]\[[1m\]\n\[[38;5;166m\]\u\[[97m\] at \[[38;5;136m\]\h\[[97m\] in \[[38;5;64m\]\w$(prompt_git "\[[97m\] on \[[38;5;61m\]" "\[[38;5;33m\]")\n\[[97m\]$ \[(B[m\]
+dbus-update-activation-environment: setting DEBUGINFOD_URLS=https://debuginfod.ubuntu.com 
+dbus-update-activation-environment: setting LC_ALL=en_US.UTF-8
+dbus-update-activation-environment: setting NODE_REPL_HISTORY=/home/lz/.node_history
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share:/var/lib/snapd/desktop
+dbus-update-activation-environment: setting PATH=/home/lz/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting HISTFILESIZE=32768
+dbus-update-activation-environment: setting HSA_OVERRIDE_GFX_VERSION=10.3.0
+dbus-update-activation-environment: setting NODE_REPL_MODE=sloppy
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+org.kde.plasma.libkworkspace: Skipping syncing of environment variable  "LESS_TERMCAP_md" as value contains unsupported characters
+org.kde.plasma.libkworkspace: Skipping syncing of environment variable  "PS1" as value contains unsupported characters
+org.kde.plasma.libkworkspace: Skipping syncing of environment variable  "PS2" as value contains unsupported characters
+org.kde.plasma.libkworkspace: Skipping syncing of environment variable  "LESS_TERMCAP_md" as value contains unsupported characters
+org.kde.plasma.libkworkspace: Skipping syncing of environment variable  "PS1" as value contains unsupported characters
+org.kde.plasma.libkworkspace: Skipping syncing of environment variable  "PS2" as value contains unsupported characters
+Xsession: X session started for lz at Wed 01 Mar 2023 08:29:44 AM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+kf.service.services: The desktop entry file "/usr/share/applications/kcm_krunnersettings.desktop" has Type= "Application" but no Exec line
+kf.service.sycoca: Invalid Service :  "/usr/share/applications/kcm_krunnersettings.desktop"
+kdeinit5_wrapper: Warning: connect(/run/user/1000/kdeinit5__0) failed: : No such file or directory
+Error: Can not contact kdeinit5!
+org.kde.startup: "kdeinit5_shutdown" () exited with code 255
+startkde: Starting up...
+startkde: Shutting down...
+startkde: Done.
+Xsession: X session started for lz at Wed 01 Mar 2023 09:49:35 AM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting PAM_KWALLET5_LOGIN=/run/user/1000/kwallet5.socket
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session2
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+Xsession: X session started for lz at Wed 01 Mar 2023 10:40:59 AM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+Xsession: X session started for lz at Wed 01 Mar 2023 10:46:57 AM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+kdeinit5_wrapper: Warning: connect(/run/user/1000/kdeinit5__0) failed: : No such file or directory
+Error: Can not contact kdeinit5!
+org.kde.startup: "kdeinit5_shutdown" () exited with code 255
+startkde: Starting up...
+startkde: Shutting down...
+startkde: Done.
+Xsession: X session started for lz at Wed 01 Mar 2023 10:55:54 AM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting PAM_KWALLET5_LOGIN=/run/user/1000/kwallet5.socket
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/usr/local/cuda/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session2
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+Xsession: X session started for lz at Wed 01 Mar 2023 10:57:36 PM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/usr/local/cuda/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+Xsession: X session started for lz at Sat 04 Mar 2023 04:36:49 PM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/usr/local/cuda/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+kdeinit5_wrapper: Warning: connect(/run/user/1000/kdeinit5__0) failed: : No such file or directory
+Error: Can not contact kdeinit5!
+org.kde.startup: "kdeinit5_shutdown" () exited with code 255
+startkde: Starting up...
+startkde: Shutting down...
+startkde: Done.
+Xsession: X session started for lz at Mon 06 Mar 2023 12:35:54 PM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting PAM_KWALLET5_LOGIN=/run/user/1000/kwallet5.socket
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/usr/local/cuda/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session2
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+kdeinit5_wrapper: Warning: connect(/run/user/1000/kdeinit5__0) failed: : No such file or directory
+Error: Can not contact kdeinit5!
+org.kde.startup: "kdeinit5_shutdown" () exited with code 255
+startkde: Starting up...
+startkde: Shutting down...
+startkde: Done.
+Xsession: X session started for lz at Sat 11 Mar 2023 03:33:47 PM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/usr/local/cuda/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment
+Xsession: X session started for lz at Mon 13 Mar 2023 05:05:13 PM +08
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+localuser:lz being added to access control list
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting LANGUAGE=en_SG:en
+dbus-update-activation-environment: setting USER=lz
+dbus-update-activation-environment: setting XDG_SESSION_TYPE=x11
+dbus-update-activation-environment: setting HOME=/home/lz
+dbus-update-activation-environment: setting DESKTOP_SESSION=plasma
+dbus-update-activation-environment: setting XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+dbus-update-activation-environment: setting LOGNAME=lz
+dbus-update-activation-environment: setting XDG_SESSION_CLASS=user
+dbus-update-activation-environment: setting PATH=/usr/local/cuda/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+dbus-update-activation-environment: setting XDG_RUNTIME_DIR=/run/user/1000
+dbus-update-activation-environment: setting XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session0
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting LANG=en_SG.UTF-8
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=KDE
+dbus-update-activation-environment: setting XAUTHORITY=/home/lz/.Xauthority
+dbus-update-activation-environment: setting XDG_SESSION_DESKTOP=KDE
+dbus-update-activation-environment: setting SHELL=/usr/bin/zsh
+dbus-update-activation-environment: setting PWD=/home/lz
+dbus-update-activation-environment: setting SHLVL=1
+dbus-update-activation-environment: setting OLDPWD=/home/lz
+dbus-update-activation-environment: setting HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+dbus-update-activation-environment: setting HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+dbus-update-activation-environment: setting HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+dbus-update-activation-environment: setting MANPATH=/home/linuxbrew/.linuxbrew/share/man::
+dbus-update-activation-environment: setting INFOPATH=/home/linuxbrew/.linuxbrew/share/info:
+dbus-update-activation-environment: setting XDG_DATA_DIRS=/usr/share/plasma:/home/lz/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+dbus-update-activation-environment: setting XDG_CONFIG_DIRS=/etc/xdg/xdg-plasma:/etc/xdg:/usr/share/kubuntu-default-settings/kf5-settings
+dbus-update-activation-environment: setting IM_CONFIG_PHASE=1
+dbus-update-activation-environment: setting GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+dbus-update-activation-environment: setting QT_ACCESSIBILITY=1
+dbus-update-activation-environment: setting _=/usr/bin/dbus-update-activation-environment

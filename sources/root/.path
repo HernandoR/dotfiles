@@ -1,0 +1,25 @@
+# User-defined paths
+
+# PATH="$PATH:~/micromamba/"
+
+# export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}
+
+path_list=(
+"$HOME/bin"
+"$HOME/.local/bin"
+"/usr/local/cuda/bin"
+# jetbrains
+"$HOME/.local/share/JetBrains/Toolbox/scripts"
+"$HOME/mambaforge/bin"
+)
+
+
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+
+for path_v in "${path_list[@]}"; do
+    if [ -d "$path_v" ]; then
+        PATH="$path_v:$PATH"
+    fi
+done
+
