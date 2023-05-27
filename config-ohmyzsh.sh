@@ -4,9 +4,16 @@ then
     echo "zsh could not be found"
     echo "installing zsh"
     sudo apt -y install zsh
+    echo "zsh installed please run this script again"
+    exit 1
 fi
 
 # chsh -s /usr/bin/zsh
+
+if [ ! -d "./sources" ]; then
+    echo "please excute this script in the dotfiles directory"
+    exit 1
+fi
 
 # check if the hostmachine can curl to github
 isInChina=$(curl -Is https://github.com | head -n 1 | grep "200 OK" | grep "China")
