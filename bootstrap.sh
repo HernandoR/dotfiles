@@ -53,13 +53,18 @@ backup_dotfiles() {
     mkdir -p "$backup_dir"
 
     # Perform the backup using rsync
-	rsync --exclude ".git/" \
+	rsync --exclude ".git*" \
 		--exclude ".DS_Store" \
 		--exclude ".osx" \
 		--exclude "bootstrap.sh" \
 		--exclude "README.md" \
 		--exclude "LICENSE-MIT.txt" \
-		-avh --no-perms "$source_dir" "$backup_dir"
+        --exclude ".z" \
+        --exclude ".zcompdump*" \
+        --exclude "*history*" \
+        --include ".vim/" \
+        --exclude "*/" \
+		-avuh --no-perms "$source_dir" "$backup_dir"
 
     echo "Dotfiles backup complete!"
 }
@@ -70,16 +75,20 @@ restore_dotfiles() {
     backup_dir="$1"
     restore_dir="$2"
 
-    backup_dotfiles "$backup_dir" "$backup_dir.bkp"
+    backup_dotfiles "$restore_dir" "$restore_dir.bkp"
 
     # Perform the restore using rsync
-	rsync --exclude ".git/" \
+	rsync --exclude ".git*" \
 		--exclude ".DS_Store" \
 		--exclude ".osx" \
 		--exclude "bootstrap.sh" \
 		--exclude "README.md" \
 		--exclude "LICENSE-MIT.txt" \
-        --exclude "*cache*" \
+        --exclude ".z" \
+        --exclude ".zcompdump*" \
+        --exclude "*history*" \
+        --include ".vim/" \
+        --exclude "*/" \
 		-avh --no-perms "$backup_dir" "$restore_dir"
 
     echo "Dotfiles restore complete!"
@@ -115,7 +124,7 @@ do_backup() {
     echo "Performing backup..."
     # Add backup logic here
     pre_process;
-    backup_dotfiles $HOME/ ./sources/root ;
+    backup_dotfiles $HOME/ ./sources/root/ ;
     post_process;
 }
 
