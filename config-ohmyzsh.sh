@@ -39,6 +39,7 @@ if [ -d ~/.oh-my-zsh ]; then
 else
     echo "oh-my-zsh is not installed"
     echo "installing oh-my-zsh"
+    alias exit=return
     if $isInChina; then
         echo "installing oh-my-zsh from gitee"
         sh -c "$(curl -fsSL https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh)"
@@ -46,6 +47,7 @@ else
         echo "installing oh-my-zsh from github"
         sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
     fi
+    unalias exit
 fi
 
 
@@ -55,25 +57,25 @@ echo "installing powerlevel10k and zsh-autosuggestions and zsh-syntax-highlighti
 if $isInChina; then
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from gitee"
     git clone --depth=1 https://gitee.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
-    git clone https://gitee.com/githubClone/zsh-autosuggestions.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-    git clone https://gitee.com/yuxiaoxi/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+    git clone --depth=1 https://gitee.com/githubClone/zsh-autosuggestions.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+    git clone --depth=1 https://gitee.com/yuxiaoxi/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 else
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from github"
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
-    git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 
-    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+    git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 
+    git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 
 fi
 
 # copy the config file
 echo "copying config"
-mv ~/.zshrc ~/.zshrc.bkp
-cp $DotFilesDir/.zshrc ~/.zshrc
+cp $DotFilesDir/source/root/.zshrc ~/.zshrc
+
 
 if ${setp10k:-true}; then
     echo "copying p10k config"
     mv ~/.p10k.zsh ~/.p10k.zsh.bkp
-    cp $DotFilesDir/zsh_plugins/.p10k.zsh ~/.p10k.zsh
+    cp $DotFilesDir/source/root/.p10k.zsh ~/.p10k.zsh
     # install powerline fonts
     echo "PLZ set font to fira powerline in terminal"
 fi
