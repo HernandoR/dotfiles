@@ -53,10 +53,10 @@ function pre_process() {
 backup_dotfiles() {
     # Accept source directory and backup directory as parameters
     source_dir="$1"
-    backup_dir="$2"
+    dest_dir="$2"
 
     # Ensure the backup directory exists
-    mkdir -p "$backup_dir"
+    mkdir -p "$dest_dir"
 
     # Perform the backup using rsync
 	rsync --exclude ".git*" \
@@ -70,7 +70,7 @@ backup_dotfiles() {
         --exclude "*history*" \
         --include ".vim/" \
         --exclude "*/" \
-		-avuh --no-perms "$source_dir" "$backup_dir"
+		-avuh --no-perms "$source_dir" "$dest_dir"
 
     echo "Dotfiles backup complete!"
 }
@@ -162,6 +162,10 @@ post_process(){
 
 }
 
+# function for help 
+usage(){
+    echo "havent implement yet"
+}
 
 
 #------------------------------------------------------------------------------

@@ -13,9 +13,9 @@ path_list=(
 "$HOME/mambaforge/bin"
 )
 
-
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
+if [ -d "/home/linuxbrew/.linuxbrew/bin" ]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
 
 for path_v in "${path_list[@]}"; do
     if [ -d "$path_v" ]; then

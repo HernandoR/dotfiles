@@ -1,1 +1,1 @@
-./restore_and_backup.sh -hq
+./restore_and_backup.sh restore
