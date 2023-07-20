@@ -68,7 +68,8 @@ backup_dotfiles() {
         --exclude ".z" \
         --exclude ".zcompdump*" \
         --exclude "*history*" \
-        --include ".vim/" \
+        --include ".vim/*" \
+		--include ".tmux*" \
         --exclude "*/" \
 		-avuh --no-perms "$source_dir" "$dest_dir"
 
