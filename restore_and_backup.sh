@@ -16,7 +16,7 @@ declare -g dry_run=false
 declare -g DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 
-declare -g rsync_default_options="avh"
+declare -g rsync_default_options="avhC"
 
 #------------------------------------------------------------------------------
 
@@ -50,7 +50,6 @@ function pre_process() {
 	fi
 }
 
-
 # Function to back up dotfiles using rsync
 backup_dotfiles() {
     # Accept source directory and backup directory as parameters
@@ -60,25 +59,42 @@ backup_dotfiles() {
     # Ensure the backup directory exists
     mkdir -p "$dest_dir"
 
+    echo $ignore_single_file_cmd
+
     # Perform the backup using rsync
+    
 	rsync \
-        --include "/.*" \
-        --include ".vim/*" \
-        --include ".tmux/*" \
-        --exclude ".git*" \
-        --exclude ".git/" \
-		--exclude ".DS_Store" \
-		--exclude ".osx" \
-        --exclude ".z" \
-        --exclude ".zcompdump*" \
-        --exclude ".cache/" \
-        --exclude "*history*" \
-        --exclude "*/" \
-        --exclude "*" \
+        -f -_".vim/*/" \
+        -f +_".tmux/*/" \
+        -f -_"*/" \
+        -f -_".git*" \
+        -f -_".git" \
+        -f -_".gitignore" \
+        -f -_".gitmodules" \
+        -f -_".DS_Store" \
+        -f -_".osx" \
+        -f -_".gtkrc*" \
+        -f -_".*creds" \
+        -f -_"bootstrap.sh" \
+        -f -_"README.md" \
+        -f -_"LICENSE-MIT.txt" \
+        -f -_".zcompdump*" \
+        -f -_".*pre-oh-my-zsh" \
+        -f -_"*history*" \
+        -f -_".*hst" \
+        -f -_".*hsts" \
+        -f -_"*.bkp" \
+        -f -_".z" \
+        -f -_".zcompdump" \
+        -f -_".sudo_as_admin_successful" \
+        -f -_".viminfo" \
+        -f -_".Xauthority" \
+        -f -_".xsession-errors" \
+        -f -_".nvidia-settings-rc" \
 		-$rsync_default_options \
         --update --no-perms \
         "$source_dir" "$dest_dir"
-
+    echo $rsync_cmd
     echo "Dotfiles backup complete!"
 }
 
@@ -91,18 +107,34 @@ restore_dotfiles() {
     backup_dotfiles "$restore_dir" "./bkp/$restore_dir.bkp"
 
     # Perform the restore using rsync
-	rsync --exclude ".git*" \
-		--exclude ".DS_Store" \
-		--exclude ".osx" \
-		--exclude "bootstrap.sh" \
-		--exclude "README.md" \
-		--exclude "LICENSE-MIT.txt" \
-        --exclude ".z" \
-        --exclude ".zcompdump*" \
-        --exclude "*history*" \
-        --include ".vim/" \
-        --include ".tmux*" \
-        --exclude "/"
+	rsync \
+        -f -_".vim/*/" \
+        -f +_".tmux/*/" \
+        -f -_"*/" \
+        -f -_".git*" \
+        -f -_".git" \
+        -f -_".gitignore" \
+        -f -_".gitmodules" \
+        -f -_".DS_Store" \
+        -f -_".osx" \
+        -f -_".gtkrc*" \
+        -f -_".*creds" \
+        -f -_"bootstrap.sh" \
+        -f -_"README.md" \
+        -f -_"LICENSE-MIT.txt" \
+        -f -_".zcompdump*" \
+        -f -_".*pre-oh-my-zsh" \
+        -f -_"*history*" \
+        -f -_".*hst" \
+        -f -_".*hsts" \
+        -f -_"*.bkp" \
+        -f -_".z" \
+        -f -_".zcompdump" \
+        -f -_".sudo_as_admin_successful" \
+        -f -_".viminfo" \
+        -f -_".Xauthority" \
+        -f -_".xsession-errors" \
+        -f -_".nvidia-settings-rc" \
 		-$rsync_default_options \
         --no-perms \
         "$backup_dir" "$restore_dir"
