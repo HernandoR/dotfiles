@@ -1,22 +1,19 @@
-
-#!/usr/bin/bash
-
 # This is a shell script that provides functionality to backup, update, and restore dotfiles using
 # rsync. It also includes options for installing zsh and Oh My Zsh. The script uses command-line
 # options to determine which subcommand to execute and includes functions for pre-processing and
 # post-processing logic.
 
 # Default values
-declare -g help=false
-declare -g quiet=false
-declare -g install_omz=false
-declare -g dry_run=false
+help=false
+quiet=false
+install_omz=false
+dry_run=false
 
 # get the current directory
-declare -g DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 
-declare -g rsync_default_options="avhC"
+rsync_default_options="avhC"
 
 #------------------------------------------------------------------------------
 
@@ -64,33 +61,7 @@ backup_dotfiles() {
     # Perform the backup using rsync
     
 	rsync \
-        -f -_".vim/*/" \
-        -f +_".tmux/*/" \
-        -f -_"*/" \
-        -f -_".git*" \
-        -f -_".git" \
-        -f -_".gitignore" \
-        -f -_".gitmodules" \
-        -f -_".DS_Store" \
-        -f -_".osx" \
-        -f -_".gtkrc*" \
-        -f -_".*creds" \
-        -f -_"bootstrap.sh" \
-        -f -_"README.md" \
-        -f -_"LICENSE-MIT.txt" \
-        -f -_".zcompdump*" \
-        -f -_".*pre-oh-my-zsh" \
-        -f -_"*history*" \
-        -f -_".*hst" \
-        -f -_".*hsts" \
-        -f -_"*.bkp" \
-        -f -_".z" \
-        -f -_".zcompdump" \
-        -f -_".sudo_as_admin_successful" \
-        -f -_".viminfo" \
-        -f -_".Xauthority" \
-        -f -_".xsession-errors" \
-        -f -_".nvidia-settings-rc" \
+        --files-from="./sources/.file_list" \
 		-$rsync_default_options \
         --update --no-perms \
         "$source_dir" "$dest_dir"
@@ -108,33 +79,7 @@ restore_dotfiles() {
 
     # Perform the restore using rsync
 	rsync \
-        -f -_".vim/*/" \
-        -f +_".tmux/*/" \
-        -f -_"*/" \
-        -f -_".git*" \
-        -f -_".git" \
-        -f -_".gitignore" \
-        -f -_".gitmodules" \
-        -f -_".DS_Store" \
-        -f -_".osx" \
-        -f -_".gtkrc*" \
-        -f -_".*creds" \
-        -f -_"bootstrap.sh" \
-        -f -_"README.md" \
-        -f -_"LICENSE-MIT.txt" \
-        -f -_".zcompdump*" \
-        -f -_".*pre-oh-my-zsh" \
-        -f -_"*history*" \
-        -f -_".*hst" \
-        -f -_".*hsts" \
-        -f -_"*.bkp" \
-        -f -_".z" \
-        -f -_".zcompdump" \
-        -f -_".sudo_as_admin_successful" \
-        -f -_".viminfo" \
-        -f -_".Xauthority" \
-        -f -_".xsession-errors" \
-        -f -_".nvidia-settings-rc" \
+        --files-from="./sources/.file_list" \
 		-$rsync_default_options \
         --no-perms \
         "$backup_dir" "$restore_dir"
@@ -176,6 +121,7 @@ do_update() {
 do_restore() {
     echo "Performing restore..."
     # Add restore logic here
+    echo "opts $rsync_default_options"
     pre_process;
     restore_dotfiles ./sources/root/ $HOME ;
     post_process;
@@ -280,6 +226,13 @@ then
             do_update
             ;;
         restore )
+            unset OPTIND # in order to make -v pow -a <arg> -f <arg> work -> https://stackoverflow.com/questions/2189281/how-to-call-getopts-in-bash-multiple-times
+                if [ ! 0 == $# ] # if options provided
+                then
+                    if [ $verbose == true ]; then echo "Remaining args are: <${@}>"; fi
+                    phase_args "$@"
+                fi
+
             do_restore
             ;;
         * ) # Invalid subcommand
