@@ -39,6 +39,7 @@ if [ -d ~/.oh-my-zsh ]; then
 else
     echo "oh-my-zsh is not installed"
     echo "installing oh-my-zsh"
+    alias exit=return
     if $isInChina; then
         echo "installing oh-my-zsh from gitee"
         sh -c "$(curl -fsSL https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh)"
@@ -46,6 +47,7 @@ else
         echo "installing oh-my-zsh from github"
         sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
     fi
+    unalias exit
 fi
 
 
