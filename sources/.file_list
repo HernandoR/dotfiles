@@ -1,6 +1,5 @@
 .vim/
 .tmux/
-.config/iterm2/
 .aliases
 .bash_logout
 .bash_profile
