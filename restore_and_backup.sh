@@ -62,6 +62,7 @@ backup_dotfiles() {
     
 	rsync \
         --files-from="./sources/.file_list" \
+        --exclude-from="./sources/.ex_list" \
 		-$rsync_default_options \
         --update --no-perms \
         "$source_dir" "$dest_dir"
@@ -80,6 +81,7 @@ restore_dotfiles() {
     # Perform the restore using rsync
 	rsync \
         --files-from="./sources/.file_list" \
+        --exclude-from="./sources/.ex_list" \
 		-$rsync_default_options \
         --no-perms \
         "$backup_dir" "$restore_dir"
