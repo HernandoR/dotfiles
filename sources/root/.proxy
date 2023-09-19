@@ -1,8 +1,10 @@
 # for those web cannot be directly accessed
+# https://askubuntu.com/questions/82880/how-do-i-set-a-system-wide-proxy-with-a-username-and-password
+# export http_proxy=http://{usr}:{passwd}@{ip}:{port}
 
-# export http_proxy
-# export https_proxy
-# export sock5_proxy
+# export http_proxy=http://
+# export https_proxy=http://
+# export sock5_proxy=sock5://
 
 export HOMEBREW_API_DOMAIN="https://mirrors.bfsu.edu.cn/homebrew-bottles/api"
 export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.bfsu.edu.cn/homebrew-bottles"
