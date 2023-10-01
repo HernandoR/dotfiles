@@ -1,5 +1,6 @@
 .vim/
 .tmux/
+.lscolors
 .aliases
 .bash_logout
 .bash_profile
