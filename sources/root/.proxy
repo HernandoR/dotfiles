@@ -2,9 +2,23 @@
 # https://askubuntu.com/questions/82880/how-do-i-set-a-system-wide-proxy-with-a-username-and-password
 # export http_proxy=http://{usr}:{passwd}@{ip}:{port}
 
-# export http_proxy=http://
-# export https_proxy=http://
-# export sock5_proxy=sock5://
+# usr=
+# passwd=
+# ip=10.10.1.1
+# port=7890
+if [[ ! -z ${ip} ]]
+then
+    if [[ ! -z ${usr} ]]
+    then
+        url=${usr}:${passwd}@${ip}:${port}
+    else
+        url=${ip}:${port}
+    fi
+    export http_proxy=http://${url}
+    export https_proxy=http://${url}
+    # export sock5_proxy=sock5://
+    unset url ip port usr passwd
+fi
 
 export HOMEBREW_API_DOMAIN="https://mirrors.bfsu.edu.cn/homebrew-bottles/api"
 export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.bfsu.edu.cn/homebrew-bottles"
