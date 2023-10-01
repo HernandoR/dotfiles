@@ -65,7 +65,7 @@ backup_dotfiles() {
         --files-from="./sources/.file_list" \
         --exclude-from="./sources/.ex_list" \
 		-$rsync_default_options \
-        --update --no-perms \
+        --no-perms \
         "$source_dir" "$dest_dir"
     echo $rsync_cmd
     echo "Dotfiles backup complete!"
