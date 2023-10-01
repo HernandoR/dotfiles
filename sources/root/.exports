@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# podman
+# export DOCKER_HOST=unix:///run/user/${UID}/podman/podman.sock
+# export DOCKER_HOST=unix:///run/user/1000/docker.sock
+
+
 # Make vim the default editor.
 export EDITOR='vim';
 

@@ -1,3 +1,4 @@
+#!bash
 # This is a shell script that provides functionality to backup, update, and restore dotfiles using
 # rsync. It also includes options for installing zsh and Oh My Zsh. The script uses command-line
 # options to determine which subcommand to execute and includes functions for pre-processing and
@@ -10,7 +11,7 @@ install_omz=false
 dry_run=false
 
 # get the current directory
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+# DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 
 rsync_default_options="avhC"
@@ -134,7 +135,7 @@ post_process(){
 	if $install_omz; then
 		echo "Installing Oh My Zsh"
 		# Add your installation logic here
-		zsh -c "$DIR/config-ohmyzsh.sh"
+		zsh -c "./config-ohmyzsh.sh"
 	fi
 
 }

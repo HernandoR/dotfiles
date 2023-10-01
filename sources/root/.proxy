@@ -1,6 +1,20 @@
 # for those web cannot be directly accessed
 # https://askubuntu.com/questions/82880/how-do-i-set-a-system-wide-proxy-with-a-username-and-password
 # export http_proxy=http://{usr}:{passwd}@{ip}:{port}
+# 
+# usr=
+# passwd=
+# ip=10.10.1.1
+# port=7890
+# 
+# export http_proxy=http://${ip}:${port}
+# export https_proxy=http://${ip}:${port}
+# export sock5_proxy=sock5://${usr}:${passwd}@${ip}:${port}
+# 
+# unset usr
+# unset passwd
+# unset ip
+# unset port
 
 # export http_proxy=http://
 # export https_proxy=http://
