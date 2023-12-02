@@ -86,7 +86,10 @@ extract
 zsh-autosuggestions
 # 高亮 
 zsh-syntax-highlighting
+command-not-found
+
 )
+
 
 source $ZSH/oh-my-zsh.sh
 
