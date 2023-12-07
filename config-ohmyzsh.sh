@@ -34,20 +34,30 @@ git submodule init
 git submodule update
 
 # check if oh-my-zsh is installed
-if [ -d ~/.oh-my-zsh ]; then
+if [ -f ~/.oh-my-zsh/oh-my-zsh.sh ]; then
     echo "oh-my-zsh is already installed"
 else
+  if [ -d ~/.oh-my-zsh ]; then
+    echo "bakingup omz dir"
+    mv ~/.oh-my-zsh ~/oh-my-zsh.bkp
+  fi
     echo "oh-my-zsh is not installed"
     echo "installing oh-my-zsh"
-    alias exit=return
     if $isInChina; then
         echo "installing oh-my-zsh from gitee"
-        sh -c "$(curl -fsSL https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh)"
+        curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o ./install.sh
     else
         echo "installing oh-my-zsh from github"
-        sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+        curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o ./install.sh
     fi
+    alias exit=return
+    export RUNZSH=no
+    export CHSH=no
+    sh ./install.sh
+    unset RUNZSH
+    unset CHSH
     unalias exit
+    rm -f ./install.sh
 fi
 
 
@@ -66,16 +76,15 @@ else
     git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 
 fi
-
-# copy the config file
-echo "copying config"
-cp $DotFilesDir/source/root/.zshrc ~/.zshrc
-
-
-if ${setp10k:-true}; then
-    echo "copying p10k config"
-    mv ~/.p10k.zsh ~/.p10k.zsh.bkp
-    cp $DotFilesDir/source/root/.p10k.zsh ~/.p10k.zsh
-    # install powerline fonts
-    echo "PLZ set font to fira powerline in terminal"
-fi
+# # copy the config file
+# echo "copying config"
+# cp $DotFilesDir/source/root/.zshrc ~/.zshrc
+# 
+# 
+# if ${setp10k:-true}; then
+#     echo "copying p10k config"
+#     mv ~/.p10k.zsh ~/.p10k.zsh.bkp
+#     cp $DotFilesDir/source/root/.p10k.zsh ~/.p10k.zsh
+#     # install powerline fonts
+#     echo "PLZ set font to fira powerline in terminal"
+# fi
