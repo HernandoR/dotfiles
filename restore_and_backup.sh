@@ -1,4 +1,4 @@
-#!bash
+#!/usr/bin/bash
 # This is a shell script that provides functionality to backup, update, and restore dotfiles using
 # rsync. It also includes options for installing zsh and Oh My Zsh. The script uses command-line
 # options to determine which subcommand to execute and includes functions for pre-processing and

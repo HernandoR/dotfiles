@@ -6,5 +6,7 @@ export HOMEBREW_CORE_GIT_REMOTE="https://mirrors.bfsu.edu.cn/git/homebrew/homebr
 
 
 git clone --depth=1 https://mirrors.bfsu.edu.cn/git/homebrew/install.git brew-install
+export NONINTERACTIVE=1
 /bin/bash brew-install/install.sh
+unset NONINTERACTIVE
 rm -rf brew-install
