@@ -19,9 +19,11 @@ then
     # export sock5_proxy=sock5://
     unset url ip port usr passwd
 fi
-
+# Set PATH, MANPATH, etc., for Homebrew.
+if [ -d "/home/linuxbrew/.linuxbrew/bin" ]; then
 export HOMEBREW_API_DOMAIN="https://mirrors.bfsu.edu.cn/homebrew-bottles/api"
 export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.bfsu.edu.cn/homebrew-bottles"
 export HOMEBREW_BREW_GIT_REMOTE="https://mirrors.bfsu.edu.cn/git/homebrew/brew.git"
 export HOMEBREW_CORE_GIT_REMOTE="https://mirrors.bfsu.edu.cn/git/homebrew/homebrew-core.git"
 export HOMEBREW_PIP_INDEX_URL="https://mirrors.bfsu.edu.cn/pypi/web/simple"
+fi
