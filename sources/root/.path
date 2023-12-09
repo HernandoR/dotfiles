@@ -13,6 +13,8 @@ path_list=(
 # jetbrains
 "$HOME/.local/share/JetBrains/Toolbox/scripts"
 "$HOME/mambaforge/bin"
+#brew
+"$(brew --prefix coreutils)/libexec/gnubin"
 )
 
 if [ -d "/home/linuxbrew/.linuxbrew/bin" ]; then

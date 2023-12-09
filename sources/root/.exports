@@ -10,6 +10,7 @@ export EDITOR='vim';
 
 # brew settings 
 export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_ENV_HINTS=1
 
 # Enable persistent REPL history for `node`.
 export NODE_REPL_HISTORY=~/.node_history;
@@ -45,5 +46,5 @@ export GPG_TTY=$(tty);
 export BASH_SILENCE_DEPRECATION_WARNING=1;
 
 # >>> ROCm Configuration for 6600xt
-# https://github.com/RadeonOpenCompute/ROCm/issues/1698
-export HSA_OVERRIDE_GFX_VERSION=10.3.0
+# # https://github.com/RadeonOpenCompute/ROCm/issues/1698
+# export HSA_OVERRIDE_GFX_VERSION=10.3.0
