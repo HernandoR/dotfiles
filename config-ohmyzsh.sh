@@ -16,8 +16,14 @@ if [ ! -d "./sources" ]; then
 fi
 
 # check if the hostmachine can curl to github
-isInChina=$(curl -Is https://github.com | head -n 1 | grep "200 OK" | grep "China")
-if $isInChina; then
+Github_Reachable=$(curl -Is https://raw.githubusercontent.com | head -n 1 | grep "200")
+if [ ! -z $Github_Reachable ]; then
+    Github_Reachable=true
+else
+    Github_Reachable=false
+fi
+
+if $Github_Reachable; then
     echo "github is reachable"
     
 else
@@ -39,16 +45,17 @@ if [ -f ~/.oh-my-zsh/oh-my-zsh.sh ]; then
 else
   if [ -d ~/.oh-my-zsh ]; then
     echo "bakingup omz dir"
+    rm -rf ~/oh-my-zsh.bkp
     mv ~/.oh-my-zsh ~/oh-my-zsh.bkp
   fi
     echo "oh-my-zsh is not installed"
     echo "installing oh-my-zsh"
-    if $isInChina; then
+    if [ ! $Github_Reachable ]; then
         echo "installing oh-my-zsh from gitee"
-        curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o ./install.sh
+        curl -fsSL https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh -o ./install.sh
     else
         echo "installing oh-my-zsh from github"
-        curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o ./install.sh
+        curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o ./install.sh
     fi
     alias exit=return
     export RUNZSH=no
@@ -64,7 +71,7 @@ fi
 
 # install powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
 echo "installing powerlevel10k and zsh-autosuggestions and zsh-syntax-highlighting"
-if $isInChina; then
+if [ ! $Github_Reachable ]; then
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from gitee"
     git clone --depth=1 https://gitee.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
     git clone --depth=1 https://gitee.com/githubClone/zsh-autosuggestions.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
