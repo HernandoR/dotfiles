@@ -37,43 +37,54 @@ brew install gnu-sed # --with-default-names
 brew install wget
 
 # Install GnuPG to enable PGP-signing commits.
-brew install gnupg
+# brew install gnupg
 
 # Install more recent versions of some macOS tools.
 brew install vim # --with-override-system-vi
 brew install grep
 brew install openssh
-brew install screen
-brew install php
-brew install gmp
 
-#ctfs
-brew install nmap
-brew install binutils
-brew install hashpump
-brew install xz
-brew install socat
-
-# Install other useful binaries.
-brew install tree
-brew install tree
-
-# dev
 brew install xmake
-brew install neovim
 
-# GUIs
+# brew install screen
+# brew install php
+# brew install gmp
+
+
+# some terminal tools
+brew install tmux
+brew install thefuck
+
+# font install tool
+
+curl -fsSL https://raw.githubusercontent.com/HernandoR/getnf/master/install.sh | sh
+
+# install casks
 brew install --cask visual-studio-code
+brew install --cask microsoft-edge
+brew install --cask iterm2
+brew install --cask termius
+brew install --cask miniforge
+brew install --cask lunar
+brew install --cask pycharm-edu
+brew install --cask texlive
+brew install --cask qspace-pro
 
+# screen protect
+brew install --cask fliqlo
 
-------------------------------------------------------------------------------
+# brew install --cask microsoft-office-businesspro
+# brew install --cask microsoft-office
+# brew install --cask wpsoffice
+# brew install --cask wpsoffice-cn
+
 
 # # Install font tools.
 # brew tap bramstein/webfonttools
 # brew install sfnt2woff
 # brew install sfnt2woff-zopfli
 # brew install woff2
-#
+
 # # Install some CTF tools; see https://github.com/ctfs/write-ups.
 # brew install aircrack-ng
 # brew install bfg
@@ -99,7 +110,7 @@ brew install --cask visual-studio-code
 # brew install ucspi-tcp # `tcpserver` etc.
 # brew install xpdf
 # brew install xz
-#
+
 # # Install other useful binaries.
 # brew install ack
 # #brew install exiv2

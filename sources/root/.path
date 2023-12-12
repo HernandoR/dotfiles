@@ -17,8 +17,13 @@ path_list=(
 "$(brew --prefix coreutils)/libexec/gnubin"
 )
 
+# brew in linux
 if [ -d "/home/linuxbrew/.linuxbrew/bin" ]; then
-   eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+#  brew in macos
+if [ -d "/opt/homebrew/bin" ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
 
 for path_v in "${path_list[@]}"; do
