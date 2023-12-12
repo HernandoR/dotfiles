@@ -1,0 +1,6 @@
+# export ZSH_AUTOSUGGEST_STRATEGY=(
+#     history
+#     completion
+# )
+# bindkey '^$' autosuggest-accept
+# bindkey '\t' forward-word

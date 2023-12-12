@@ -25,7 +25,7 @@ fi
 
 if $Github_Reachable; then
     echo "github is reachable"
-    
+
 else
     echo "github is not reachable"
     echo "Using local scripts / gitee ."
@@ -79,15 +79,15 @@ if [ ! $Github_Reachable ]; then
 else
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from github"
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
-    git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 
+    git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
     git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 
 fi
 # # copy the config file
 # echo "copying config"
 # cp $DotFilesDir/source/root/.zshrc ~/.zshrc
-# 
-# 
+#
+#
 # if ${setp10k:-true}; then
 #     echo "copying p10k config"
 #     mv ~/.p10k.zsh ~/.p10k.zsh.bkp
