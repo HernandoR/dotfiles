@@ -11,4 +11,6 @@ sudo apt -y install git zsh rsync
 
 ./install-homebrew.sh
 
+
+
 ./restore_and_backup.sh restore
