@@ -8,7 +8,7 @@ for file in ~/.{path,bash_prompt,exports,aliases,functions,proxy,extra}; do
 	[ -r "$file" ] && [ -f "$file" ] && source "$file";
 done;
 unset file;
-if [ -d "$HOME/.linuxbrew/bin" ] ; then
-	eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-fi
+# if [ -d "$HOME/.linuxbrew/bin" ] ; then
+# 	eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+# fi
 

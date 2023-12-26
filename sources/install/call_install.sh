@@ -1,5 +1,5 @@
-curl -L https://gist.githubusercontent.com/HernandoR/f1d2f0be041c99bf0f7c1d0a53ac1ada/raw/install-temianl-app.sh
-curl -L https://gist.githubusercontent.com/HernandoR/f1d2f0be041c99bf0f7c1d0a53ac1ada/raw/install-desktop-app.sh
+# curl -L https://gist.githubusercontent.com/HernandoR/f1d2f0be041c99bf0f7c1d0a53ac1ada/raw/install-temianl-app.sh
+# curl -L https://gist.githubusercontent.com/HernandoR/f1d2f0be041c99bf0f7c1d0a53ac1ada/raw/install-desktop-app.sh
 source ./install-temianl-app.sh
 source ./install-desktop-app.sh
 
