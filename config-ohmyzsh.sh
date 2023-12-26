@@ -83,7 +83,11 @@ else
     git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 
 fi
-# # copy the config file
+# copy the config files
+echo "copying config"
+cp -f ./sources/zsh_plugins/zsh-autosuggestions.plugin.zsh ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh
+cp -f ./sources/zsh_plugins/zsh-syntax-highlighting.plugin.zsh ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.plugin.zsh
+
 # echo "copying config"
 # cp $DotFilesDir/source/root/.zshrc ~/.zshrc
 #
