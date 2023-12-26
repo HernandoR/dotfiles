@@ -65,8 +65,8 @@ brew install --cask microsoft-edge
 brew install --cask iterm2
 brew install --cask termius
 brew install --cask miniforge
-brew install --cask lunar
-brew install --cask pycharm-edu
+# brew install --cask lunar
+brew install --cask pycharm-ce-with-anaconda-plugin
 brew install --cask texlive
 brew install --cask qspace-pro
 
