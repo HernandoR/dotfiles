@@ -59,8 +59,11 @@ backup_dotfiles() {
 
     echo $ignore_single_file_cmd
 
+    echo "backup is depreciated, please manual edit"
+    exit 1
+
     # Perform the backup using rsync
-    
+
 	rsync \
         --files-from="./sources/.file_list" \
         --exclude-from="./sources/.ex_list" \
@@ -131,7 +134,7 @@ do_restore() {
 }
 
 post_process(){
-	
+
 	if $install_omz; then
 		echo "Installing Oh My Zsh"
 		# Add your installation logic here
@@ -140,7 +143,7 @@ post_process(){
 
 }
 
-# function for help 
+# function for help
 usage(){
     echo "usage havent implement yet"
 }
@@ -210,7 +213,7 @@ phase_args(){
     fi
 }
 
-if [ ! 0 == $# ] # If options provided then 
+if [ ! 0 == $# ] # If options provided then
 then
     subcommand=$1; shift # Get subcommand and shift to next option
     # subcmd handling
