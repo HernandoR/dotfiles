@@ -35,6 +35,8 @@ brew install gnu-sed # --with-default-names
 # Install `wget` with IRI support.
 # brew install wget --with-iri
 brew install wget
+brew install rsync
+brew install --cask rsyncui
 
 # Install GnuPG to enable PGP-signing commits.
 # brew install gnupg
