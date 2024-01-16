@@ -1,8 +1,17 @@
 # if havent install zsh, install it first
-if ! command -v zsh &> /dev/null
-then
+###
+# @Author: HernandoR lzhen.dev@outlook.com
+# @CreateDate: Do not edit
+# @LastEditors: HernandoR lzhen.dev@outlook.com
+# @LastEditTime: 2024-04-04
+# @Description:
+#
+# Copyright (c) 2024 by HernandoR lzhen.dev@outlook.com, All Rights Reserved.
+###
+if ! command -v zsh &>/dev/null; then
     echo "zsh could not be found"
     echo "installing zsh"
+    # Macos is now shipped with zsh
     sudo apt -y install zsh
     echo "zsh installed please run this script again"
     exit 1
@@ -16,24 +25,24 @@ if [ ! -d "./sources" ]; then
 fi
 
 # check if the hostmachine can curl to github
-Github_Reachable=$(curl -Is https://raw.githubusercontent.com | head -n 1 | grep "200")
-if [ ! -z $Github_Reachable ]; then
-    Github_Reachable=true
-else
-    Github_Reachable=false
-fi
+# Github_Reachable=$(curl -Is https://raw.githubusercontent.com | head -n 1 | grep "200")
+# if [ ! -z $Github_Reachable ]; then
+#     Github_Reachable=true
+# else
+#     Github_Reachable=false
+# fi
+Github_Reachable=${Github_Reachable:-false}
 
 if $Github_Reachable; then
     echo "github is reachable"
-
 else
     echo "github is not reachable"
     echo "Using local scripts / gitee ."
 fi
 
 # read the script's directory
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-DotFilesDir=DIR/../dotfiles
+# DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# DotFilesDir=DIR/../dotfiles
 
 echo "update submodules"
 git submodule init
@@ -43,12 +52,14 @@ git submodule update
 if [ -f ~/.oh-my-zsh/oh-my-zsh.sh ]; then
     echo "oh-my-zsh is already installed"
 else
-  if [ -d ~/.oh-my-zsh ]; then
-    echo "bakingup omz dir"
-    rm -rf ~/oh-my-zsh.bkp
-    mv ~/.oh-my-zsh ~/oh-my-zsh.bkp
-  fi
-    echo "oh-my-zsh is not installed"
+    if [ -d ~/.oh-my-zsh ]; then
+        echo "oh-my-zsh was installed"
+        echo "bakingup omz dir"
+        rm -rf ~/oh-my-zsh.bkp
+        mv ~/.oh-my-zsh ~/oh-my-zsh.bkp
+    else
+        echo "oh-my-zsh is not installed"
+    fi
     echo "installing oh-my-zsh"
     if [ ! $Github_Reachable ]; then
         echo "installing oh-my-zsh from gitee"
@@ -67,18 +78,16 @@ else
     rm -f ./install.sh
 fi
 
-
-
 # install powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
 echo "installing powerlevel10k and zsh-autosuggestions and zsh-syntax-highlighting"
 if [ ! $Github_Reachable ]; then
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from gitee"
-    git clone --depth=1 https://gitee.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+    git clone --depth=1 https://gitee.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
     git clone --depth=1 https://gitee.com/githubClone/zsh-autosuggestions.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
     git clone --depth=1 https://gitee.com/yuxiaoxi/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 else
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from github"
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
     git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
     git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 
@@ -87,15 +96,3 @@ fi
 echo "copying config"
 cp -f ./sources/zsh_plugins/zsh-autosuggestions.plugin.zsh ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh
 cp -f ./sources/zsh_plugins/zsh-syntax-highlighting.plugin.zsh ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.plugin.zsh
-
-# echo "copying config"
-# cp $DotFilesDir/source/root/.zshrc ~/.zshrc
-#
-#
-# if ${setp10k:-true}; then
-#     echo "copying p10k config"
-#     mv ~/.p10k.zsh ~/.p10k.zsh.bkp
-#     cp $DotFilesDir/source/root/.p10k.zsh ~/.p10k.zsh
-#     # install powerline fonts
-#     echo "PLZ set font to fira powerline in terminal"
-# fi
