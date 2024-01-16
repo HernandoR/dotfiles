@@ -1,8 +1,8 @@
 # if havent install zsh, install it first
-if ! command -v zsh &> /dev/null
-then
+if ! command -v zsh &>/dev/null; then
     echo "zsh could not be found"
     echo "installing zsh"
+    # Macos is now shipped with zsh
     sudo apt -y install zsh
     echo "zsh installed please run this script again"
     exit 1
@@ -25,14 +25,13 @@ fi
 
 if $Github_Reachable; then
     echo "github is reachable"
-
 else
     echo "github is not reachable"
     echo "Using local scripts / gitee ."
 fi
 
 # read the script's directory
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 DotFilesDir=DIR/../dotfiles
 
 echo "update submodules"
@@ -43,11 +42,11 @@ git submodule update
 if [ -f ~/.oh-my-zsh/oh-my-zsh.sh ]; then
     echo "oh-my-zsh is already installed"
 else
-  if [ -d ~/.oh-my-zsh ]; then
-    echo "bakingup omz dir"
-    rm -rf ~/oh-my-zsh.bkp
-    mv ~/.oh-my-zsh ~/oh-my-zsh.bkp
-  fi
+    if [ -d ~/.oh-my-zsh ]; then
+        echo "bakingup omz dir"
+        rm -rf ~/oh-my-zsh.bkp
+        mv ~/.oh-my-zsh ~/oh-my-zsh.bkp
+    fi
     echo "oh-my-zsh is not installed"
     echo "installing oh-my-zsh"
     if [ ! $Github_Reachable ]; then
@@ -67,18 +66,16 @@ else
     rm -f ./install.sh
 fi
 
-
-
 # install powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
 echo "installing powerlevel10k and zsh-autosuggestions and zsh-syntax-highlighting"
 if [ ! $Github_Reachable ]; then
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from gitee"
-    git clone --depth=1 https://gitee.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+    git clone --depth=1 https://gitee.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
     git clone --depth=1 https://gitee.com/githubClone/zsh-autosuggestions.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
     git clone --depth=1 https://gitee.com/yuxiaoxi/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 else
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from github"
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
     git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
     git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 
