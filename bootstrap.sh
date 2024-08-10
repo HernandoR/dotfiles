@@ -11,7 +11,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
         sudo apt -y remove libcurl4
         sudo apt -y install curl
     fi
-    sudo apt -y install git zsh rsync
+    sudo apt -y aptitude install git zsh rsync
 elif [[ "$OSTYPE" =="darwin"* ]]; then
     # for macos devices, use brew
     if ! command -v curl &> /dev/null
@@ -23,6 +23,8 @@ else
     echo "Unknown OS"
     exit 1
 fi
+
+alias apti=aptitude
 
 ./config-ohmyzsh.sh
 
