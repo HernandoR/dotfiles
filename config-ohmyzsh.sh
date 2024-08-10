@@ -1,12 +1,12 @@
 # if havent install zsh, install it first
-if ! command -v zsh &> /dev/null
-then
-    echo "zsh could not be found"
-    echo "installing zsh"
-    sudo apt -y install zsh
-    echo "zsh installed please run this script again"
-    exit 1
-fi
+# if [ ! command -v zsh ] &> /dev/null
+# then
+#     echo "zsh could not be found"
+#     echo "installing zsh"
+#     sudo apt -y install zsh
+#     echo "zsh installed please run this script again"
+#     exit 1
+# fi
 
 # chsh -s /usr/bin/zsh
 

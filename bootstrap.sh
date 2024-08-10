@@ -5,7 +5,9 @@ then
     sudo apt -y install curl
 fi
 
-sudo apt -y install git zsh rsync
+sudo apt -y aptitude install git zsh rsync
+
+alias apt=aptitude
 
 ./config-ohmyzsh.sh
 

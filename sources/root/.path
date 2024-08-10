@@ -14,11 +14,11 @@ path_list=(
 "$HOME/.local/share/JetBrains/Toolbox/scripts"
 "$HOME/mambaforge/bin"
 #brew
-"$(brew --prefix coreutils)/libexec/gnubin"
 )
 
 if [ -d "/home/linuxbrew/.linuxbrew/bin" ]; then
    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+   path_list+="$(brew --prefix coreutils)/libexec/gnubin"
 fi
 
 for path_v in "${path_list[@]}"; do
