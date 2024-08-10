@@ -5,7 +5,7 @@ then
     sudo apt -y install curl
 fi
 
-sudo apt -y aptitude install git zsh rsync
+sudo apt -y install aptitude git zsh rsync
 
 alias apt=aptitude
 
