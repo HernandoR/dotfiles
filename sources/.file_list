@@ -1,3 +1,7 @@
+.vim/*
+.tmux/
+.config/lvim/
+.lscolors
 .aliases
 .bash_logout
 .bash_profile
