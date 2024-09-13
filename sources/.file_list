@@ -1,13 +1,10 @@
-.vim/*
-.tmux/
-.config/lvim/
-.lscolors
 .aliases
 .bash_logout
 .bash_profile
 .bash_prompt
 .bashrc
 .condarc
+.config/lvim/
 .config/lvim/
 .curlrc
 .exports
@@ -16,6 +13,7 @@
 .functions
 .inputrc
 .lscolors
+.local/bin/
 .macos
 .p10k.zsh
 .path
@@ -23,11 +21,11 @@
 .proxy
 .screenrc
 .tmux.conf
-.tmux/*
+.tmux/
 .vim
 .vim/
-.vim/color/*
-.vim/syntax/*
+.vim/color/
+.vim/syntax/
 .vimrc
 .wgetrc
 .zshenv
