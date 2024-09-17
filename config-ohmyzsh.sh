@@ -17,13 +17,13 @@ fi
 
 # check if the hostmachine can curl to github
 Github_Reachable=$(curl -Is https://raw.githubusercontent.com | head -n 1 | grep "200")
-if [ ! -z $Github_Reachable ]; then
-    Github_Reachable=true
-else
+if [ -z $Github_Reachable ]; then
     Github_Reachable=false
+else
+    Github_Reachable=true
 fi
 
-if $Github_Reachable; then
+if [ $Github_Reachable=true ]; then
     echo "github is reachable"
     
 else
@@ -50,7 +50,7 @@ else
   fi
     echo "oh-my-zsh is not installed"
     echo "installing oh-my-zsh"
-    if [ ! $Github_Reachable ]; then
+    if [ $Github_Reachable=false ]; then
         echo "installing oh-my-zsh from gitee"
         curl -fsSL https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh -o ./install.sh
     else
@@ -71,7 +71,7 @@ fi
 
 # install powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
 echo "installing powerlevel10k and zsh-autosuggestions and zsh-syntax-highlighting"
-if [ ! $Github_Reachable ]; then
+if [ $Github_Reachable=false ]; then
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from gitee"
     git clone --depth=1 https://gitee.com/romkatv/powerlevel10k.git  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
     git clone --depth=1 https://gitee.com/githubClone/zsh-autosuggestions.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
