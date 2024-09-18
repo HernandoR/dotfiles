@@ -24,7 +24,7 @@
 .tmux/
 .vim
 .vim/
-.vim/color/
+.vim/colors/solarized.vim
 .vim/syntax/
 .vimrc
 .wgetrc
