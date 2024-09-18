@@ -26,6 +26,8 @@ fi
 
 alias apti=aptitude
 
+./install-llvm.sh 18 all
+
 ./config-ohmyzsh.sh
 
 
