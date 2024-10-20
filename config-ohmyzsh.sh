@@ -1,4 +1,5 @@
 # if havent install zsh, install it first
+
 ###
 # @Author: HernandoR lzhen.dev@outlook.com
 # @CreateDate: Do not edit
@@ -8,14 +9,15 @@
 #
 # Copyright (c) 2024 by HernandoR lzhen.dev@outlook.com, All Rights Reserved.
 ###
-if ! command -v zsh &>/dev/null; then
-    echo "zsh could not be found"
-    echo "installing zsh"
-    # Macos is now shipped with zsh
-    sudo apt -y install zsh
-    echo "zsh installed please run this script again"
-    exit 1
-fi
+
+# if [ ! command -v zsh ] &> /dev/null
+# then
+#     echo "zsh could not be found"
+#     echo "installing zsh"
+#     sudo apt -y install zsh
+#     echo "zsh installed please run this script again"
+#     exit 1
+# fi
 
 # chsh -s /usr/bin/zsh
 
@@ -25,15 +27,15 @@ if [ ! -d "./sources" ]; then
 fi
 
 # check if the hostmachine can curl to github
-# Github_Reachable=$(curl -Is https://raw.githubusercontent.com | head -n 1 | grep "200")
-# if [ ! -z $Github_Reachable ]; then
-#     Github_Reachable=true
-# else
-#     Github_Reachable=false
-# fi
-Github_Reachable=${Github_Reachable:-false}
 
-if $Github_Reachable; then
+Github_Reachable=$(curl -Is https://raw.githubusercontent.com | head -n 1 | grep "200")
+if [ -z $Github_Reachable ]; then
+    Github_Reachable=false
+else
+    Github_Reachable=true
+fi
+
+if [ $Github_Reachable=true ]; then
     echo "github is reachable"
 else
     echo "github is not reachable"
@@ -61,7 +63,7 @@ else
         echo "oh-my-zsh is not installed"
     fi
     echo "installing oh-my-zsh"
-    if [ ! $Github_Reachable ]; then
+    if [ $Github_Reachable=false ]; then
         echo "installing oh-my-zsh from gitee"
         curl -fsSL https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh -o ./install.sh
     else
@@ -80,7 +82,7 @@ fi
 
 # install powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting
 echo "installing powerlevel10k and zsh-autosuggestions and zsh-syntax-highlighting"
-if [ ! $Github_Reachable ]; then
+if [ $Github_Reachable=false ]; then
     echo "installing powerlevel10k zsh-autosuggestions, zsh-syntax-highlighting from gitee"
     git clone --depth=1 https://gitee.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
     git clone --depth=1 https://gitee.com/githubClone/zsh-autosuggestions.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions

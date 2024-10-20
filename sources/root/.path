@@ -12,18 +12,19 @@ path_list=(
 "/usr/local/cuda/bin"
 # jetbrains
 "$HOME/.local/share/JetBrains/Toolbox/scripts"
-"$HOME/mambaforge/bin"
+"$HOME/miniconda3/bin"
 #brew
-"$(brew --prefix coreutils)/libexec/gnubin"
 )
 
 # brew in linux
 if [ -d "/home/linuxbrew/.linuxbrew/bin" ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    path_list+="$(brew --prefix coreutils)/libexec/gnubin"
 fi
 #  brew in macos
 if [ -d "/opt/homebrew/bin" ]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
+    path_list+="$(brew --prefix coreutils)/libexec/gnubin"
 fi
 
 for path_v in "${path_list[@]}"; do
@@ -33,11 +34,14 @@ for path_v in "${path_list[@]}"; do
 done
 
 cpp_path_list=(
-"$HOME/mambaforge/include"
+"$HOME/miniconda3/include"
+"${mipilot_root}"
 )
-for path_v in "${cpp_path_list}"; do
+for path_v in "${cpp_path_list[@]}"; do
     if [ -d "$path_v" ]; then
         CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH:+$CPLUS_INCLUDE_PATH:}"$path_v"
     fi
 done
 
+export PATH=$PATH
+export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH
