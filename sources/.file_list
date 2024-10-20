@@ -5,7 +5,6 @@
 .bashrc
 .condarc
 .config/lvim/
-.config/lvim/
 .curlrc
 .exports
 .extra

@@ -1,8 +1,7 @@
-sudo apt update
-if ! command -v curl &> /dev/null
+if ! command -v brew &> /dev/null;
 then
-    sudo apt -y remove libcurl4
-    sudo apt -y install curl
+    echo "Installing Homebrew"
+    ./install-homebrew.sh
 fi
 
 sudo apt -y install aptitude git zsh rsync
@@ -11,9 +10,9 @@ alias apt=aptitude
 
 ./install-llvm.sh 18 all
 
+
 ./config-ohmyzsh.sh
 
-./install-homebrew.sh
 
 
 
