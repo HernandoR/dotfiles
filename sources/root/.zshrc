@@ -84,7 +84,7 @@ z
 extract
 # 根据历史命令提示
 zsh-autosuggestions
-# 高亮 
+# 高亮
 zsh-syntax-highlighting
 command-not-found
 
@@ -125,7 +125,8 @@ eval $(thefuck --alias fuck)
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#757575'
 
 # 高亮
-
+# stop if on a non-interactive shell
+[[ $- != *i* ]] && return
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
