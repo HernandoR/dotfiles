@@ -10,6 +10,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     then
         sudo apt -y remove libcurl4
         sudo apt -y install curl
+        sudo apt -y install xclip # for tmux clipboard
     fi
     sudo apt -y install git zsh rsync
 elif [[ "$OSTYPE" =="darwin"* ]]; then
