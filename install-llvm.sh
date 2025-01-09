@@ -8,7 +8,6 @@ sudo ~/.local/bin/llvm.sh $@
 
 sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-$version 100 \
                     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-$version \
-                    --slave /usr/bin/ld lld /usr/bin/lld-$version \
                     --slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-$version \
                     --slave /usr/bin/clangd clangd /usr/bin/clangd-$version \
                     --slave /usr/bin/clang-format clang-format /usr/bin/clang-format-$version \

@@ -25,6 +25,7 @@ terminal_apps=(
     "lunarvim"
     "nodejs_npm"
     "nvim"
+    "fd"
     "lunarvim"
 )
 
@@ -54,7 +55,20 @@ validate() {
 }
 
 ------------------------------------------------------------------------------------------------------------------------
-
+install_fd() {
+    echo "Installing fd..."
+    if ! command -v fd &> /dev/null; then
+        if [[ "$OS" == "macOS" ]]; then
+            brew install fd
+        elif [[ "$OS" == "Linux" ]]; then
+            linux_install fd
+        else
+            echo "fd installation is not supported for this operating system."
+        fi
+    else
+        echo "fd is already installed."
+    fi
+}
 # Function to install Homebrew or Linuxbrew
 install_homebrew() {
     if [[ "$OS" == "macOS" ]]; then
