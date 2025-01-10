@@ -1,3 +1,4 @@
+#!/usr/bin/env zsh
 if ! command -v brew &> /dev/null;
 then
     echo "Installing Homebrew"
