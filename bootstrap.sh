@@ -31,6 +31,4 @@ alias apti=aptitude
 ./config-ohmyzsh.sh
 
 
-
-
 ./restore_and_backup.sh restore

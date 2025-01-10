@@ -28,7 +28,7 @@ unset_proxy() {
 # Check the subcommand and execute the corresponding function
 # optional arguments: <proxy_host> <proxy_port>
 
-{}
+
 # case "$1" in
 #   set)
 #     if [[ $# -ne 3 ]]; then
