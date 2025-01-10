@@ -16,7 +16,7 @@ install_fira_code_nerd_font
 install_xmake
 install_build_essential
 install_conda
-install_lunarvim
+# install_lunarvim
 install_nodejs_npm
 
 
