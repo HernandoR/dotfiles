@@ -1,5 +1,4 @@
-# if havent install zsh, install it first
-# ###
+###
 # @Author: HernandoR lzhen.dev@outlook.com
 # @CreateDate: Do not edit
 # @LastEditors: HernandoR lzhen.dev@outlook.com
@@ -8,16 +7,12 @@
 #
 # Copyright (c) 2024 by HernandoR lzhen.dev@outlook.com, All Rights Reserved.
 ###
-# if [ ! command -v zsh ] &>/dev/null; # then
-#     echo "zsh could not be found"
-#     echo "installing zsh"
-#     # Macos is now shipped with zsh
-    # sudo apt -y install zsh
-#     echo "zsh installed please run this script again"
-#     exit 1
-# fi
 
-# chsh -s /usr/bin/zsh
+set -e
+
+# deprecated
+echo "This script is deprecated, please use the config-ohmyzsh.py instead"
+exit 1
 
 if [ ! -d "./sources" ]; then
     echo "please excute this script in the dotfiles directory"
