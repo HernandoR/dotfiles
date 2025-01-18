@@ -48,7 +48,7 @@ def main(use_github):
     else:
         oh_my_zsh_dir = Path.home() / ".oh-my-zsh"
         if oh_my_zsh_dir.is_dir():
-            print("oh-my-zsh was installed")
+            print("oh-my-zsh was inistalled")
             print("backing up omz dir")
             shutil.rmtree(Path.home() / "oh-my-zsh.bkp", ignore_errors=True)
             shutil.move(str(oh_my_zsh_dir), str(Path.home() / "oh-my-zsh.bkp"))
