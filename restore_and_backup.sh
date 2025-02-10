@@ -79,8 +79,19 @@ restore_dotfiles() {
     # Accept backup directory and destination directory as parameters
     backup_dir="$1"
     restore_dir="$2"
+    if [ ! -d "$backup_dir" ]; then
+        echo "Backup directory does not exist"
+        exit 1 
+    fi
 
-    backup_dotfiles "$restore_dir" "./bkp/$restore_dir.bkp"
+    if [ ! -d "$restore_dir" ]; then
+        mkdir -p "$restore_dir"
+    else
+        echo "Destination directory already exists"
+        backup_dotfiles "$restore_dir" "./bkp/$restore_dir.bkp"
+        rm -rf "$restore_dir"
+        mkdir -p "$restore_dir"
+    fi
 
     # Perform the restore using rsync
 	rsync \
@@ -110,7 +121,7 @@ do_backup() {
 
     # Add backup logic here
     pre_process;
-    backup_dotfiles $HOME/ ./sources/root/ ;
+    backup_dotfiles $HOME/dotfiles ./sources/root/ ;
     post_process;
 }
 
@@ -129,18 +140,15 @@ do_restore() {
     # Add restore logic here
     echo "opts $rsync_default_options"
     pre_process;
-    restore_dotfiles ./sources/root/ $HOME ;
+    restore_dotfiles ./sources/root/ $HOME/dotfiles ;
     post_process;
 }
 
 post_process(){
-
-	if $install_omz; then
-		echo "Installing Oh My Zsh"
-		# Add your installation logic here
-		zsh -c "./config-ohmyzsh.sh"
-	fi
-
+    #ln -s $HOME/dotfiles/.* $HOME
+    for file in $(ls ./sources/root/); do
+        ln -s $HOME/dotfiles/$file $HOME
+    done
 }
 
 # function for help
