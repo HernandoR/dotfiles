@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 version=$1
+# recommended ./install-llvm.sh 18 all
 echo "Installing LLVM version $version"
 wget https://apt.llvm.org/llvm.sh -O ~/.local/bin/llvm.sh
 chmod +x ~/.local/bin/llvm.sh
@@ -18,9 +19,7 @@ sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-$version 
 for file in /usr/bin/*-"$version"; do
     if [ -f "$file" ]; then
         base_name=$(basename "$file" -"$version")
-        if [ ! -f "/usr/bin/$base_name" ] && \
-            [ "$base_name" != "ld" ] && \
-            [ "$base_name" != "lld" ]; then
+        if [ ! -f "/usr/bin/$base_name" ]; then
             sudo update-alternatives --install /usr/bin/"$base_name" "$base_name" /usr/bin/"${base_name}"-"$version" 1
         fi
     fi

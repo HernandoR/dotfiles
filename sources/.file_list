@@ -1,3 +1,4 @@
+antigen.zsh
 .aliases
 .bash_logout
 .bash_profile
@@ -5,7 +6,7 @@
 .bashrc
 .condarc
 .config/lvim/
-.config/lvim/
+.config/helix/
 .curlrc
 .exports
 .extra
