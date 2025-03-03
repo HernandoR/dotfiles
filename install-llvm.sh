@@ -1,5 +1,7 @@
 #!/bin/bash
 set -e
+# sample usage:
+# ./install-llvm.sh 12 all
 version=$1
 # recommended ./install-llvm.sh 18 all
 echo "Installing LLVM version $version"
