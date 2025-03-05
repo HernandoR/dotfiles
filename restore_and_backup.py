@@ -83,7 +83,7 @@ class DotfilesManager:
 
     def link_dotfiles(self, source_dir, dest_dir):
         """链接dotfiles, 使其生效, also preserves the directory structure"""
-        for root, _, files in os.walk(source_dir):
+        for root, dirs, files in os.walk(source_dir):
             for file in files:
                 src = Path(root) / file
                 dest = Path(dest_dir) / src.relative_to(source_dir)
@@ -93,6 +93,12 @@ class DotfilesManager:
                     self.v_print(f"Removed {dest}")
                 dest.symlink_to(src)
                 self.v_print(f"Linked {src} to {dest}")
+            for dir in dirs:
+                src = Path(root) / dir
+                dest = Path(dest_dir) / src.relative_to(source_dir)
+                if not dest.exists():
+                    dest.mkdir()
+                    self.v_print(f"Created directory {dest}")
 
         print("Dotfiles linked successfully!")
 
