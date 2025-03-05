@@ -5,7 +5,10 @@ then
     ./install-homebrew.sh
 fi
 
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+OSTYPE=$(cat /etc/os-release |grep ID_LIKE | cut -d'=' -f2)
+echo "OS: $OSTYPE"
+
+if [[ "$OSTYPE" == "debian" ]]; then
     sudo apt update
     if ! command -v curl &> /dev/null
     then
@@ -14,7 +17,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
         sudo apt -y install xclip # for tmux clipboard
     fi
     sudo apt -y install git zsh rsync
-elif [[ "$OSTYPE" =="darwin"* ]]; then
+elif [[ "$OSTYPE" =="darwin"]]; then
     # for macos devices, use brew
     if ! command -v curl &> /dev/null
     then
