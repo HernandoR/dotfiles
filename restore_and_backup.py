@@ -113,10 +113,10 @@ if __name__ == "__main__":
 
     subparsers = parser.add_subparsers(help="sub-command help")
     parser_bkp = subparsers.add_parser("backup", help="Backup dotfiles")
-    parser_bkp.set_defaults(backup=True)
+    parser_bkp.set_defaults(backup=True, restore=False)
 
     parser_res = subparsers.add_parser("restore", help="Restore dotfiles")
-    parser_res.set_defaults(restore=True)
+    parser_res.set_defaults(restore=True, backup=False)
     parser_res.add_argument(
         "-i", "--install-omz", action="store_true", help="Install oh-my-zsh"
     )
