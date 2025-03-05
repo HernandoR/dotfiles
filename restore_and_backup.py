@@ -99,14 +99,25 @@ class DotfilesManager:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Dotfiles Manager")
-    parser.add_argument("-b", "--backup", action="store_true", help="Backup dotfiles")
-    parser.add_argument("-r", "--restore", action="store_true", help="Restore dotfiles")
-    parser.add_argument("-q", "--quiet", action="store_true", help="Run in quiet mode")
-    parser.add_argument(
+    # parser.add_argument("-b", "--backup", action="store_true", help="Backup dotfiles")
+    # parser.add_argument("-r", "--restore", action="store_true", help="Restore dotfiles")
+
+    parser_logger = parser.add_mutually_exclusive_group()
+    parser_logger.add_argument(
+        "-q", "--quiet", action="store_true", help="Run in quiet mode"
+    )
+    parser_logger.add_argument(
         "-v", "--verbose", action="store_true", help="Run in verbose mode"
     )
     parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run")
-    parser.add_argument(
+
+    subparsers = parser.add_subparsers(help="sub-command help")
+    parser_bkp = subparsers.add_parser("backup", help="Backup dotfiles")
+    parser_bkp.set_defaults(backup=True)
+
+    parser_res = subparsers.add_parser("restore", help="Restore dotfiles")
+    parser_res.set_defaults(restore=True)
+    parser_res.add_argument(
         "-i", "--install-omz", action="store_true", help="Install oh-my-zsh"
     )
     args = parser.parse_args()
