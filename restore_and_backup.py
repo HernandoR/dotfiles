@@ -83,7 +83,7 @@ class DotfilesManager:
 
     def link_dotfiles(self, source_dir, dest_dir):
         """链接dotfiles, 使其生效, also preserves the directory structure"""
-        for root, _, files in os.walk(source_dir):
+        for root, dirs, files in os.walk(source_dir):
             for file in files:
                 src = Path(root) / file
                 dest = Path(dest_dir) / src.relative_to(source_dir)
@@ -93,20 +93,37 @@ class DotfilesManager:
                     self.v_print(f"Removed {dest}")
                 dest.symlink_to(src)
                 self.v_print(f"Linked {src} to {dest}")
+            for dir in dirs:
+                src = Path(root) / dir
+                dest = Path(dest_dir) / src.relative_to(source_dir)
+                if not dest.exists():
+                    dest.mkdir()
+                    self.v_print(f"Created directory {dest}")
 
         print("Dotfiles linked successfully!")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Dotfiles Manager")
-    parser.add_argument("-b", "--backup", action="store_true", help="Backup dotfiles")
-    parser.add_argument("-r", "--restore", action="store_true", help="Restore dotfiles")
-    parser.add_argument("-q", "--quiet", action="store_true", help="Run in quiet mode")
-    parser.add_argument(
+    # parser.add_argument("-b", "--backup", action="store_true", help="Backup dotfiles")
+    # parser.add_argument("-r", "--restore", action="store_true", help="Restore dotfiles")
+
+    parser_logger = parser.add_mutually_exclusive_group()
+    parser_logger.add_argument(
+        "-q", "--quiet", action="store_true", help="Run in quiet mode"
+    )
+    parser_logger.add_argument(
         "-v", "--verbose", action="store_true", help="Run in verbose mode"
     )
     parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run")
-    parser.add_argument(
+
+    subparsers = parser.add_subparsers(help="sub-command help")
+    parser_bkp = subparsers.add_parser("backup", help="Backup dotfiles")
+    parser_bkp.set_defaults(backup=True, restore=False)
+
+    parser_res = subparsers.add_parser("restore", help="Restore dotfiles")
+    parser_res.set_defaults(restore=True, backup=False)
+    parser_res.add_argument(
         "-i", "--install-omz", action="store_true", help="Install oh-my-zsh"
     )
     args = parser.parse_args()

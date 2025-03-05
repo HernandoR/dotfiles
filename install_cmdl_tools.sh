@@ -27,7 +27,7 @@ apt-get install -y --no-install-recommends \
     rip \
     dust \
     procs \
-    lsd \
+    lsd
 
 # fd-find: is find
 # bat: is cat
@@ -36,12 +36,13 @@ apt-get install -y --no-install-recommends \
 # procs: is ps
 # lsd: is ls
 
-
 curl -LO https://github.com/ClementTsang/bottom/releases/download/0.10.2/bottom_0.10.2-1_amd64.deb
 dpkg -i bottom_0.10.2-1_amd64.deb
 
 # uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
+
+uv tool install thefuck
 
 # source /etc/../bin/env
 # unset XDG_BIN_HOME
