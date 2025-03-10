@@ -4,9 +4,16 @@ then
     echo "Installing Homebrew"
     ./install-homebrew.sh
 fi
+# if /etc/os-release does not exist, then we are on macos
 
-OSTYPE=$(cat /etc/os-release |grep ID_LIKE | cut -d'=' -f2)
-echo "OS: $OSTYPE"
+if [ ! -f /etc/os-release ]; then
+    echo "OS: MacOS"
+    OSTYPE="darwin"
+else
+    OSTYPE=$(cat /etc/os-release |grep ID_LIKE | cut -d'=' -f2)
+    echo "OS: $OSTYPE"
+fi
+
 
 if [ "$OSTYPE" = "debian" ]; then
     sudo apt update
