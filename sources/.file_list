@@ -12,6 +12,8 @@ antigen.zsh
 .extra
 .fonts.conf
 .functions
+.gitconfig
+.gitattributes
 .inputrc
 .lscolors
 .local/bin/
