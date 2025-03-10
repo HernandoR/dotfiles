@@ -2,21 +2,52 @@
 # 	name = liuzhen19
 # 	email = liuzhen19@xiaomi.com
 # 	signingkey = /home/lz/.ssh/id_ed25519.pub
-[pull]
-	rebase = true
-[color]
-	ui = auto
-[gpg]
-	format = ssh
-[credential]
-	helper = "!f() { /home/lz/.vscode-server/bin/4849ca9bdf9666755eb463db297b69e5385090e3/node /tmp/vscode-remote-containers-7f7d3cc2-b8a9-4b97-acf8-7ac5dd33ac34.js git-credential-helper $*; }; f"
-[init]
-	defaultBranch = main
-[commit]
-	gpgsign = false
-	sshsign = true
 [alias]
-    # `git log` with patches shown with difftastic.
+	# Clone a repository including all submodules.
+	c = clone --recursive
+	# Commit all changes.
+	ca = !git add ':(exclude,attr:builtin_objectmode=160000)' && git commit -av
+
+	# Show the diff between the latest commit and the current state.
+	d = !"git diff-index --quiet HEAD -- || clear; git --no-pager diff --patch-with-stat"
+	# `git di $number` shows the diff between the state `$number` revisions ago and the current state.
+	di = !"d() { git diff --patch-with-stat HEAD~$1; }; git diff-index --quiet HEAD -- || clear; d"
+
+	# View abbreviated SHA, description, and history graph of the latest 20 commits.
+	l = log --pretty=oneline -n 20 --graph --abbrev-commit
+
+	# View the current working tree status using the short format.
+	s = status -s
+	# Pull in remote changes for the current repository and all its submodules.
+	p = pull --recurse-submodules
+
+	# Switch to a branch, creating it if necessary.
+	go = "!f() { git checkout -b \"$1\" 2> /dev/null || git checkout \"$1\"; }; f"
+
+	# List aliases.
+	aliases = config --get-regexp alias
+	# Amend the currently staged files to the latest commit.
+	amend = commit --amend --reuse-message=HEAD
+
+	# Credit an author on the latest commit.
+	credit = "!f() { git commit --amend --author \"$1 <$2>\" -C HEAD; }; f"
+	# List contributors with number of commits.
+	contributors = shortlog --summary --numbered
+
+	# Remove branches that have already been merged with main.
+	# a.k.a. ‘delete merged’
+	dm = "!git branch --merged | grep -v '\\*' | xargs -n 1 git branch -d"
+
+	# Find branches containing commit
+	fb = "!f() { git branch -a --contains $1; }; f"
+	# Find tags containing commit
+	ft = "!f() { git describe --always --contains $1; }; f"
+	# Find commits by source code
+	fc = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short -S$1; }; f"
+	# Find commits by commit message
+	fm = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short --grep=$1; }; f"
+
+	# `git log` with patches shown with difftastic.
     dl = -c diff.external=difft log -p --ext-diff
 
     # Show the most recent commit with difftastic.
@@ -24,13 +55,105 @@
 
     # `git diff` with difftastic.
     dft = -c diff.external=difft diff
-# [diff]
-#     external = difft
+
+	# Show verbose output about tags, branches or remotes
+	tags = tag -l
+	branches = branch --all
+	remotes = remote --verbose
+
+	# Interactive rebase with the given number of latest commits.
+	reb = "!r() { git rebase -i HEAD~$1; }; r"
+	# Remove the old tag with this name and tag the latest commit with it.
+	retag = "!r() { git tag -d $1 && git push origin :refs/tags/$1 && git tag $1; }; r"
+
+	# Show the user email for the current repository.
+	whoami = config user.email
+
+[apply]
+	# Detect whitespace errors when applying a patch.
+	whitespace = fix
+
+[branch]
+	# Show most recently changed branches first.
+	sort = -committerdate
+
+[pull]
+	rebase = true
+
+[push]
+	# https://git-scm.com/docs/git-config#git-config-pushdefault
+	default = simple
+	# Make `git push` push relevant annotated tags when pushing branches out.
+	followTags = true
+
+[color]
+	# Use colors in Git commands that are capable of colored output when
+	# outputting to the terminal. (This is the default setting in Git ≥ 1.8.4.)
+	ui = auto
+
+[color "branch"]
+	current = yellow reverse
+	local = yellow
+	remote = green
+
+[color "diff"]
+	meta = yellow bold
+	frag = magenta bold # line info
+	old = red # deletions
+	new = green # additions
+
+[color "status"]
+	added = yellow
+	changed = green
+	untracked = cyan
+
+[gpg]
+	format = ssh
+[credential]
+	helper = "!f() { /home/lz/.vscode-server/bin/4849ca9bdf9666755eb463db297b69e5385090e3/node /tmp/vscode-remote-containers-7f7d3cc2-b8a9-4b97-acf8-7ac5dd33ac34.js git-credential-helper $*; }; f"
+[init]
+	defaultBranch = main
+
+[commit]
+	gpgsign = false
+	sshsign = true
+
+
+[diff "bin"]
+	# Use `hexdump` to diff binary files.
+	textconv = hexdump -v -C
+
+[diff]
+    external = difft
+	
 [merge "mergiraf"]
     name = mergiraf
     driver = mergiraf merge --git %O %A %B -s %S -x %X -y %Y -p %P
 
-# if you haven't got a global gitattributes file yet
 [core]
-    attributesfile = ~/.gitattributes
+	# Use custom `.gitignore` and `.gitattributes`.
+	excludesfile = ~/.gitignore
+	attributesfile = ~/.gitattributes
+    	# Treat spaces before tabs and all kinds of trailing whitespace as an error.
+	# [default] trailing-space: looks for spaces at the end of a line
+	# [default] space-before-tab: looks for spaces before tabs at the beginning of a line
+	whitespace = space-before-tab,-indent-with-non-tab,trailing-space
 
+	# Make `git rebase` safer on macOS.
+	# More info: <http://www.git-tower.com/blog/make-git-rebase-safe-on-osx/>
+	trustctime = false
+
+	# Prevent showing files whose names contain non-ASCII symbols as unversioned.
+	# http://michael-kuehnel.de/git/2014/11/21/git-mac-osx-and-german-umlaute.html
+	precomposeunicode = false
+
+	# Speed up commands involving untracked files such as `git status`.
+	# https://git-scm.com/docs/git-update-index#_untracked_cache
+	untrackedCache = true
+
+[help]
+	# Automatically correct and execute mistyped commands.
+	autocorrect = 1
+
+[init]
+	defaultBranch = main
