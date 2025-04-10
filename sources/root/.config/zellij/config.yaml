@@ -1,0 +1,10 @@
+default_shell: zsh
+on_force_close: detach
+
+simplified_ui: false # 简单 UI（不包含提示字体）
+pane_frames: false # pane 之间的边框
+theme: solarized-dark
+
+default_mode: lock # 启动时的模式，locked 可选
+mouse_mode: true # 鼠标模式（选取）
+scroll_buffer_size: 10000 # 缓冲大小
