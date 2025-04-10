@@ -1,0 +1,34 @@
+#设置改变配置自动启动 [window]的需要重启
+# live_config_reload = true
+
+#改变窗口设置
+[window]
+#窗口大小
+dimensions = { columns = 135, lines = 30 }
+padding = { x = 4, y = 2 }
+dynamic_padding = true
+#透明度
+opacity = 0.9
+#窗口名字
+title = "Alacritty"
+
+#字体
+[font]
+normal = { family = "FiraCode Nerd Font", style = "Bold" }
+bold = { family = "FiraCode Nerd Font", style = "Bold" }
+italic = { family = "FiraCode Nerd Font", style = "Bold" }
+size = 12.0
+
+#光标
+[cursor]
+style = { shape = "Beam", blinking = "On" }
+
+[terminal]
+#设定复制黏贴行为 默认只能复制
+osc52 = "CopyPaste"
+
+[shell]
+program = "zsh"
+args = ["-l", "-i", "-c", "zellij attach --index 0 --create"]
+# program = "/usr/bin/zsh"
+# args = ["-l", "-c", "zellij attach --index 0 --create"]
