@@ -6,11 +6,12 @@ import shutil
 import argparse
 import subprocess
 from pathlib import Path
+from tempfile import mkdtemp
 
 
 class DotfilesManager:
     def __init__(self):
-        self.rsync_default_options = "avhC"
+        self.rsync_default_options = ["a", "v", "h", "C", "-recursive"]
         self.quiet = False
         self.verbose = False
         self.dry_run = False
@@ -36,7 +37,7 @@ class DotfilesManager:
         if not shutil.which("zsh"):
             print("zsh could not be found")
             print("installing zsh")
-            subprocess.run(["sudo", "apt", "-y", "install", "zsh"])  # noqa
+            subprocess.run(["sudo", "apt", "-y", "install", "zsh"], check=True)  # noqa
             print("zsh installed please run this script again")
             sys.exit(1)
 
@@ -52,7 +53,16 @@ class DotfilesManager:
         cmd.extend(["--no-perms"])
         cmd.extend([str(source_dir), str(dest_dir)])
 
-        subprocess.run(cmd)
+        res = subprocess.run(cmd, capture_output=True)
+        if res.returncode != 0:
+            print(
+                f"""Error during backup:
+                    result code: {res.returncode}
+                    Error message: {res.stderr.decode("utf-8")}
+                    Output: {res.stdout.decode("utf-8")}
+                    """
+            )
+            exit(1)
         print("Dotfiles backup complete!")
 
     def v_print(self, msg):
@@ -78,14 +88,23 @@ class DotfilesManager:
         cmd.extend([str(backup_dir), str(restore_dir)])
 
         self.v_print(" ".join(cmd))
-        subprocess.run(cmd)
+        res = subprocess.run(cmd, capture_output=True)
+        if res.returncode != 0:
+            print(
+                f"""Error during restore:
+                    result code: {res.returncode}
+                    Error message: {res.stderr.decode("utf-8")}
+                    Output: {res.stdout.decode("utf-8")}
+                    """
+            )
+            exit(1)
         print("Dotfiles restored successfully!")
 
     def link_dotfiles(self, source_dir, dest_dir):
         """链接dotfiles, 使其生效, also preserves the directory structure"""
-        for root, dirs, files in os.walk(source_dir):
-            for file in files:
-                src = Path(root) / file
+        for dir_path, dir_name, file_name in os.walk(source_dir):
+            for file in file_name:
+                src = Path(dir_path) / file
                 dest = Path(dest_dir) / src.relative_to(source_dir)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 if dest.exists():
@@ -93,14 +112,60 @@ class DotfilesManager:
                     self.v_print(f"Removed {dest}")
                 dest.symlink_to(src)
                 self.v_print(f"Linked {src} to {dest}")
-            for dir in dirs:
-                src = Path(root) / dir
+            for dir in dir_name:
+                src = Path(dir_path) / dir
                 dest = Path(dest_dir) / src.relative_to(source_dir)
                 if not dest.exists():
                     dest.mkdir()
                     self.v_print(f"Created directory {dest}")
 
         print("Dotfiles linked successfully!")
+
+
+class TestDotfilesManager:
+    def __init__(self):
+        self.rsync_default_options = "avhC"
+        self.quiet = False
+        self.verbose = False
+        self.dry_run = False
+        self.install_omz = False
+
+        # fixture
+        self.source_dir = Path("./sources/root")
+        self.dot_dir = Path(mkdtemp())
+        self.home_dir = Path(mkdtemp())
+        self.mgr = DotfilesManager()
+        self.cleanup()
+
+    def test_backup_dotfiles(self):
+        """测试备份dotfiles"""
+        pass
+
+    def test_restore_dotfiles(self):
+        """测试恢复dotfiles"""
+        self.mgr.restore_dotfiles(self.source_dir, self.dot_dir)
+        assert os.path.isdir(self.dot_dir)
+        print(f"please check {self.dot_dir} for the restored files")
+
+    def test_link_dotfiles(self):
+        """测试链接dotfiles"""
+        self.test_restore_dotfiles()
+        self.mgr.link_dotfiles(self.dot_dir, self.home_dir)
+        assert os.path.isdir(self.home_dir)
+        print(f"please check {self.home_dir} for the linked files")
+
+    def cleanup(self):
+        """清理测试生成的目录"""
+        shutil.rmtree(self.dot_dir)
+        shutil.rmtree(self.home_dir)
+        print("Cleaned up test directories")
+
+
+# test
+
+tt = TestDotfilesManager()
+tt.test_link_dotfiles()
+exit(0)
 
 
 if __name__ == "__main__":

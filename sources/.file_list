@@ -5,8 +5,9 @@ antigen.zsh
 .bash_prompt
 .bashrc
 .condarc
-.config/lvim/
-.config/helix/
+.config
+# .config/lvim/
+# .config/helix/
 .curlrc
 .exports
 .extra
@@ -17,7 +18,7 @@ antigen.zsh
 .inputrc
 .lscolors
 .local/bin/
-.macos
+# .macos
 .p10k.zsh
 .path
 .profile
