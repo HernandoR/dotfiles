@@ -102,14 +102,20 @@ class DotfilesManager:
 
     def link_dotfiles(self, source_dir, dest_dir):
         """链接dotfiles, 使其生效, also preserves the directory structure"""
+        print(f"linking dotfiles from {source_dir} to {dest_dir}")
+        if not dest_dir.exists():
+            dest_dir.mkdir(parents=True, exist_ok=True)
         for dir_path, dir_name, file_name in os.walk(source_dir):
             for file in file_name:
                 src = Path(dir_path) / file
                 dest = Path(dest_dir) / src.relative_to(source_dir)
-                dest.parent.mkdir(parents=True, exist_ok=True)
                 if dest.exists():
+                    if dest.resolve() == src.resolve():
+                        self.v_print(f"Already linked {src} to {dest}")
+                        continue
                     dest.unlink()
                     self.v_print(f"Removed {dest}")
+                dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.symlink_to(src)
                 self.v_print(f"Linked {src} to {dest}")
             for dir in dir_name:
@@ -159,13 +165,6 @@ class TestDotfilesManager:
         shutil.rmtree(self.dot_dir)
         shutil.rmtree(self.home_dir)
         print("Cleaned up test directories")
-
-
-# test
-
-tt = TestDotfilesManager()
-tt.test_link_dotfiles()
-exit(0)
 
 
 if __name__ == "__main__":
