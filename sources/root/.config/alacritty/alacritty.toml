@@ -14,9 +14,9 @@ title = "Alacritty"
 
 #字体
 [font]
-normal = { family = "FiraCode Nerd Font", style = "Bold" }
+normal = { family = "FiraCode Nerd Font", style = "Regular" }
 bold = { family = "FiraCode Nerd Font", style = "Bold" }
-italic = { family = "FiraCode Nerd Font", style = "Bold" }
+italic = { family = "FiraCode Nerd Font", style = "italic" }
 size = 12.0
 
 #光标
@@ -27,8 +27,8 @@ style = { shape = "Beam", blinking = "On" }
 #设定复制黏贴行为 默认只能复制
 osc52 = "CopyPaste"
 
-[shell]
-program = "zsh"
-args = ["-l", "-i", "-c", "zellij attach --index 0 --create"]
+# [shell]
+# program = "zsh"
+# args = ["-l", "-i", "-c", "zellij attach --index 0 --create"]
 # program = "/usr/bin/zsh"
 # args = ["-l", "-c", "zellij attach --index 0 --create"]
