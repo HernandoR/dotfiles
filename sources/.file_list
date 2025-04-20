@@ -6,8 +6,14 @@ antigen.zsh
 .bashrc
 .condarc
 .config
+.config/alacritty
+.config/alacritty/themes
+.config/alacritty/themes/themes
+.config/tlrc
+.config/zellij
+.config/zellij/layouts
 # .config/lvim/
-# .config/helix/
+.config/helix/
 .curlrc
 .exports
 .extra
