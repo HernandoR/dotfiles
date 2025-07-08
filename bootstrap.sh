@@ -1,9 +1,9 @@
-#!/usr/bin/env zsh
-if ! command -v brew &> /dev/null;
-then
-    echo "Installing Homebrew"
-    ./install-homebrew.sh
-fi
+# #!/usr/bin/env zsh
+# if ! command -v brew &> /dev/null;
+# then
+#     echo "Installing Homebrew"
+#     ./install-homebrew.sh
+# fi
 # if /etc/os-release does not exist, then we are on macos
 
 if [ ! -f /etc/os-release ]; then
