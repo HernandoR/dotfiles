@@ -8,18 +8,9 @@ alias .....="cd ../../../.."
 alias ~="cd ~" # `cd` is probably faster to type though
 alias -- -="cd -"
 
-set_alias_if_cmd_exists() {
-	local cmd="$1"
-	local alias_name="$2"
-	if command -v "${cmd}" >/dev/null 2>&1; then
-		alias "${alias_name}"="${cmd}"
-	fi
-}
-
-set_alias_if_cmd_exists apti aptitude
-set_alias_if_cmd_exists fd fdfind
-set_alias_if_cmd_exists zj zellij
-
+alias apti=aptitude
+alias fd=fdfind
+alias zj=zellij
 
 # Shortcuts
 alias d="cd ~/Documents/Dropbox"
