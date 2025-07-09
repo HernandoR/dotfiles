@@ -8,6 +8,14 @@ alias .....="cd ../../../.."
 alias ~="cd ~" # `cd` is probably faster to type though
 alias -- -="cd -"
 
+if [ -x "$(command -v aptitude)" ]; then
+	alias apti=aptitude
+fi
+
+if [ -x "$(command -v fdfind)" ]; then
+	alias fd=fdfind
+fi
+
 # Shortcuts
 alias d="cd ~/Documents/Dropbox"
 alias dl="cd ~/Downloads"

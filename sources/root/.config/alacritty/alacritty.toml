@@ -27,6 +27,13 @@ style = { shape = "Beam", blinking = "On" }
 #设定复制黏贴行为 默认只能复制
 osc52 = "CopyPaste"
 
+[keyboard]
+bindings = [
+    { key = "C", mods = "Control", action = "Copy" },
+    { key = "V", mods = "Control", action = "Paste" },
+    { key = "C", mods = "Alt", chars = "\u0003" },
+]
+
 # [shell]
 # program = "zsh"
 # args = ["-l", "-i", "-c", "zellij attach --index 0 --create"]
