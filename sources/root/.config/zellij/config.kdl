@@ -136,7 +136,7 @@ keybinds clear-defaults=true {
         bind "Alt [" { PreviousSwapLayout; }
         bind "Alt ]" { NextSwapLayout; }
         bind "Alt f" { ToggleFloatingPanes; }
-        bind "Ctrl g" { SwitchToMode "locked"; }
+        bind "Ctrl a" { SwitchToMode "locked"; }
         bind "Alt h" { MoveFocusOrTab "left"; }
         bind "Alt i" { MoveTab "left"; }
         bind "Alt j" { MoveFocus "down"; }
@@ -233,6 +233,7 @@ keybinds clear-defaults=true {
         bind "z" { ToggleFocusFullscreen; SwitchToMode "normal"; }
     }
 }
+theme "catppuccin-frappe"
 
 // Plugin aliases - can be used to change the implementation of Zellij
 // changing these requires a restart to take effect

@@ -8,7 +8,7 @@ dimensions = { columns = 135, lines = 30 }
 padding = { x = 4, y = 2 }
 dynamic_padding = true
 #透明度
-opacity = 0.9
+opacity = 0.95
 #窗口名字
 title = "Alacritty"
 
@@ -27,15 +27,14 @@ style = { shape = "Beam", blinking = "On" }
 #设定复制黏贴行为 默认只能复制
 osc52 = "CopyPaste"
 
+# [shell]
+# program = "zsh"
+# args = ["-l", "-i", "-c", "zellij attach --index 0 --create"]
+# program = "/usr/bin/zsh"
+# args = ["-l", "-c", "zellij attach --index 0 --create"]
 [keyboard]
 bindings = [
     { key = "C", mods = "Control", action = "Copy" },
     { key = "V", mods = "Control", action = "Paste" },
     { key = "C", mods = "Alt", chars = "\u0003" },
 ]
-
-# [shell]
-# program = "zsh"
-# args = ["-l", "-i", "-c", "zellij attach --index 0 --create"]
-# program = "/usr/bin/zsh"
-# args = ["-l", "-c", "zellij attach --index 0 --create"]

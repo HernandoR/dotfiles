@@ -48,3 +48,9 @@ complete -W "NSGlobalDomain" defaults;
 
 # Add `killall` tab completion for common apps
 complete -o "nospace" -W "Contacts Calendar Dock Finder Mail Safari iTunes SystemUIServer Terminal Twitter" killall;
+[ -r ~/.bashrc ] && . ~/.bashrc #call bashrc[cml installer]
+. "$HOME/.cargo/env"
+
+[ ! -f "$HOME/.x-cmd.root/X" ] || . "$HOME/.x-cmd.root/X" # boot up x-cmd.
+
+if [ -e /home/lz/.nix-profile/etc/profile.d/nix.sh ]; then . /home/lz/.nix-profile/etc/profile.d/nix.sh; fi # added by Nix installer

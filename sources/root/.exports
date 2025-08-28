@@ -6,6 +6,8 @@
 
 # Make vim the default editor.
 # export EDITOR='vim';
+export RUSTUP_UPDATE_ROOT=https://mirrors.tuna.tsinghua.edu.cn/rustup/rustup
+export RUSTUP_DIST_SERVER=https://mirrors.tuna.tsinghua.edu.cn/rustup
 
 # brew settings
 export HOMEBREW_NO_AUTO_UPDATE=1

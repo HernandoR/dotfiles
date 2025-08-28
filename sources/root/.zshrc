@@ -90,7 +90,7 @@ source $HOME/antigen.zsh
 antigen use oh-my-zsh
 
 antigen bundle z
-antigen bundle extract
+# antigen bundle extract
 
 # Bundles from the default repo (robbyrussell's oh-my-zsh).
 antigen bundle git
@@ -180,3 +180,8 @@ test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+[ -r ~/.cloudml-cli/.profile ] && source ~/.cloudml-cli/.profile #[cml installer]
+source <(cml completion zsh) #[cml completion]
+export PATH="/home/lz/.pixi/bin:$PATH"
+
+[ ! -f "$HOME/.x-cmd.root/X" ] || . "$HOME/.x-cmd.root/X" # boot up x-cmd.
