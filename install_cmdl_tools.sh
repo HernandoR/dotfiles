@@ -36,8 +36,11 @@ apt-get install -y --no-install-recommends \
 # procs: is ps
 # lsd: is ls
 
-curl -LO https://github.com/ClementTsang/bottom/releases/download/0.10.2/bottom_0.10.2-1_amd64.deb
-dpkg -i bottom_0.10.2-1_amd64.deb
+curl -L git.io/antigen > $HOME/.antigen.zsh
+# or use git.io/antigen-nightly for the latest version
+
+curl -LO https://github.com/ClementTsang/bottom/releases/download/0.11.1/bottom_0.11.1-1_amd64.deb
+dpkg -i bottom_0.11.1-1_amd64.deb
 
 # uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
