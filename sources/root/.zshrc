@@ -180,8 +180,11 @@ test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-[ -r ~/.cloudml-cli/.profile ] && source ~/.cloudml-cli/.profile #[cml installer]
-source <(cml completion zsh) #[cml completion]
-export PATH="/home/lz/.pixi/bin:$PATH"
+
+# export PATH="/home/lz/.pixi/bin:$PATH"
+if [[ -d "$HOME/.pixi/bin" ]]; then
+  # 用 :+ 语法确保只在路径不存在时添加（防止重复）
+  [[ ":$PATH:" != *":$HOME/.pixi/bin:"* ]] && export PATH="$HOME/.pixi/bin:$PATH"
+fi
 
 [ ! -f "$HOME/.x-cmd.root/X" ] || . "$HOME/.x-cmd.root/X" # boot up x-cmd.

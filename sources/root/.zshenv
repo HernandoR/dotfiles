@@ -15,6 +15,8 @@ unset file;
 # 	eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 # fi
 
-. "$HOME/.cargo/env"
+if [ -f "$HOME/.cargo/env" ] ; then
+	. "$HOME/.cargo/env"
+fi
 
 if [ -e /home/lz/.nix-profile/etc/profile.d/nix.sh ]; then . /home/lz/.nix-profile/etc/profile.d/nix.sh; fi # added by Nix installer
