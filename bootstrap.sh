@@ -23,14 +23,7 @@ if [ "$OSTYPE" = "debian" ]; then
         sudo apt -y install curl
         sudo apt -y install xclip # for tmux clipboard
     fi
-    sudo apt -y install git zsh rsync
-elif [ "$OSTYPE" = "darwin"]; then
-    # for macos devices, use brew
-    if ! command -v curl &> /dev/null
-    then
-        brew install curl
-    fi
-    brew install git zsh rsync
+    sudo apt -y install git zsh rsync aptitude
 else
     echo "Unknown OS"
     exit 1
