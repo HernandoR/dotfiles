@@ -19,7 +19,7 @@
 ### 正确的初始化流程
 
 **登陆 Shell（Login Shell）：**
-- 读取顺序：`/etc/profile` → `~/.bash_profile` → `~/.bash_login` → `~/.profile`
+- 读取顺序：`/etc/profile` → 然后读取第一个存在的文件：`~/.bash_profile`、`~/.bash_login` 或 `~/.profile`
 - `.bash_profile` 应该负责设置环境变量和加载 `.bashrc`
 
 **非登陆 Shell（Non-login Shell）：**
@@ -56,15 +56,24 @@
 
 **修改后：**
 ```bash
-# .bashrc should NOT source .bash_profile to avoid circular references
-# .bash_profile already sources .bashrc for login shells
+# .bashrc should avoid unguarded sourcing of .bash_profile to prevent circular references.
+# .bash_profile already sources .bashrc for login shells.
+# For interactive non-login shells, conditionally source ~/.bash_profile so they
+# still receive the same initialization without causing recursion.
+if ! shopt -q login_shell && [ -r "$HOME/.bash_profile" ]; then
+    . "$HOME/.bash_profile"
+fi
 ```
 
 ### 修改说明
 
-1. 移除了 `.bashrc` 中对 `.bash_profile` 的引用
-2. 添加了注释说明原因，防止未来再次引入相同问题
-3. 保持 `.bash_profile` 中对 `.bashrc` 的引用（第 51 行），这是正确的做法
+1. 移除了 `.bashrc` 中对 `.bash_profile` 的无条件引用以避免循环
+2. 添加了条件判断：只有在非登陆 shell（`! shopt -q login_shell`）时才加载 `.bash_profile`
+3. 这样确保：
+   - 登陆 shell：`.bash_profile` → `.bashrc`（正常流程，无循环）
+   - 非登陆 shell：`.bashrc` → `.bash_profile`（获得完整初始化）
+   - 防止了循环引用，同时保持了所有 shell 类型的正确初始化
+4. 保持 `.bash_profile` 中对 `.bashrc` 的引用（第 51 行），这是正确的做法
 
 ## ZSH 相关问题修复
 
@@ -89,14 +98,17 @@ antigen 在初始化时需要写入缓存目录，但该目录在首次运行时
 
 ```bash
 # Ensure antigen cache directory exists to prevent "No such file or directory" errors
-# Note: This assumes the default antigen directory structure ($HOME/.antigen).
-# If you've customized ADOTDIR or antigen's installation path, adjust accordingly.
-mkdir -p "$HOME/.antigen/bundles/robbyrussell/oh-my-zsh/cache/completions"
+# Note: This uses the same base directory logic as antigen itself (${ADOTDIR:-$HOME/.antigen}).
+# If you've customized ADOTDIR or antigen's installation path, this will respect that setting.
+[[ -d "${ADOTDIR:-$HOME/.antigen}/bundles/robbyrussell/oh-my-zsh/cache/completions" ]] || mkdir -p "${ADOTDIR:-$HOME/.antigen}/bundles/robbyrussell/oh-my-zsh/cache/completions"
 
 source $HOME/antigen.zsh
 ```
 
-这样可以确保在 antigen 尝试写入缓存之前，必要的目录结构已经存在。如果用户自定义了 antigen 的安装路径（通过 `ADOTDIR` 变量），需要相应调整该路径。
+这样可以确保：
+1. 在 antigen 尝试写入缓存之前，必要的目录结构已经存在
+2. 使用 `${ADOTDIR:-$HOME/.antigen}` 与 antigen 本身的逻辑保持一致，自动支持自定义安装路径
+3. 使用条件判断 `[[ -d ... ]] ||` 只在目录不存在时创建，提高性能（避免每次启动都执行 mkdir）
 
 ## 验证测试
 
