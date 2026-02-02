@@ -86,6 +86,8 @@ fi
 # Add wisely, as too many plugins slow down shell startup.
 
 # Ensure antigen cache directory exists to prevent "No such file or directory" errors
+# Note: This assumes the default antigen directory structure ($HOME/.antigen).
+# If you've customized ADOTDIR or antigen's installation path, adjust accordingly.
 mkdir -p "$HOME/.antigen/bundles/robbyrussell/oh-my-zsh/cache/completions"
 
 source $HOME/antigen.zsh

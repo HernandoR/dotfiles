@@ -75,6 +75,8 @@ zsh 登陆后会报错：
 tee: /home/mi/.antigen/bundles/robbyrussell/oh-my-zsh/cache//completions/_docker: No such file or directory
 ```
 
+注意：错误消息中的双斜杠 `cache//completions` 是实际错误输出的一部分，不是笔误。
+
 ### 根本原因
 
 antigen 在初始化时需要写入缓存目录，但该目录在首次运行时可能不存在。当 antigen 尝试为 docker 插件生成补全缓存时，如果父目录不存在就会报错。
@@ -87,12 +89,14 @@ antigen 在初始化时需要写入缓存目录，但该目录在首次运行时
 
 ```bash
 # Ensure antigen cache directory exists to prevent "No such file or directory" errors
+# Note: This assumes the default antigen directory structure ($HOME/.antigen).
+# If you've customized ADOTDIR or antigen's installation path, adjust accordingly.
 mkdir -p "$HOME/.antigen/bundles/robbyrussell/oh-my-zsh/cache/completions"
 
 source $HOME/antigen.zsh
 ```
 
-这样可以确保在 antigen 尝试写入缓存之前，必要的目录结构已经存在。
+这样可以确保在 antigen 尝试写入缓存之前，必要的目录结构已经存在。如果用户自定义了 antigen 的安装路径（通过 `ADOTDIR` 变量），需要相应调整该路径。
 
 ## 验证测试
 
