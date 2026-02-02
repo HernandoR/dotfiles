@@ -66,7 +66,37 @@
 2. 添加了注释说明原因，防止未来再次引入相同问题
 3. 保持 `.bash_profile` 中对 `.bashrc` 的引用（第 51 行），这是正确的做法
 
+## ZSH 相关问题修复
+
+### 问题描述
+
+zsh 登陆后会报错：
+```
+tee: /home/mi/.antigen/bundles/robbyrussell/oh-my-zsh/cache//completions/_docker: No such file or directory
+```
+
+### 根本原因
+
+antigen 在初始化时需要写入缓存目录，但该目录在首次运行时可能不存在。当 antigen 尝试为 docker 插件生成补全缓存时，如果父目录不存在就会报错。
+
+### 修复方案
+
+**文件：** `sources/root/.zshrc`
+
+在加载 antigen 之前添加目录创建命令：
+
+```bash
+# Ensure antigen cache directory exists to prevent "No such file or directory" errors
+mkdir -p "$HOME/.antigen/bundles/robbyrussell/oh-my-zsh/cache/completions"
+
+source $HOME/antigen.zsh
+```
+
+这样可以确保在 antigen 尝试写入缓存之前，必要的目录结构已经存在。
+
 ## 验证测试
+
+### Bash 测试
 
 使用以下命令测试修复后的配置：
 
@@ -78,6 +108,17 @@ timeout 5 bash --login -c "echo 'Bash login successful'"
 **预期结果：**
 - bash 能够在 5 秒内成功启动并输出 "Bash login successful"
 - 不会出现卡死或需要 Ctrl-C 中断的情况
+
+### ZSH 测试
+
+```bash
+# 测试 zsh 启动不会报错
+zsh -c "echo 'ZSH login successful'"
+```
+
+**预期结果：**
+- zsh 能够正常启动
+- 不会出现 "No such file or directory" 错误
 
 ## 其他注意事项
 
@@ -94,3 +135,4 @@ timeout 5 bash --login -c "echo 'Bash login successful'"
 
 - [Bash Startup Files](https://www.gnu.org/software/bash/manual/html_node/Bash-Startup-Files.html)
 - [Difference between .bashrc and .bash_profile](https://stackoverflow.com/questions/415403/whats-the-difference-between-bashrc-bash-profile-and-environment)
+- [Antigen Documentation](https://github.com/zsh-users/antigen)

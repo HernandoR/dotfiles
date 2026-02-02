@@ -84,6 +84,10 @@ fi
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
+
+# Ensure antigen cache directory exists to prevent "No such file or directory" errors
+mkdir -p "$HOME/.antigen/bundles/robbyrussell/oh-my-zsh/cache/completions"
+
 source $HOME/antigen.zsh
 
 # Load the oh-my-zsh's library.
