@@ -154,7 +154,7 @@ antigen apply
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-eval $(thefuck --alias fuck)
+# eval $(thefuck --alias fuck)
 
 # auto seggestion colour VITAL!!!
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#757575'
