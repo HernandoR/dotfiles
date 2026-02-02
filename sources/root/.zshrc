@@ -84,6 +84,12 @@ fi
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
+
+# Ensure antigen cache directory exists to prevent "No such file or directory" errors
+# Note: This uses the same base directory logic as antigen itself (${ADOTDIR:-$HOME/.antigen}).
+# If you've customized ADOTDIR or antigen's installation path, this will respect that setting.
+[[ -d "${ADOTDIR:-$HOME/.antigen}/bundles/robbyrussell/oh-my-zsh/cache/completions" ]] || mkdir -p "${ADOTDIR:-$HOME/.antigen}/bundles/robbyrussell/oh-my-zsh/cache/completions"
+
 source $HOME/antigen.zsh
 
 # Load the oh-my-zsh's library.
