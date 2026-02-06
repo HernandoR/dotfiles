@@ -1,6 +1,6 @@
 [user]
-	name = liuzhen19
-	email = liuzhen19@xiaomi.com
+	name = hernandor
+	email = lzhen.dev@outlook.com
 	signingkey = /home/lz/.ssh/id_ed25519.pub
 [alias]
 	# Clone a repository including all submodules.
@@ -109,8 +109,7 @@
 
 [gpg]
 	format = ssh
-[credential]
-	helper = "!f() { /home/lz/.vscode-server/bin/4849ca9bdf9666755eb463db297b69e5385090e3/node /tmp/vscode-remote-containers-7f7d3cc2-b8a9-4b97-acf8-7ac5dd33ac34.js git-credential-helper $*; }; f"
+
 [init]
 	defaultBranch = main
 
@@ -125,7 +124,7 @@
 
 [diff]
     external = difft
-	
+
 [merge "mergiraf"]
     name = mergiraf
     driver = mergiraf merge --git %O %A %B -s %S -x %X -y %Y -p %P
