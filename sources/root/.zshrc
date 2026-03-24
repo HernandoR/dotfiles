@@ -1,9 +1,9 @@
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
+# if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+#   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+# fi
 
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
@@ -84,12 +84,6 @@ fi
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-
-# Ensure antigen cache directory exists to prevent "No such file or directory" errors
-# Note: This uses the same base directory logic as antigen itself (${ADOTDIR:-$HOME/.antigen}).
-# If you've customized ADOTDIR or antigen's installation path, this will respect that setting.
-[[ -d "${ADOTDIR:-$HOME/.antigen}/bundles/robbyrussell/oh-my-zsh/cache/completions" ]] || mkdir -p "${ADOTDIR:-$HOME/.antigen}/bundles/robbyrussell/oh-my-zsh/cache/completions"
-
 source $HOME/antigen.zsh
 
 # Load the oh-my-zsh's library.
@@ -111,7 +105,8 @@ antigen bundle zsh-users/zsh-syntax-highlighting
 # Bundles from the default repo (robbyrussell's oh-my-zsh).
 antigen bundle brew
 antigen bundle command-not-found
-antigen bundle docker
+# bugs in these bundles, so disable them for now
+# antigen bundle docker
 antigen bundle docker-compose
 antigen bundle gem
 antigen bundle git
@@ -127,9 +122,12 @@ antigen bundle zsh-users/zsh-autosuggestions
 antigen bundle zsh-users/zsh-apple-touchbar
 
 # Load the theme.
-antigen theme romkatv/powerlevel10k
+# antigen theme romkatv/powerlevel10k
+# antigen bundle hadenlabs/zsh-starship@main
 
 antigen apply
+
+eval "$(starship init zsh)"
 
 # User configuration
 
@@ -160,7 +158,7 @@ antigen apply
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-# eval $(thefuck --alias fuck)
+eval $(thefuck --alias fuck)
 
 # auto seggestion colour VITAL!!!
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#757575'
