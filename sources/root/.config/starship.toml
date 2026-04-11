@@ -140,9 +140,10 @@ ignore_base = false
 
 [time]
 disabled = false
-time_format = "%R"
+time_format = "%T"
 style = "fg:lavender"
-format = '[  $time ]($style)'
+symbol = ""
+format = '[ $symbol $time ]($style)'
 
 [line_break]
 disabled = false
@@ -158,7 +159,8 @@ vimcmd_visual_symbol = '[❮](bold fg:yellow)'
 
 [cmd_duration]
 show_milliseconds = true
-format = " in $duration "
+symbol = "⏱"
+format = ' $symbol $duration'
 style = "fg:lavender"
 disabled = false
 show_notifications = true
@@ -167,7 +169,8 @@ min_time_to_notify = 45000
 [status]
 disabled = false
 style = "fg:red"
-format = '[✘ $status ]($style)'
+symbol = "✘"
+format = '[ $symbol $status ]($style)'
 success_symbol = ''
 
 [fill]

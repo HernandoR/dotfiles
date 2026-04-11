@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-import os
-import sys
-import shutil
 import argparse
+import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from tempfile import mkdtemp
 
@@ -201,10 +201,10 @@ if __name__ == "__main__":
     dotfiles.pre_process()
 
     if args.backup:
-        dotfiles.backup_dotfiles(Path.home() / "dotfiles", Path("./sources/root"))
+        dotfiles.backup_dotfiles(Path.home() / "home_dotfiles", Path("./sources/root"))
     elif args.restore:
         dotfiles.restore_dotfiles(Path("./sources/root"), Path.home() / "dotfiles")
-        dotfiles.link_dotfiles(Path.home() / "dotfiles", Path.home())
+        dotfiles.link_dotfiles(Path.home() / "home_dotfiles", Path.home())
     else:
         print("Please specify either backup or restore")
         sys.exit(1)
