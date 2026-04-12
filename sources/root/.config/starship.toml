@@ -142,8 +142,8 @@ ignore_base = false
 disabled = false
 time_format = "%T"
 style = "fg:lavender"
-symbol = ""
-format = '[ $symbol $time ]($style)'
+# symbol = ""
+format = '[ " $time ]($style)'
 
 [line_break]
 disabled = false
@@ -159,8 +159,8 @@ vimcmd_visual_symbol = '[❮](bold fg:yellow)'
 
 [cmd_duration]
 show_milliseconds = true
-symbol = "⏱"
-format = ' $symbol $duration'
+# symbol = ""
+format = ' ⏱ $duration'
 style = "fg:lavender"
 disabled = false
 show_notifications = true
