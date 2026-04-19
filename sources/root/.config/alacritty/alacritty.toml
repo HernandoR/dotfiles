@@ -36,5 +36,23 @@ osc52 = "CopyPaste"
 bindings = [
     { key = "C", mods = "Control", action = "Copy" },
     { key = "V", mods = "Control", action = "Paste" },
-    { key = "C", mods = "Alt", chars = "\u0003" },
+    # ALT + C -> interrupt (Ctrl+C)
+    { key = "C", mods = "Alt", mode = "Vi" , chars = "\u0003" },
+    # ========== Option + 方向键：按词移动（Unicode 控制序列） ==========
+    # Opt+Left  = ESC+b → U+001B + U+0062
+    { key = "Left",  mods = "Alt", chars = "\u001B\u0062" },
+    # Opt+Right = ESC+f → U+001B + U+0066
+    { key = "Right", mods = "Alt", chars = "\u001B\u0066" },
+
+    # ========== Command + 方向键：行首 / 行尾（Unicode 控制字符） ==========
+    # Cmd+Left  = SOH (U+0001) → 行首
+    { key = "Left",  mods = "Command", chars = "\u0001" },
+    # Cmd+Right = ENQ (U+0005) → 行尾
+    { key = "Right", mods = "Command", chars = "\u0005" },
+
+    # ========== Mac 删除功能（纯 Unicode） ==========
+    # Fn+Delete = 向后删除字符 → ESC[3~ → U+001B+U+005B+U+0033+U+007E
+    { key = "Delete", chars = "\u001B\u005B\u0033\u007E" },
+    # Opt+Backspace = 删除前一个单词 → ESC+DEL → U+001B+U+007F
+    { key = "Back", mods = "Alt", chars = "\u001B\u007F" },
 ]
