@@ -1,39 +1,23 @@
-# #!/usr/bin/env zsh
-# if ! command -v brew &> /dev/null;
-# then
-#     echo "Installing Homebrew"
-#     ./install-homebrew.sh
-# fi
-# if /etc/os-release does not exist, then we are on macos
+#!/usr/bin/env sh
+set -e
 
-if [ ! -f /etc/os-release ]; then
-    echo "OS: MacOS"
-    OSTYPE="darwin"
-else
-    OSTYPE=$(cat /etc/os-release |grep ID_LIKE | cut -d'=' -f2)
-    echo "OS: $OSTYPE"
-fi
+echo "Starting bootstrap process..."
 
-
-if [ "$OSTYPE" = "debian" ]; then
-    sudo apt update
-    if ! command -v curl &> /dev/null
-    then
-        sudo apt -y remove libcurl4
-        sudo apt -y install curl
-        sudo apt -y install xclip # for tmux clipboard
-    fi
-    sudo apt -y install git zsh rsync aptitude
-else
-    echo "Unknown OS"
+if ! command -v curl > /dev/null 2>&1; then
+    echo "Error: curl is required to bootstrap. Please install curl first."
     exit 1
 fi
 
-alias apti=aptitude
+if ! command -v uv > /dev/null 2>&1; then
+    echo "uv not found. Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
 
-./install-llvm.sh 18 all
+    if [ -f "$HOME/.local/bin/env" ]; then
+        . "$HOME/.local/bin/env"
+    else
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+fi
 
-./config-ohmyzsh.sh
-
-
-./restore_and_backup.sh restore
+echo "Handing off execution to Python via uv..."
+uv run main.py "$@"
