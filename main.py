@@ -1,8 +1,11 @@
 import logging
 import os
 import platform
+import shutil
 import subprocess
 import sys
+import urllib.request
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,20 +69,73 @@ class DotfilesManager:
             self.run_command(["sudo", "apt", "-y", "remove", "libcurl4"])
             self.run_command(["sudo", "apt", "-y", "install", "curl", "xclip"])
 
-        packages = ["git", "zsh", "rsync", "aptitude"]
+        packages = ["git", "zsh", "rsync", "aptitude", "wget"]
         logger.info(f"Installing core packages: {', '.join(packages)}")
         self.run_command(["sudo", "apt", "-y", "install"] + packages)
 
-    def run_legacy_scripts(self):
-        if os.path.exists("./install-llvm.sh"):
-            self.run_command(["./install-llvm.sh", "18", "all"])
-        else:
-            logger.warning("install-llvm.sh not found.")
+    def install_llvm(self, version="18"):
+        logger.info(f"Installing LLVM version {version}...")
+        llvm_sh_path = Path.home() / ".local" / "bin" / "llvm.sh"
+        llvm_sh_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if os.path.exists("./config-ohmyzsh.sh"):
-            self.run_command(["./config-ohmyzsh.sh"])
+        logger.info("Downloading llvm.sh...")
+        urllib.request.urlretrieve("https://apt.llvm.org/llvm.sh", llvm_sh_path)
+        llvm_sh_path.chmod(0o755)
+
+        logger.info("Running llvm.sh...")
+        self.run_command(["sudo", str(llvm_sh_path), version, "all"])
+
+        logger.info("Setting up update-alternatives for clang...")
+        alternatives = [
+            ("clang", "clang", f"clang-{version}", 100),
+            ("clang++", "clang++", f"clang++-{version}", None),
+            ("clang-cpp", "clang-cpp", f"clang-cpp-{version}", None),
+            ("clangd", "clangd", f"clangd-{version}", None),
+            ("clang-format", "clang-format", f"clang-format-{version}", None),
+            ("clang-tidy", "clang-tidy", f"clang-tidy-{version}", None),
+            ("clang-cl", "clang-cl", f"clang-cl-{version}", None),
+            ("clang-query", "clang-query", f"clang-query-{version}", None),
+            ("clang-rename", "clang-rename", f"clang-rename-{version}", None),
+        ]
+
+        cmd = [
+            "sudo",
+            "update-alternatives",
+            "--install",
+            "/usr/bin/clang",
+            "clang",
+            f"/usr/bin/clang-{version}",
+            "100",
+        ]
+        for _, link, path, _ in alternatives[1:]:
+            cmd.extend(["--slave", f"/usr/bin/{link}", link, f"/usr/bin/{path}"])
+        self.run_command(cmd)
+
+        bin_dir = Path("/usr/bin")
+        if bin_dir.exists():
+            for file in bin_dir.glob(f"*-{version}"):
+                base_name = file.name.replace(f"-{version}", "")
+                if not (bin_dir / base_name).exists():
+                    self.run_command(
+                        [
+                            "sudo",
+                            "update-alternatives",
+                            "--install",
+                            f"/usr/bin/{base_name}",
+                            base_name,
+                            str(file),
+                            "1",
+                        ]
+                    )
+
+    def run_legacy_scripts(self):
+        if self.os_type in ["debian", "ubuntu"]:
+            self.install_llvm("18")
+
+        if os.path.exists("./config-ohmyzsh.py"):
+            self.run_command([sys.executable, "./config-ohmyzsh.py"])
         else:
-            logger.warning("config-ohmyzsh.sh not found.")
+            logger.warning("config-ohmyzsh.py not found.")
 
         if os.path.exists("./restore_and_backup.py"):
             self.run_command([sys.executable, "./restore_and_backup.py", "restore"])
