@@ -1,3 +1,67 @@
+def install_homebrew(run_cmd):
+    import os
+
+    # Check if brew is already installed
+    import subprocess
+
+    try:
+        subprocess.run(
+            ["command", "-v", "brew"], check=True, capture_output=True, shell=True
+        )
+        print("Homebrew is already installed.")
+        return
+    except subprocess.CalledProcessError:
+        pass
+
+    env = os.environ.copy()
+    env["HOMEBREW_API_DOMAIN"] = "https://mirrors.bfsu.edu.cn/homebrew-bottles/api"
+    env["HOMEBREW_BOTTLE_DOMAIN"] = "https://mirrors.bfsu.edu.cn/homebrew-bottles"
+    env["HOMEBREW_BREW_GIT_REMOTE"] = (
+        "https://mirrors.bfsu.edu.cn/git/homebrew/brew.git"
+    )
+    env["NONINTERACTIVE"] = "1"
+
+    print("Installing Homebrew from BFSU mirror...")
+    run_cmd(["sudo", "ls", ">/dev/null"], shell=True)
+    run_cmd(
+        [
+            "git",
+            "clone",
+            "--depth=1",
+            "https://mirrors.bfsu.edu.cn/git/homebrew/install.git",
+            "brew-install",
+        ]
+    )
+
+    # Run the installation
+    # subprocess.run doesn't natively take an 'env' dictionary in our wrapper, but we can do it via shell exports
+    cmd = (
+        "export HOMEBREW_API_DOMAIN=https://mirrors.bfsu.edu.cn/homebrew-bottles/api && "
+        "export HOMEBREW_BOTTLE_DOMAIN=https://mirrors.bfsu.edu.cn/homebrew-bottles && "
+        "export HOMEBREW_BREW_GIT_REMOTE=https://mirrors.bfsu.edu.cn/git/homebrew/brew.git && "
+        "export NONINTERACTIVE=1 && "
+        "/bin/bash brew-install/install.sh"
+    )
+    run_cmd(cmd, shell=True)
+    run_cmd(["rm", "-rf", "brew-install"])
+
+
+def bootstrap_macos(run_cmd):
+    install_homebrew(run_cmd)
+
+    import subprocess
+
+    try:
+        subprocess.run(
+            ["command", "-v", "curl"], check=True, capture_output=True, shell=True
+        )
+    except subprocess.CalledProcessError:
+        run_cmd(["brew", "install", "curl"])
+
+    packages = ["git", "zsh", "rsync", "rclone"]
+    run_cmd(["brew", "install"] + packages)
+
+
 def install_mac_brew(run_cmd):
     # Make sure we’re using the latest Homebrew.
     run_cmd(["brew", "update"])

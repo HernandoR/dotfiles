@@ -353,6 +353,30 @@ class DotfilesManager:
         logger.info("Installing Mac Brew Packages...")
         macos.install_mac_brew(self.run_command)
 
+    def set_git_proxy(self):
+        http_proxy = os.environ.get("http_proxy", "")
+        https_proxy = os.environ.get("https_proxy", "")
+        if not http_proxy and not https_proxy:
+            logger.error("No proxy environment variables set. Cannot set git proxy.")
+            return
+
+        logger.info(f"Setting git proxy to {http_proxy or https_proxy}...")
+        if http_proxy:
+            self.run_command(["git", "config", "--global", "http.proxy", http_proxy])
+            self.run_command(["git", "config", "--global", "https.proxy", http_proxy])
+        elif https_proxy:
+            self.run_command(["git", "config", "--global", "http.proxy", https_proxy])
+            self.run_command(["git", "config", "--global", "https.proxy", https_proxy])
+
+    def unset_git_proxy(self):
+        logger.info("Unsetting git proxy...")
+        self.run_command(
+            ["git", "config", "--global", "--unset", "http.proxy"], check=False
+        )
+        self.run_command(
+            ["git", "config", "--global", "--unset", "https.proxy"], check=False
+        )
+
     def run_optional_installers(self):
         if self.options.get("with_1password"):
             self.install_1password()
@@ -381,7 +405,8 @@ class DotfilesManager:
         logger.info(f"Detected OS Type: {self.os_type}")
 
         if self.os_type == "darwin":
-            logger.info("macOS detected. Core package installation skipped.")
+            logger.info("macOS detected. Bootstrapping via Homebrew.")
+            macos.bootstrap_macos(self.run_command)
         elif self.os_type in ["debian", "ubuntu"]:
             self.bootstrap_debian()
         else:
@@ -425,7 +450,7 @@ def main():
         help="Enable all components suitable for Mac (excludes Docker)",
     )
 
-    # Optional direct commands for just backup or restore
+    # Optional direct commands for just backup or restore or proxy
     subparsers = parser.add_subparsers(dest="command", help="sub-command help")
 
     # backup
@@ -433,6 +458,12 @@ def main():
 
     # restore
     parser_res = subparsers.add_parser("restore", help="Restore dotfiles")
+
+    # proxy
+    parser_proxy = subparsers.add_parser(
+        "set-proxy", help="Set Git proxy based on environment variables"
+    )
+    parser_proxy_unset = subparsers.add_parser("unset-proxy", help="Unset Git proxy")
 
     args = parser.parse_args()
 
@@ -471,6 +502,10 @@ def main():
     elif args.command == "restore":
         manager.restore_dotfiles(Path("./sources/root"), Path.home() / "dotfiles")
         manager.link_dotfiles(Path.home() / "dotfiles", Path.home())
+    elif args.command == "set-proxy":
+        manager.set_git_proxy()
+    elif args.command == "unset-proxy":
+        manager.unset_git_proxy()
     else:
         # Default bootstrap behavior
         manager.run()
