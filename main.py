@@ -17,13 +17,14 @@ logger = logging.getLogger("dotfiles")
 
 
 class DotfilesManager:
-    def __init__(self, dry_run=False, verbose=False):
+    def __init__(self, dry_run=False, verbose=False, options=None):
         self.os_type = self._detect_os()
         self.state = {
             "apt_updated": False,
         }
         self.dry_run = dry_run
         self.verbose = verbose
+        self.options = options or {}
         if verbose:
             logger.setLevel(logging.DEBUG)
 
@@ -311,14 +312,92 @@ class DotfilesManager:
 
         logger.info("Dotfiles linked successfully!")
 
+    def install_1password(self):
+        if self.os_type not in ["debian", "ubuntu"]:
+            logger.info("1Password script is for Debian-based systems. Skipping.")
+            return
+        logger.info("Installing 1Password...")
+        if os.path.exists("./install-1password.sh"):
+            self.run_command(["./install-1password.sh"])
+        else:
+            logger.warning("install-1password.sh not found.")
+
+    def install_docker(self):
+        if self.os_type not in ["debian", "ubuntu"]:
+            logger.info("Docker script is for Debian-based systems. Skipping.")
+            return
+        logger.info("Installing Docker...")
+        if os.path.exists("./install-docker.sh"):
+            self.run_command(["./install-docker.sh"])
+        else:
+            logger.warning("install-docker.sh not found.")
+
+    def install_docker_rootless(self):
+        logger.info("Installing Docker Rootless...")
+        if os.path.exists("./install-docker-rootless.sh"):
+            self.run_command(["./install-docker-rootless.sh"])
+        else:
+            logger.warning("install-docker-rootless.sh not found.")
+
+    def install_miniforge(self):
+        logger.info("Installing Miniforge...")
+        if os.path.exists("./install-miniforge.sh"):
+            self.run_command(["./install-miniforge.sh"])
+        else:
+            logger.warning("install-miniforge.sh not found.")
+
+    def install_cmdl_tools(self):
+        if self.os_type not in ["debian", "ubuntu"]:
+            logger.info("Cmdl tools script uses apt. Skipping.")
+            return
+        logger.info("Installing Cmdl Tools...")
+        if os.path.exists("./install_cmdl_tools.sh"):
+            self.run_command(["./install_cmdl_tools.sh"])
+        else:
+            logger.warning("install_cmdl_tools.sh not found.")
+
+    def install_cuda(self):
+        if self.os_type not in ["debian", "ubuntu"]:
+            logger.info("CUDA script is for Ubuntu. Skipping.")
+            return
+        logger.info("Installing CUDA Toolkit...")
+        if os.path.exists("./cuda-toolkit.sh"):
+            self.run_command(["./cuda-toolkit.sh"])
+        else:
+            logger.warning("cuda-toolkit.sh not found.")
+
+    def install_mac_brew(self):
+        if self.os_type != "darwin":
+            logger.info("Mac Brew script is for macOS. Skipping.")
+            return
+        logger.info("Installing Mac Brew Packages...")
+        if os.path.exists("./mac-brew.sh"):
+            self.run_command(["./mac-brew.sh"])
+        else:
+            logger.warning("mac-brew.sh not found.")
+
+    def run_optional_installers(self):
+        if self.options.get("with_1password"):
+            self.install_1password()
+        if self.options.get("with_docker"):
+            self.install_docker()
+        if self.options.get("with_docker_rootless"):
+            self.install_docker_rootless()
+        if self.options.get("with_miniforge"):
+            self.install_miniforge()
+        if self.options.get("with_cmdl_tools"):
+            self.install_cmdl_tools()
+        if self.options.get("with_cuda"):
+            self.install_cuda()
+        if self.options.get("with_mac_brew"):
+            self.install_mac_brew()
+
     def run_legacy_scripts(self):
         if self.os_type in ["debian", "ubuntu"]:
             self.install_llvm("18")
 
-        # Using integrated omz config instead of python script
         self.config_ohmyzsh()
 
-        # Using integrated restore process instead of external scripts
         self.restore_dotfiles(Path("./sources/root"), Path.home() / "dotfiles")
         self.link_dotfiles(Path.home() / "dotfiles", Path.home())
 
@@ -328,13 +407,14 @@ class DotfilesManager:
 
         if self.os_type == "darwin":
             logger.info("macOS detected. Core package installation skipped.")
-        elif self.os_type == "debian" or "ubuntu" in self.os_type.lower():
+        elif self.os_type in ["debian", "ubuntu"]:
             self.bootstrap_debian()
         else:
             logger.error(f"Unknown OS: {self.os_type}")
             sys.exit(1)
 
         self.run_legacy_scripts()
+        self.run_optional_installers()
         logger.info("Bootstrap completed successfully!")
 
 
@@ -344,6 +424,34 @@ def main():
         "--dry-run", action="store_true", help="Print commands without executing"
     )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
+
+    # Optional component flags
+    parser.add_argument(
+        "--with-1password", action="store_true", help="Install 1Password"
+    )
+    parser.add_argument("--with-docker", action="store_true", help="Install Docker")
+    parser.add_argument(
+        "--with-docker-rootless", action="store_true", help="Install Docker Rootless"
+    )
+    parser.add_argument(
+        "--with-miniforge", action="store_true", help="Install Miniforge"
+    )
+    parser.add_argument(
+        "--with-cmdl-tools", action="store_true", help="Install Command Line Tools"
+    )
+    parser.add_argument("--with-cuda", action="store_true", help="Install CUDA Toolkit")
+    parser.add_argument(
+        "--with-mac-brew", action="store_true", help="Install Mac Brew packages"
+    )
+
+    parser.add_argument(
+        "--all", action="store_true", help="Enable all optional components"
+    )
+    parser.add_argument(
+        "--mac",
+        action="store_true",
+        help="Enable all components suitable for Mac (excludes Docker)",
+    )
 
     # Optional direct commands for just backup or restore
     subparsers = parser.add_subparsers(dest="command", help="sub-command help")
@@ -356,7 +464,38 @@ def main():
 
     args = parser.parse_args()
 
-    manager = DotfilesManager(dry_run=args.dry_run, verbose=args.verbose)
+    # Process meta-flags
+    if args.all:
+        args.with_1password = True
+        args.with_docker = True
+        args.with_docker_rootless = True
+        args.with_miniforge = True
+        args.with_cmdl_tools = True
+        args.with_cuda = True
+        args.with_mac_brew = True
+
+    if args.mac:
+        args.with_1password = True
+        args.with_docker = False
+        args.with_docker_rootless = False
+        args.with_miniforge = True
+        args.with_cmdl_tools = True
+        args.with_cuda = False
+        args.with_mac_brew = True
+
+    options = {
+        "with_1password": args.with_1password,
+        "with_docker": args.with_docker,
+        "with_docker_rootless": args.with_docker_rootless,
+        "with_miniforge": args.with_miniforge,
+        "with_cmdl_tools": args.with_cmdl_tools,
+        "with_cuda": args.with_cuda,
+        "with_mac_brew": args.with_mac_brew,
+    }
+
+    manager = DotfilesManager(
+        dry_run=args.dry_run, verbose=args.verbose, options=options
+    )
 
     if args.command == "backup":
         manager.backup_dotfiles(Path.home() / "dotfiles", Path("./sources/root"))
