@@ -339,13 +339,6 @@ class DotfilesManager:
         else:
             logger.warning("install-docker-rootless.sh not found.")
 
-    def install_miniforge(self):
-        logger.info("Installing Miniforge...")
-        if os.path.exists("./install-miniforge.sh"):
-            self.run_command(["./install-miniforge.sh"])
-        else:
-            logger.warning("install-miniforge.sh not found.")
-
     def install_cmdl_tools(self):
         if self.os_type not in ["debian", "ubuntu"]:
             logger.info("Cmdl tools script uses apt. Skipping.")
@@ -383,8 +376,6 @@ class DotfilesManager:
             self.install_docker()
         if self.options.get("with_docker_rootless"):
             self.install_docker_rootless()
-        if self.options.get("with_miniforge"):
-            self.install_miniforge()
         if self.options.get("with_cmdl_tools"):
             self.install_cmdl_tools()
         if self.options.get("with_cuda"):
@@ -434,9 +425,6 @@ def main():
         "--with-docker-rootless", action="store_true", help="Install Docker Rootless"
     )
     parser.add_argument(
-        "--with-miniforge", action="store_true", help="Install Miniforge"
-    )
-    parser.add_argument(
         "--with-cmdl-tools", action="store_true", help="Install Command Line Tools"
     )
     parser.add_argument("--with-cuda", action="store_true", help="Install CUDA Toolkit")
@@ -469,7 +457,6 @@ def main():
         args.with_1password = True
         args.with_docker = True
         args.with_docker_rootless = True
-        args.with_miniforge = True
         args.with_cmdl_tools = True
         args.with_cuda = True
         args.with_mac_brew = True
@@ -478,7 +465,6 @@ def main():
         args.with_1password = True
         args.with_docker = False
         args.with_docker_rootless = False
-        args.with_miniforge = True
         args.with_cmdl_tools = True
         args.with_cuda = False
         args.with_mac_brew = True
@@ -487,7 +473,6 @@ def main():
         "with_1password": args.with_1password,
         "with_docker": args.with_docker,
         "with_docker_rootless": args.with_docker_rootless,
-        "with_miniforge": args.with_miniforge,
         "with_cmdl_tools": args.with_cmdl_tools,
         "with_cuda": args.with_cuda,
         "with_mac_brew": args.with_mac_brew,
