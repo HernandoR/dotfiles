@@ -8,6 +8,8 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from installers import debian, macos
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -317,57 +319,39 @@ class DotfilesManager:
             logger.info("1Password script is for Debian-based systems. Skipping.")
             return
         logger.info("Installing 1Password...")
-        if os.path.exists("./install-1password.sh"):
-            self.run_command(["./install-1password.sh"])
-        else:
-            logger.warning("install-1password.sh not found.")
+        debian.install_1password(self.run_command)
 
     def install_docker(self):
         if self.os_type not in ["debian", "ubuntu"]:
             logger.info("Docker script is for Debian-based systems. Skipping.")
             return
         logger.info("Installing Docker...")
-        if os.path.exists("./install-docker.sh"):
-            self.run_command(["./install-docker.sh"])
-        else:
-            logger.warning("install-docker.sh not found.")
+        debian.install_docker(self.run_command)
 
     def install_docker_rootless(self):
         logger.info("Installing Docker Rootless...")
-        if os.path.exists("./install-docker-rootless.sh"):
-            self.run_command(["./install-docker-rootless.sh"])
-        else:
-            logger.warning("install-docker-rootless.sh not found.")
+        debian.install_docker_rootless(self.run_command)
 
     def install_cmdl_tools(self):
         if self.os_type not in ["debian", "ubuntu"]:
             logger.info("Cmdl tools script uses apt. Skipping.")
             return
         logger.info("Installing Cmdl Tools...")
-        if os.path.exists("./install_cmdl_tools.sh"):
-            self.run_command(["./install_cmdl_tools.sh"])
-        else:
-            logger.warning("install_cmdl_tools.sh not found.")
+        debian.install_cmdl_tools(self.run_command)
 
     def install_cuda(self):
         if self.os_type not in ["debian", "ubuntu"]:
             logger.info("CUDA script is for Ubuntu. Skipping.")
             return
         logger.info("Installing CUDA Toolkit...")
-        if os.path.exists("./cuda-toolkit.sh"):
-            self.run_command(["./cuda-toolkit.sh"])
-        else:
-            logger.warning("cuda-toolkit.sh not found.")
+        debian.install_cuda(self.run_command)
 
     def install_mac_brew(self):
         if self.os_type != "darwin":
             logger.info("Mac Brew script is for macOS. Skipping.")
             return
         logger.info("Installing Mac Brew Packages...")
-        if os.path.exists("./mac-brew.sh"):
-            self.run_command(["./mac-brew.sh"])
-        else:
-            logger.warning("mac-brew.sh not found.")
+        macos.install_mac_brew(self.run_command)
 
     def run_optional_installers(self):
         if self.options.get("with_1password"):
