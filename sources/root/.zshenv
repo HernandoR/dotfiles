@@ -1,22 +1,28 @@
-# Add `~/bin` to the `$PATH`
-export PATH="$HOME/bin:$PATH";
+# Zsh environment — sourced for ALL zsh invocations.
+#
+# Sourcing chain for non-interactive shells:
+#   .zshenv → .tools → .exports → .path
+#
+# Interactive shells additionally get:
+#   .bash_prompt → .aliases → .functions → .proxy → .extra
+#   (then .zshrc handles zsh-specific plugins/themes)
+#
+# Note: the interactive guard is placed AFTER environment setup so that
+# non-interactive zsh (scripts, subprocesses) still get PATH and env vars.
 
-# stop if on a non-interactive shell
-[[ $- != *i* ]] && return
+# ---- Environment setup (all shells) ----
 
-# Load the shell dotfiles, and then some:
-# * ~/.path can be used to extend `$PATH`.
-# * ~/.extra can be used for other settings you don’t want to commit.
-for file in ~/.{exports,path,functions,aliases,bash_prompt,proxy,extra}; do
-	[ -r "$file" ] && [ -f "$file" ] && source "$file";
+for file in ~/.{tools,exports,path}; do
+	[ -r "$file" ] && [ -f "$file" ] && . "$file";
 done;
 unset file;
-# if [ -d "$HOME/.linuxbrew/bin" ] ; then
-# 	eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-# fi
 
-if [ -f "$HOME/.cargo/env" ] ; then
-	. "$HOME/.cargo/env"
-fi
+# Stop here for non-interactive shells
+[[ $- != *i* ]] && return
 
-if [ -e /home/lz/.nix-profile/etc/profile.d/nix.sh ]; then . /home/lz/.nix-profile/etc/profile.d/nix.sh; fi # added by Nix installer
+# ---- Interactive-only dotfiles ----
+
+for file in ~/.{bash_prompt,aliases,functions,proxy,extra}; do
+	[ -r "$file" ] && [ -f "$file" ] && . "$file";
+done;
+unset file;

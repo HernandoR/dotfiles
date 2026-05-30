@@ -1,13 +1,10 @@
-# Add `~/bin` to the `$PATH`
-export PATH="$HOME/bin:$PATH";
-
-# Load the shell dotfiles, and then some:
-# * ~/.path can be used to extend `$PATH`.
-# * ~/.extra can be used for other settings you don’t want to commit.
-for file in ~/.{path,bash_prompt,exports,aliases,functions,extra}; do
-	[ -r "$file" ] && [ -f "$file" ] && source "$file";
-done;
-unset file;
+# Bash login shell entry point.
+# Sets up bash-specific options, then delegates shared config to .bashrc.
+#
+# Sourcing chain:
+#   .bash_profile → .bashrc → .tools → .exports → .path →
+#                             .bash_prompt → .aliases → .functions →
+#                             .proxy → .extra
 
 # Case-insensitive globbing (used in pathname expansion)
 shopt -s nocaseglob;
@@ -48,9 +45,6 @@ complete -W "NSGlobalDomain" defaults;
 
 # Add `killall` tab completion for common apps
 complete -o "nospace" -W "Contacts Calendar Dock Finder Mail Safari iTunes SystemUIServer Terminal Twitter" killall;
-[ -r ~/.bashrc ] && . ~/.bashrc #call bashrc[cml installer]
-. "$HOME/.cargo/env"
 
-[ ! -f "$HOME/.x-cmd.root/X" ] || . "$HOME/.x-cmd.root/X" # boot up x-cmd.
-
-if [ -e /home/lz/.nix-profile/etc/profile.d/nix.sh ]; then . /home/lz/.nix-profile/etc/profile.d/nix.sh; fi # added by Nix installer
+# Load shared shell configuration
+[ -r ~/.bashrc ] && . ~/.bashrc

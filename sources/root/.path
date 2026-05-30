@@ -1,52 +1,49 @@
-# User-defined paths
-
-# PATH="$PATH:~/micromamba/"
-
-# export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}
-
-
+# PATH extensions — sourced after .tools and .exports.
+# All PATH additions go here so they're available to both bash and zsh.
 
 path_list=(
-"$HOME/bin"
-"$HOME/.local/bin"
-"$HOME/Applications"
-"/usr/local/cuda/bin"
-"/usr/lib/cargo/bin/coreutils"
-# jetbrains
-"$HOME/.local/share/JetBrains/Toolbox/scripts"
-"$HOME/miniconda3/bin"
-#brew
+	"$HOME/bin"
+	"$HOME/.local/bin"
+	"$HOME/Applications"
+	"$HOME/.pixi/bin"
+	"$HOME/.local/share/solana/install/active_release/bin"
+	"$HOME/.lmstudio/bin"
+	"$HOME/.local/share/JetBrains/Toolbox/scripts"
+	"$HOME/miniconda3/bin"
+	"/usr/local/cuda/bin"
+	"/usr/lib/cargo/bin/coreutils"
+	"/opt/homebrew/opt/curl/bin"
 )
 
-# brew in linux
-# if [ -d "/home/linuxbrew/.linuxbrew/bin" ]; then
-#    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-#    path_list+="$(brew --prefix coreutils)/libexec/gnubin"
-# fi
-# #  brew in macos
-# if [ -d "/opt/homebrew/bin" ]; then
-#     eval "$(/opt/homebrew/bin/brew shellenv)"
-# fi
-# #  brew in macos
-# if [ -d "/opt/homebrew/bin" ]; then
-#     eval "$(/opt/homebrew/bin/brew shellenv)"
-# fi
+# Homebrew (macOS)
+if [ -d "/opt/homebrew/bin" ]; then
+	eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
+# Go
+if command -v go >/dev/null 2>&1 && [ -z "$GOPATH" ]; then
+	export GOPATH="$HOME/go"
+fi
+if [ -n "$GOPATH" ]; then
+	path_list+=("$GOPATH/bin")
+fi
 
 for path_v in "${path_list[@]}"; do
-    if [ -d "$path_v" ]; then
-        PATH="$path_v:$PATH"
-    fi
+	if [ -d "$path_v" ]; then
+		PATH="$path_v:$PATH"
+	fi
 done
 
+# CPLUS_INCLUDE_PATH
 cpp_path_list=(
-"$HOME/miniconda3/include"
-"${mipilot_root}"
+	"$HOME/miniconda3/include"
+	"${mipilot_root}"
 )
 for path_v in "${cpp_path_list[@]}"; do
-    if [ -d "$path_v" ]; then
-        CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH:+$CPLUS_INCLUDE_PATH:}"$path_v"
-    fi
+	if [ -d "$path_v" ]; then
+		CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH:+$CPLUS_INCLUDE_PATH:}"$path_v"
+	fi
 done
 
-export PATH=$PATH
-export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH
+export PATH
+export CPLUS_INCLUDE_PATH
