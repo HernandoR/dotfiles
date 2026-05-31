@@ -2,7 +2,7 @@
 # can reference ${red}, ${yellow}, ${bold}, etc.
 
 if tput setaf 1 &> /dev/null; then
-	tput sgr0;
+	tput sgr0 >/dev/null;
 	bold=$(tput bold);
 	reset=$(tput sgr0);
 	black=$(tput setaf 0);
