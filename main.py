@@ -20,6 +20,7 @@ logger = logging.getLogger("dotfiles")
 
 class DotfilesManager:
     def __init__(self, dry_run=False, verbose=False, options=None):
+        self.is_root = os.geteuid() == 0
         self.os_type = self._detect_os()
         self.state = {
             "apt_updated": False,
@@ -46,6 +47,14 @@ class DotfilesManager:
         return "unknown"
 
     def run_command(self, cmd, check=True, shell=False, capture_output=False):
+        # Strip sudo when already running as root
+        if self.is_root:
+            if isinstance(cmd, str) and cmd.startswith("sudo "):
+                cmd = cmd[5:]
+                logger.debug("Running as root, stripped 'sudo' prefix")
+            elif isinstance(cmd, list) and cmd and cmd[0] == "sudo":
+                cmd = cmd[1:]
+                logger.debug("Running as root, stripped 'sudo' element")
         cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
         logger.info(f"Running: {cmd_str}")
         if self.dry_run:
