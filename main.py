@@ -161,7 +161,7 @@ class DotfilesManager:
                 [
                     "curl",
                     "-fsSL",
-                    "https://gitee.com/romkatv/antigen/raw/master/bin/antigen.zsh",
+                    "https://git.io/antigen",
                     "-o",
                     str(Path.home() / "antigen.zsh"),
                 ]
