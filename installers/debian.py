@@ -44,6 +44,59 @@ def install_cmdl_tools(run_cmd):
     run_cmd(["sudo", "apt-get", "update"])
 
 
+def install_llvm(run_cmd, version="18", dry_run=False):
+    import urllib.request
+
+    llvm_sh_path = Path.home() / ".local" / "bin" / "llvm.sh"
+    if not dry_run:
+        llvm_sh_path.parent.mkdir(parents=True, exist_ok=True)
+        print("  Downloading llvm.sh...")
+        urllib.request.urlretrieve("https://apt.llvm.org/llvm.sh", llvm_sh_path)
+        llvm_sh_path.chmod(0o755)
+
+    print("  Running llvm.sh...")
+    run_cmd([str(llvm_sh_path), version, "all"])
+
+    print("  Setting up update-alternatives for clang...")
+    alternatives = [
+        ("clang", "clang", f"clang-{version}", 100),
+        ("clang++", "clang++", f"clang++-{version}", None),
+        ("clang-cpp", "clang-cpp", f"clang-cpp-{version}", None),
+        ("clangd", "clangd", f"clangd-{version}", None),
+        ("clang-format", "clang-format", f"clang-format-{version}", None),
+        ("clang-tidy", "clang-tidy", f"clang-tidy-{version}", None),
+        ("clang-cl", "clang-cl", f"clang-cl-{version}", None),
+        ("clang-query", "clang-query", f"clang-query-{version}", None),
+        ("clang-rename", "clang-rename", f"clang-rename-{version}", None),
+    ]
+
+    cmd = [
+        "update-alternatives",
+        "--install",
+        "/usr/bin/clang",
+        "clang",
+        f"/usr/bin/clang-{version}",
+        "100",
+    ]
+    for _, link, path, _ in alternatives[1:]:
+        cmd.extend(["--slave", f"/usr/bin/{link}", link, f"/usr/bin/{path}"])
+    run_cmd(cmd)
+
+    bin_dir = Path("/usr/bin")
+    if bin_dir.exists():
+        for file in bin_dir.glob(f"*-{version}"):
+            base_name = file.name.replace(f"-{version}", "")
+            if not (bin_dir / base_name).exists():
+                run_cmd([
+                    "update-alternatives",
+                    "--install",
+                    f"/usr/bin/{base_name}",
+                    base_name,
+                    str(file),
+                    "1",
+                ])
+
+
 def install_cuda(run_cmd):
     run_cmd(
         "wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-ubuntu2404.pin",
