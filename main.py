@@ -312,6 +312,10 @@ class DotfilesManager:
         logger.info("Installing Mac Brew Packages...")
         macos.install_mac_brew(self.run_command)
 
+    def install_starship(self):
+        logger.info("Installing Starship prompt...")
+        self.run_command("curl -sS https://starship.rs/install.sh | sh", shell=True)
+
     def set_git_proxy(self):
         http_proxy = os.environ.get("http_proxy", "")
         https_proxy = os.environ.get("https_proxy", "")
@@ -354,6 +358,8 @@ class DotfilesManager:
 
     def run_legacy_scripts(self):
         self.config_ohmyzsh()
+
+        self.install_starship()
 
         self.restore_dotfiles(Path("./sources/root"), Path.home() / "dotfiles")
         self.link_dotfiles(Path.home() / "dotfiles", Path.home())
@@ -401,7 +407,6 @@ def main():
     parser.add_argument(
         "--with-mac-brew", action="store_true", help="Install Mac Brew packages"
     )
-
     parser.add_argument(
         "--all", action="store_true", help="Enable all optional components"
     )
