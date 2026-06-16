@@ -120,7 +120,7 @@ class DotfilesManager:
         except (subprocess.CalledProcessError, Exception):
             return False
 
-    def config_ohmyzsh(self, use_github=True):
+    def config_ohmyzsh(self, use_github=True, interactive=False):
         if not Path("./sources").is_dir():
             logger.error("Please execute this script in the dotfiles directory")
             sys.exit(1)
@@ -151,7 +151,8 @@ class DotfilesManager:
                 else "https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh"
             )
             self.run_command(["curl", "-fsSL", install_url, "-o", "./install.sh"])
-            self.run_command(["sh", "./install.sh"])
+            install_args = [] if interactive else ["--unattended"]
+            self.run_command(["sh", "./install.sh"] + install_args)
             if not self.dry_run:
                 Path("./install.sh").unlink(missing_ok=True)
 
@@ -312,9 +313,10 @@ class DotfilesManager:
         logger.info("Installing Mac Brew Packages...")
         macos.install_mac_brew(self.run_command)
 
-    def install_starship(self):
+    def install_starship(self, interactive=False):
         logger.info("Installing Starship prompt...")
-        self.run_command("curl -sS https://starship.rs/install.sh | sh", shell=True)
+        flags = "" if interactive else " -y"
+        self.run_command(f"curl -sS https://starship.rs/install.sh | sh -s --{flags}", shell=True)
 
     def set_git_proxy(self):
         http_proxy = os.environ.get("http_proxy", "")
@@ -357,9 +359,10 @@ class DotfilesManager:
             self.install_mac_brew()
 
     def run_legacy_scripts(self):
-        self.config_ohmyzsh()
+        interactive = self.options.get("interactive", False)
+        self.config_ohmyzsh(interactive=interactive)
 
-        self.install_starship()
+        self.install_starship(interactive=interactive)
 
         self.restore_dotfiles(Path("./sources/root"), Path.home() / "dotfiles")
         self.link_dotfiles(Path.home() / "dotfiles", Path.home())
@@ -388,6 +391,9 @@ def main():
         "--dry-run", action="store_true", help="Print commands without executing"
     )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
+    parser.add_argument(
+        "--interactive", action="store_true", help="Enable interactive prompts during installation"
+    )
 
     # Optional component flags
     parser.add_argument(
@@ -452,6 +458,7 @@ def main():
         args.with_mac_brew = True
 
     options = {
+        "interactive": args.interactive,
         "with_1password": args.with_1password,
         "with_docker": args.with_docker,
         "with_docker_rootless": args.with_docker_rootless,
