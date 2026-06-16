@@ -395,31 +395,12 @@ def main():
         "--interactive", action="store_true", help="Enable interactive prompts during installation"
     )
 
-    # Optional component flags
+    # Optional components — comma-separated list via flag or env var
     parser.add_argument(
-        "--with-1password", action="store_true", help="Install 1Password"
-    )
-    parser.add_argument("--with-docker", action="store_true", help="Install Docker")
-    parser.add_argument(
-        "--with-docker-rootless", action="store_true", help="Install Docker Rootless"
-    )
-    parser.add_argument(
-        "--with-cmdl-tools", action="store_true", help="Install Command Line Tools"
-    )
-    parser.add_argument("--with-cuda", action="store_true", help="Install CUDA Toolkit")
-    parser.add_argument(
-        "--with-llvm", action="store_true", help="Install LLVM toolchain"
-    )
-    parser.add_argument(
-        "--with-mac-brew", action="store_true", help="Install Mac Brew packages"
-    )
-    parser.add_argument(
-        "--all", action="store_true", help="Enable all optional components"
-    )
-    parser.add_argument(
-        "--mac",
-        action="store_true",
-        help="Enable all components suitable for Mac (excludes Docker)",
+        "--optional-components",
+        type=str,
+        default="",
+        help="Comma-separated list of optional components (1password, docker, docker-rootless, cmdl-tools, cuda, llvm, mac-brew, all, mac)",
     )
 
     # Optional direct commands for just backup or restore or proxy
@@ -439,34 +420,43 @@ def main():
 
     args = parser.parse_args()
 
-    # Process meta-flags
-    if args.all:
-        args.with_1password = True
-        args.with_docker = True
-        args.with_docker_rootless = True
-        args.with_cmdl_tools = True
-        args.with_cuda = True
-        args.with_llvm = True
-        args.with_mac_brew = True
+    # Resolve optional components from env var or CLI flag (CLI takes precedence)
+    COMPONENT_ALIASES = {
+        "all": ["1password", "docker", "docker-rootless", "cmdl-tools", "cuda", "llvm", "mac-brew"],
+        "mac": ["1password", "cmdl-tools", "mac-brew"],
+    }
+    COMPONENT_MAP = {
+        "1password": "with_1password",
+        "docker": "with_docker",
+        "docker-rootless": "with_docker_rootless",
+        "cmdl-tools": "with_cmdl_tools",
+        "cuda": "with_cuda",
+        "llvm": "with_llvm",
+        "mac-brew": "with_mac_brew",
+    }
 
-    if args.mac:
-        args.with_1password = True
-        args.with_docker = False
-        args.with_docker_rootless = False
-        args.with_cmdl_tools = True
-        args.with_cuda = False
-        args.with_mac_brew = True
+    raw = os.environ.get("DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS", "")
+    if args.optional_components:
+        raw = args.optional_components
+
+    enabled_components = set()
+    if raw:
+        for part in raw.split(","):
+            part = part.strip().lower()
+            if not part:
+                continue
+            if part in COMPONENT_ALIASES:
+                enabled_components.update(COMPONENT_ALIASES[part])
+            elif part in COMPONENT_MAP:
+                enabled_components.add(part)
+            else:
+                logger.warning(f"Unknown optional component: {part}")
 
     options = {
         "interactive": args.interactive,
-        "with_1password": args.with_1password,
-        "with_docker": args.with_docker,
-        "with_docker_rootless": args.with_docker_rootless,
-        "with_cmdl_tools": args.with_cmdl_tools,
-        "with_cuda": args.with_cuda,
-        "with_llvm": args.with_llvm,
-        "with_mac_brew": args.with_mac_brew,
     }
+    for comp_name, opt_key in COMPONENT_MAP.items():
+        options[opt_key] = comp_name in enabled_components
 
     manager = DotfilesManager(
         dry_run=args.dry_run, verbose=args.verbose, options=options
