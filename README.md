@@ -1,115 +1,129 @@
 # lzhen's dotfiles
 
-Well, Unfortunately, i don't like bash. Migrating the install script into zsh configs
+Cross-platform dotfiles with a Python-based bootstrap. A thin POSIX shell
+entrypoint hands off to [`uv`](https://docs.astral.sh/uv/), which runs the
+real installer (`main.py`). The installer detects your OS, installs core
+packages, sets up Oh My Zsh + Starship, links the dotfiles into `$HOME`, and
+optionally installs extra components from a registry.
 
-# Mathias’s dotfiles
+> **Warning:** These are my personal settings. Fork the repo and review the
+> code before running it — don't blindly apply someone else's configuration.
 
-![Screenshot of my shell prompt](https://i.imgur.com/EkEtphC.png)
-
-## Installation
-
-**Warning:** If you want to give these dotfiles a try, you should first fork this repository, review the code, and remove things you don’t want or need. Don’t blindly use my settings unless you know what that entails. Use at your own risk!
-
-### Using Git and the bootstrap script
-
-You can clone the repository wherever you want. (I like to keep it in `~/Projects/dotfiles`, with `~/dotfiles` as a symlink.) The bootstrapper script will pull in the latest version and copy the files to your home folder.
+## Quick start
 
 ```bash
-git clone https://github.com/mathiasbynens/dotfiles.git && cd dotfiles && source bootstrap.sh
+git clone git@github.com:HernandoR/dotfiles.git
+cd dotfiles
+./bootstrap.sh
 ```
 
-To update, `cd` into your local `dotfiles` repository and then:
+`bootstrap.sh` requires `curl`. It installs `uv` if it isn't already present,
+then runs `uv run main.py` and forwards any extra arguments to it. So anything
+documented below for `main.py` can be passed straight through:
 
 ```bash
-source bootstrap.sh
+./bootstrap.sh --dry-run --verbose
 ```
 
-Alternatively, to update while avoiding the confirmation prompt:
+## What the bootstrap does
+
+Running with no sub-command (`./bootstrap.sh` or `uv run main.py`) performs a
+full bootstrap:
+
+1. **Detect OS** — `darwin`, `debian`/`ubuntu`, or `unknown` (read from
+   `platform.system()` and `/etc/os-release`).
+2. **Install core packages**
+   - **macOS:** installs Homebrew (from the BFSU mirror) and `git`, `zsh`,
+     `rsync`, `rclone`.
+   - **Debian/Ubuntu:** `apt update`, ensures `curl` is present, then installs
+     `git`, `zsh`, `rsync`, `aptitude`, `wget`.
+3. **Configure the shell** — installs Oh My Zsh (falling back to a Gitee
+   mirror when GitHub is unreachable), Antigen, the `zsh-autosuggestions` and
+   `zsh-syntax-highlighting` plugins, and the Starship prompt.
+4. **Restore + link dotfiles** — rsyncs the tracked files from `sources/root`
+   into `~/dotfiles`, then symlinks them into `$HOME`.
+5. **Run optional components** — anything you requested via
+   `--optional-components` (see below).
+
+### Flags
+
+| Flag | Effect |
+|------|--------|
+| `--dry-run` | Print every command without executing it. |
+| `--verbose` | Enable debug logging (and `rsync -P` progress). |
+| `--interactive` | Allow interactive prompts during install (Oh My Zsh, Starship). |
+| `--optional-components <list>` | Comma-separated optional components / alias groups. |
+
+## Sub-commands
+
+`main.py` also exposes targeted commands for managing dotfiles without a full
+bootstrap:
 
 ```bash
-set -- -f; source bootstrap.sh
+./bootstrap.sh backup        # rsync $HOME/dotfiles back into sources/root
+./bootstrap.sh restore       # restore sources/root into $HOME/dotfiles and re-link
+./bootstrap.sh set-proxy     # set git http/https proxy from $http_proxy / $https_proxy
+./bootstrap.sh unset-proxy   # clear the git proxy config
 ```
 
-### Git-free install
+## Optional components
 
-To install these dotfiles without Git:
+Optional components live in a self-registering registry
+(`installers/components.py`). Each is selected by name, or by an **alias
+group** (currently `all`). Select them in two ways — the CLI flag wins over the
+environment variable:
 
 ```bash
-cd; curl -#L https://github.com/mathiasbynens/dotfiles/tarball/main | tar -xzv --strip-components 1 --exclude={README.md,bootstrap.sh,.osx,LICENSE-MIT.txt}
+# via flag
+./bootstrap.sh --optional-components docker,claude
+
+# via env var
+DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS=all ./bootstrap.sh
 ```
 
-To update later on, just run that command again.
+Unknown names are logged and skipped. Components only run on their supported
+OS; non-applicable ones are skipped automatically.
 
-### Specify the `$PATH`
+| Name | Description | OS |
+|------|-------------|----|
+| `1password` | 1Password | debian, ubuntu |
+| `docker` | Docker | debian, ubuntu |
+| `docker-rootless` | Docker (rootless) | all |
+| `cmdl-tools` | command-line tools (deadsnakes PPA, etc.) | debian, ubuntu |
+| `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
+| `llvm` | LLVM 18 (+ `update-alternatives`) | debian, ubuntu |
+| `mac-brew` | Homebrew formulae & casks | darwin |
+| `claude` | Claude Code CLI | all |
 
-If `~/.path` exists, it will be sourced along with the other files, before any feature testing (such as [detecting which version of `ls` is being used](https://github.com/mathiasbynens/dotfiles/blob/aff769fd75225d8f2e481185a71d5e05b76002dc/.aliases#L21-L26)) takes place.
-
-Here’s an example `~/.path` file that adds `/usr/local/bin` to the `$PATH`:
+To list everything available at any time:
 
 ```bash
-export PATH="/usr/local/bin:$PATH"
+uv run -m installers.components
 ```
 
-### Add custom commands without creating a new fork
+## Repository layout
 
-If `~/.extra` exists, it will be sourced along with the other files. You can use this to add a few custom commands without the need to fork this entire repository, or to add commands you don’t want to commit to a public repository.
-
-My `~/.extra` looks something like this:
-
-```bash
-# Git credentials
-# Not in the repository, to prevent people from accidentally committing under my name
-GIT_AUTHOR_NAME="Mathias Bynens"
-GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
-git config --global user.name "$GIT_AUTHOR_NAME"
-GIT_AUTHOR_EMAIL="mathias@mailinator.com"
-GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
-git config --global user.email "$GIT_AUTHOR_EMAIL"
+```
+bootstrap.sh             POSIX entrypoint — installs uv, runs main.py
+main.py                  DotfilesManager: OS detection, core install, dotfile linking, sub-commands
+installers/
+  components.py          OptionalComponent registry (--optional-components)
+  debian.py              Debian/Ubuntu installers (1Password, Docker, CUDA, LLVM, …)
+  macos.py               macOS bootstrap (Homebrew + formulae/casks)
+sources/
+  root/                  the actual dotfiles, rsynced into $HOME
+  .file_list             files rsync includes
+  .ex_list               patterns rsync excludes
+  zsh_plugins/           zsh plugin configs copied into Oh My Zsh custom/
+  install/, templates/   supporting assets
+init/                    editor/terminal preferences (Sublime, iTerm, etc.)
 ```
 
-You could also use `~/.extra` to override settings, functions and aliases from my dotfiles repository. It’s probably better to [fork this repository](https://github.com/mathiasbynens/dotfiles/fork) instead, though.
+## Notes
 
-### Sensible macOS defaults
-
-When setting up a new Mac, you may want to set some sensible macOS defaults:
-
-```bash
-./.macos
-```
-
-### Install Homebrew formulae
-
-When setting up a new Mac, you may want to install some common [Homebrew](https://brew.sh/) formulae (after installing Homebrew, of course):
-
-```bash
-./brew.sh
-```
-
-Some of the functionality of these dotfiles depends on formulae installed by `brew.sh`. If you don’t plan to run `brew.sh`, you should look carefully through the script and manually install any particularly important ones. A good example is Bash/Git completion: the dotfiles use a special version from Homebrew.
-
-## Feedback
-
-Suggestions/improvements
-[welcome](https://github.com/mathiasbynens/dotfiles/issues)!
-
-## Author
-
-| [![twitter/mathias](http://gravatar.com/avatar/24e08a9ea84deb17ae121074d0f17125?s=70)](http://twitter.com/mathias "Follow @mathias on Twitter") |
-|---|
-| [Mathias Bynens](https://mathiasbynens.be/) |
-
-## Thanks to…
-
-* @ptb and [his _macOS Setup_ repository](https://github.com/ptb/mac-setup)
-* [Ben Alman](http://benalman.com/) and his [dotfiles repository](https://github.com/cowboy/dotfiles)
-* [Cătălin Mariș](https://github.com/alrra) and his [dotfiles repository](https://github.com/alrra/dotfiles)
-* [Gianni Chiappetta](https://butt.zone/) for sharing his [amazing collection of dotfiles](https://github.com/gf3/dotfiles)
-* [Jan Moesen](http://jan.moesen.nu/) and his [ancient `.bash_profile`](https://gist.github.com/1156154) + [shiny _tilde_ repository](https://github.com/janmoesen/tilde)
-* Lauri ‘Lri’ Ranta for sharing [loads of hidden preferences](https://web.archive.org/web/20161104144204/http://osxnotes.net/defaults.html)
-* [Matijs Brinkhuis](https://matijs.brinkhu.is/) and his [dotfiles repository](https://github.com/matijs/dotfiles)
-* [Nicolas Gallagher](http://nicolasgallagher.com/) and his [dotfiles repository](https://github.com/necolas/dotfiles)
-* [Sindre Sorhus](https://sindresorhus.com/)
-* [Tom Ryder](https://sanctum.geek.nz/) and his [dotfiles repository](https://sanctum.geek.nz/cgit/dotfiles.git/about)
-* [Kevin Suttle](http://kevinsuttle.com/) and his [dotfiles repository](https://github.com/kevinSuttle/dotfiles) and [macOS-Defaults project](https://github.com/kevinSuttle/macOS-Defaults), which aims to provide better documentation for [`~/.macos`](https://mths.be/macos)
-* [Haralan Dobrev](https://hkdobrev.com/)
-* Anyone who [contributed a patch](https://github.com/mathiasbynens/dotfiles/contributors) or [made a helpful suggestion](https://github.com/mathiasbynens/dotfiles/issues)
+- Requires Python ≥ 3.9; `uv` manages the interpreter and (currently empty)
+  dependency set, so no manual `pip install` is needed.
+- Several downloads default to Chinese mirrors (BFSU for Homebrew, Gitee for
+  Oh My Zsh when GitHub is unreachable) for faster installs in CN networks.
+- Run the installer from inside the cloned `dotfiles` directory — it expects
+  the `sources/` directory to be present.
