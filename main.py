@@ -5,9 +5,13 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-from installers import debian, macos
+from installers import macos
+# Importing components registers every OptionalComponent subclass at
+# class-definition time, populating the registry used below.
+from installers.components import OptionalComponent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -100,13 +104,6 @@ class DotfilesManager:
         logger.info(f"Installing core packages: {', '.join(packages)}")
         self.run_command(["sudo", "apt", "-y", "install"] + packages)
 
-    def install_llvm(self, version="18"):
-        if self.os_type not in ["debian", "ubuntu"]:
-            logger.info("LLVM script is for Debian-based systems. Skipping.")
-            return
-        logger.info(f"Installing LLVM version {version}...")
-        debian.install_llvm(self.run_command, version=version, dry_run=self.dry_run)
-
     def is_github_reachable(self):
         if self.dry_run:
             return True
@@ -124,6 +121,10 @@ class DotfilesManager:
         if not Path("./sources").is_dir():
             logger.error("Please execute this script in the dotfiles directory")
             sys.exit(1)
+
+        output_dir = Path("./output")
+        if not self.dry_run:
+            output_dir.mkdir(exist_ok=True)
 
         github_reachable = self.is_github_reachable() if use_github else False
         logger.info(
@@ -150,11 +151,12 @@ class DotfilesManager:
                 if github_reachable
                 else "https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh"
             )
-            self.run_command(["curl", "-fsSL", install_url, "-o", "./install.sh"])
+            install_script = output_dir / "install.sh"
+            self.run_command(["curl", "-fsSL", install_url, "-o", str(install_script)])
             install_args = [] if interactive else ["--unattended"]
-            self.run_command(["sh", "./install.sh"] + install_args)
+            self.run_command(["sh", str(install_script)] + install_args)
             if not self.dry_run:
-                Path("./install.sh").unlink(missing_ok=True)
+                install_script.unlink(missing_ok=True)
 
         logger.info("Installing antigen...")
         if not self.dry_run:
@@ -274,49 +276,16 @@ class DotfilesManager:
 
         logger.info("Dotfiles linked successfully!")
 
-    def install_1password(self):
-        if self.os_type not in ["debian", "ubuntu"]:
-            logger.info("1Password script is for Debian-based systems. Skipping.")
-            return
-        logger.info("Installing 1Password...")
-        debian.install_1password(self.run_command)
-
-    def install_docker(self):
-        if self.os_type not in ["debian", "ubuntu"]:
-            logger.info("Docker script is for Debian-based systems. Skipping.")
-            return
-        logger.info("Installing Docker...")
-        debian.install_docker(self.run_command)
-
-    def install_docker_rootless(self):
-        logger.info("Installing Docker Rootless...")
-        debian.install_docker_rootless(self.run_command)
-
-    def install_cmdl_tools(self):
-        if self.os_type not in ["debian", "ubuntu"]:
-            logger.info("Cmdl tools script uses apt. Skipping.")
-            return
-        logger.info("Installing Cmdl Tools...")
-        debian.install_cmdl_tools(self.run_command)
-
-    def install_cuda(self):
-        if self.os_type not in ["debian", "ubuntu"]:
-            logger.info("CUDA script is for Ubuntu. Skipping.")
-            return
-        logger.info("Installing CUDA Toolkit...")
-        debian.install_cuda(self.run_command)
-
-    def install_mac_brew(self):
-        if self.os_type != "darwin":
-            logger.info("Mac Brew script is for macOS. Skipping.")
-            return
-        logger.info("Installing Mac Brew Packages...")
-        macos.install_mac_brew(self.run_command)
-
     def install_starship(self, interactive=False):
         logger.info("Installing Starship prompt...")
-        flags = "" if interactive else " -y"
-        self.run_command(f"curl -sS https://starship.rs/install.sh | sh -s --{flags}", shell=True)
+        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            self.run_command(["curl", "-fsSL", "https://starship.rs/install.sh", "-o", str(tmp_path)])
+            flags = [] if interactive else ["-y"]
+            self.run_command(["sh", str(tmp_path), "--"] + flags)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     def set_git_proxy(self):
         http_proxy = os.environ.get("http_proxy", "")
@@ -343,20 +312,8 @@ class DotfilesManager:
         )
 
     def run_optional_installers(self):
-        if self.options.get("with_1password"):
-            self.install_1password()
-        if self.options.get("with_docker"):
-            self.install_docker()
-        if self.options.get("with_docker_rootless"):
-            self.install_docker_rootless()
-        if self.options.get("with_cmdl_tools"):
-            self.install_cmdl_tools()
-        if self.options.get("with_cuda"):
-            self.install_cuda()
-        if self.options.get("with_llvm"):
-            self.install_llvm("18")
-        if self.options.get("with_mac_brew"):
-            self.install_mac_brew()
+        for name in self.options.get("optional_components", []):
+            OptionalComponent.get(name).run(self)
 
     def run_legacy_scripts(self):
         interactive = self.options.get("interactive", False)
@@ -395,12 +352,19 @@ def main():
         "--interactive", action="store_true", help="Enable interactive prompts during installation"
     )
 
-    # Optional components — comma-separated list via flag or env var
+    # Optional components — comma-separated list via flag or env var.
+    # The choices come straight from the component registry.
+    component_choices = OptionalComponent.names() + sorted(
+        OptionalComponent.alias_groups()
+    )
     parser.add_argument(
         "--optional-components",
         type=str,
         default="",
-        help="Comma-separated list of optional components (1password, docker, docker-rootless, cmdl-tools, cuda, llvm, mac-brew, all, mac)",
+        help=(
+            "Comma-separated list of optional components "
+            f"({', '.join(component_choices)})"
+        ),
     )
 
     # Optional direct commands for just backup or restore or proxy
@@ -420,43 +384,15 @@ def main():
 
     args = parser.parse_args()
 
-    # Resolve optional components from env var or CLI flag (CLI takes precedence)
-    COMPONENT_ALIASES = {
-        "all": ["1password", "docker", "docker-rootless", "cmdl-tools", "cuda", "llvm", "mac-brew"],
-        "mac": ["1password", "cmdl-tools", "mac-brew"],
-    }
-    COMPONENT_MAP = {
-        "1password": "with_1password",
-        "docker": "with_docker",
-        "docker-rootless": "with_docker_rootless",
-        "cmdl-tools": "with_cmdl_tools",
-        "cuda": "with_cuda",
-        "llvm": "with_llvm",
-        "mac-brew": "with_mac_brew",
-    }
-
+    # Resolve optional components from env var or CLI flag (CLI takes precedence).
     raw = os.environ.get("DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS", "")
     if args.optional_components:
         raw = args.optional_components
 
-    enabled_components = set()
-    if raw:
-        for part in raw.split(","):
-            part = part.strip().lower()
-            if not part:
-                continue
-            if part in COMPONENT_ALIASES:
-                enabled_components.update(COMPONENT_ALIASES[part])
-            elif part in COMPONENT_MAP:
-                enabled_components.add(part)
-            else:
-                logger.warning(f"Unknown optional component: {part}")
-
     options = {
         "interactive": args.interactive,
+        "optional_components": OptionalComponent.resolve(raw),
     }
-    for comp_name, opt_key in COMPONENT_MAP.items():
-        options[opt_key] = comp_name in enabled_components
 
     manager = DotfilesManager(
         dry_run=args.dry_run, verbose=args.verbose, options=options
