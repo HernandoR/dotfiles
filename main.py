@@ -5,6 +5,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from installers import macos
@@ -277,8 +278,14 @@ class DotfilesManager:
 
     def install_starship(self, interactive=False):
         logger.info("Installing Starship prompt...")
-        flags = "" if interactive else " -y"
-        self.run_command(f"curl -sS https://starship.rs/install.sh | sh -s --{flags}", shell=True)
+        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            self.run_command(["curl", "-fsSL", "https://starship.rs/install.sh", "-o", str(tmp_path)])
+            flags = [] if interactive else ["-y"]
+            self.run_command(["sh", str(tmp_path), "--"] + flags)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     def set_git_proxy(self):
         http_proxy = os.environ.get("http_proxy", "")

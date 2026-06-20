@@ -16,6 +16,8 @@ A component declares:
 """
 
 import logging
+import pathlib
+import tempfile
 
 from installers import debian, macos
 
@@ -180,7 +182,16 @@ class ClaudeCode(OptionalComponent):
     def install(self, manager):
         # Official native installer; auto-updates in the background.
         # npm fallback: npm install -g @anthropic-ai/claude-code
-        manager.run_command("curl -fsSL https://claude.ai/install.sh | bash", shell=True)
+        # Download then execute separately so a curl failure raises instead of
+        # silently feeding an empty script to bash (shell pipelines return the
+        # last command's exit code, masking upstream failures).
+        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
+            tmp_path = pathlib.Path(tmp.name)
+        try:
+            manager.run_command(["curl", "-fsSL", "https://claude.ai/install.sh", "-o", str(tmp_path)])
+            manager.run_command(["bash", str(tmp_path)])
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
 
 def main():
