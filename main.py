@@ -121,6 +121,10 @@ class DotfilesManager:
             logger.error("Please execute this script in the dotfiles directory")
             sys.exit(1)
 
+        output_dir = Path("./output")
+        if not self.dry_run:
+            output_dir.mkdir(exist_ok=True)
+
         github_reachable = self.is_github_reachable() if use_github else False
         logger.info(
             f"GitHub is {'reachable' if github_reachable else 'not reachable, using gitee'}"
@@ -146,11 +150,12 @@ class DotfilesManager:
                 if github_reachable
                 else "https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh"
             )
-            self.run_command(["curl", "-fsSL", install_url, "-o", "./install.sh"])
+            install_script = output_dir / "install.sh"
+            self.run_command(["curl", "-fsSL", install_url, "-o", str(install_script)])
             install_args = [] if interactive else ["--unattended"]
-            self.run_command(["sh", "./install.sh"] + install_args)
+            self.run_command(["sh", str(install_script)] + install_args)
             if not self.dry_run:
-                Path("./install.sh").unlink(missing_ok=True)
+                install_script.unlink(missing_ok=True)
 
         logger.info("Installing antigen...")
         if not self.dry_run:

@@ -105,7 +105,7 @@ class OnePassword(OptionalComponent):
     name = "1password"
     description = "1Password"
     supported_os = ("debian", "ubuntu")
-    groups = frozenset({"all", "mac"})
+    groups = frozenset({"all"})
 
     def install(self, manager):
         debian.install_1password(manager.run_command)
@@ -135,7 +135,7 @@ class CmdlTools(OptionalComponent):
     name = "cmdl-tools"
     description = "command-line tools"
     supported_os = ("debian", "ubuntu")
-    groups = frozenset({"all", "mac"})
+    groups = frozenset({"all"})
 
     def install(self, manager):
         debian.install_cmdl_tools(manager.run_command)
@@ -165,7 +165,7 @@ class MacBrew(OptionalComponent):
     name = "mac-brew"
     description = "Homebrew packages"
     supported_os = ("darwin",)
-    groups = frozenset({"all", "mac"})
+    groups = frozenset({"all"})
 
     def install(self, manager):
         macos.install_mac_brew(manager.run_command)
@@ -175,9 +175,33 @@ class ClaudeCode(OptionalComponent):
     name = "claude"
     description = "Claude Code CLI"
     supported_os = None  # cross-platform native installer (macOS, Linux, WSL)
-    groups = frozenset({"all", "mac"})
+    groups = frozenset({"all"})
 
     def install(self, manager):
         # Official native installer; auto-updates in the background.
         # npm fallback: npm install -g @anthropic-ai/claude-code
         manager.run_command("curl -fsSL https://claude.ai/install.sh | bash", shell=True)
+
+
+def main():
+    """Print all available optional components."""
+    print("Available Optional Components:")
+    print("=" * 50)
+
+    for name in OptionalComponent.names():
+        comp = OptionalComponent.get(name)
+        groups_str = ", ".join(sorted(comp.groups)) if comp.groups else "none"
+        os_str = ", ".join(comp.supported_os) if comp.supported_os else "all OS"
+        print(f"\n  {name}")
+        print(f"    Description: {comp.description}")
+        print(f"    OS: {os_str}")
+        print(f"    Groups: {groups_str}")
+
+    print("\n" + "=" * 50)
+    print("\nAlias Groups:")
+    for group_name, components in sorted(OptionalComponent.alias_groups().items()):
+        print(f"  {group_name}: {', '.join(components)}")
+
+
+if __name__ == "__main__":
+    main()
