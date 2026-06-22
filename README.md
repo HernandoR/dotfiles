@@ -47,12 +47,12 @@ full bootstrap:
 
 ### Flags
 
-| Flag | Effect |
-|------|--------|
-| `--dry-run` | Print every command without executing it. |
-| `--verbose` | Enable debug logging (and `rsync -P` progress). |
-| `--interactive` | Allow interactive prompts during install (Oh My Zsh, Starship). |
-| `--optional-components <list>` | Comma-separated optional components / alias groups. |
+| Flag                           | Effect                                                          |
+| ------------------------------ | --------------------------------------------------------------- |
+| `--dry-run`                    | Print every command without executing it.                       |
+| `--verbose`                    | Enable debug logging (and `rsync -P` progress).                 |
+| `--interactive`                | Allow interactive prompts during install (Oh My Zsh, Starship). |
+| `--optional-components <list>` | Comma-separated optional components / alias groups.             |
 
 ## Sub-commands
 
@@ -64,6 +64,13 @@ bootstrap:
 ./bootstrap.sh restore       # restore sources/root into $HOME/dotfiles and re-link
 ./bootstrap.sh set-proxy     # set git http/https proxy from $http_proxy / $https_proxy
 ./bootstrap.sh unset-proxy   # clear the git proxy config
+```
+
+If you want to repoint the current user's home directory on Linux, use `edit_home.sh`:
+
+```bash
+sudo ./edit_home.sh /path/to/new/home
+sudo DOTFILE_EDIT_HOME_TARGET=/path/to/new/home ./edit_home.sh
 ```
 
 ## Optional components
@@ -84,16 +91,16 @@ DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS=all ./bootstrap.sh
 Unknown names are logged and skipped. Components only run on their supported
 OS; non-applicable ones are skipped automatically.
 
-| Name | Description | OS |
-|------|-------------|----|
-| `1password` | 1Password | debian, ubuntu |
-| `docker` | Docker | debian, ubuntu |
-| `docker-rootless` | Docker (rootless) | all |
-| `cmdl-tools` | command-line tools (deadsnakes PPA, etc.) | debian, ubuntu |
-| `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
-| `llvm` | LLVM 18 (+ `update-alternatives`) | debian, ubuntu |
-| `mac-brew` | Homebrew formulae & casks | darwin |
-| `claude` | Claude Code CLI | all |
+| Name              | Description                               | OS             |
+| ----------------- | ----------------------------------------- | -------------- |
+| `1password`       | 1Password                                 | debian, ubuntu |
+| `docker`          | Docker                                    | debian, ubuntu |
+| `docker-rootless` | Docker (rootless)                         | all            |
+| `cmdl-tools`      | command-line tools (deadsnakes PPA, etc.) | debian, ubuntu |
+| `cuda`            | CUDA Toolkit 12.6                         | debian, ubuntu |
+| `llvm`            | LLVM 18 (+ `update-alternatives`)         | debian, ubuntu |
+| `mac-brew`        | Homebrew formulae & casks                 | darwin         |
+| `claude`          | Claude Code CLI                           | all            |
 
 To list everything available at any time:
 
