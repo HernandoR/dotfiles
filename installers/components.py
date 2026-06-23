@@ -19,8 +19,10 @@ import logging
 import pathlib
 import tempfile
 
-import debian
-import macos
+# import debian
+# import macos
+from installers import debian, macos
+
 
 logger = logging.getLogger("dotfiles")
 
