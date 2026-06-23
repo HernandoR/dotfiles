@@ -18,9 +18,8 @@ components.py OptionalComponent registry (--optional-components)
 debian.py Debian/Ubuntu installers (1Password, Docker, CUDA, LLVM, …)
 macos.py macOS bootstrap (Homebrew + formulae/casks)
 sources/
-root/ The real dotfiles, rsynced into $HOME (.zshrc, .vimrc, .p10k.zsh, …)
-.file_list rsync --files-from include list
-.ex_list rsync --exclude-from pattern list
+root/ The real dotfiles, staged into $HOME (.zshrc, .vimrc, .p10k.zsh, …)
+.ex_list rsync --exclude-from pattern list (cache/lock/swap noise)
 zsh_plugins/ zsh plugin configs copied into ~/.oh-my-zsh/custom/plugins
 install/ standalone helper shell scripts (app installers)
 templates/ (empty at scan time)
@@ -42,8 +41,6 @@ uv run main.py --interactive                # allow interactive prompts (OMZ, St
 uv run main.py --optional-components docker,claude
 DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS=all uv run main.py   # env var (CLI flag wins, main.py:388-390)
 
-uv run main.py backup        # rsync ~/dotfiles back into sources/root
-uv run main.py restore       # restore sources/root into ~/dotfiles + re-link
 uv run main.py set-proxy     # git proxy from $http_proxy / $https_proxy
 uv run main.py unset-proxy   # clear git proxy
 
@@ -74,13 +71,13 @@ Lint: no project-level lint config exists. `sources/root/ruff.toml` is a _deploy
 | A Debian/Ubuntu install routine | `installers/debian.py:16-24` (`install_docker`)              | Takes `run_cmd`, mixes list + `shell=True` commands, cleans up temp files.                                  |
 | A macOS install routine         | `installers/macos.py:65-138` (`install_mac_brew`)            | brew update/upgrade, formulae + casks loops, cleanup.                                                       |
 | A `main.py` manager method      | `main.py:279-288` (`install_starship`)                       | Temp-file download-then-run + dry-run-safe via `run_command`.                                               |
-| A new CLI sub-command           | `main.py:374` (`backup` parser) + dispatch `main.py:401-409` | Subparser registration + `args.command` dispatch block.                                                     |
+| A new CLI sub-command           | `main.py` `subparsers.add_parser` + `args.command` dispatch  | Subparser registration + `args.command` dispatch block.                                                     |
 | A standalone one-off script     | `install_llvm.py:1-11`                                       | PEP-723 header, local `run_cmd`, reuses an `installers/` function.                                          |
-| A new dotfile to deploy         | add to `sources/root/` **and** `sources/.file_list`          | rsync only copies files listed in `.file_list` (`main.py:206`).                                             |
+| A new dotfile to deploy         | add to `sources/root/` only                                  | `stage_dotfiles` rsyncs everything in `sources/root/` (minus `.ex_list`) on bootstrap.                     |
 
 ## Don't touch / be careful with
 
-- **`/output` and `/bkp`** — generated at runtime, git-ignored (`.gitignore:1-2`). `output/` holds downloaded installer scripts; `bkp/` holds dotfile backups.
+- **`/output`** — generated at runtime, git-ignored (`.gitignore:1`). Holds downloaded installer scripts.
 - **`.venv/`, `__pycache__/`, `*.egg-info/`** — git-ignored build/runtime artifacts (`.gitignore`).
 - **`uv.lock`** — listed under `.gitignore` (last line); don't hand-edit.
 - **`sources/root/**`** — these are *deployed verbatim* into the user's `$HOME` via symlink (`main.py:248-277`). Editing them changes the user's live shell config. `sources/root/ruff.toml` is a deployed dotfile, **not** this repo's linter.
@@ -106,8 +103,8 @@ Lint: no project-level lint config exists. `sources/root/ruff.toml` is a _deploy
 ### 3. New dotfile delivered to `$HOME`
 
 1. Put the file under `sources/root/` preserving its `$HOME`-relative path.
-2. Add its path to `sources/.file_list` (rsync include — `main.py:206`); add ignore patterns to `sources/.ex_list` if needed.
-3. It will be rsynced into `~/dotfiles` and symlinked into `$HOME` on the next `restore`/bootstrap (`main.py:324-325`).
+2. Optionally add ignore patterns to `sources/.ex_list` if the file/dir produces runtime noise (cache, lock, swap).
+3. On the next bootstrap, `stage_dotfiles` rsyncs it into the staging dir and `link_dotfiles` symlinks it into `$HOME`.
 
 ## Hard rules
 

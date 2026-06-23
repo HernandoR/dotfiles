@@ -194,8 +194,8 @@ class DotfilesManager:
                 str(zsh_syn_dir / "zsh-syntax-highlighting.plugin.zsh"),
             )
 
-    def backup_dotfiles(self, source_dir, dest_dir):
-        logger.info("Backing up dotfiles...")
+    def stage_dotfiles(self, source_dir, dest_dir):
+        logger.info(f"Staging dotfiles from {source_dir} to {dest_dir}...")
         if not self.dry_run:
             os.makedirs(dest_dir, exist_ok=True)
 
@@ -205,51 +205,29 @@ class DotfilesManager:
         if self.dry_run:
             rsync_opts.append("-n")
 
+        # Trailing slash on source copies contents, not the directory itself.
+        src = str(source_dir).rstrip("/") + "/"
         cmd = (
             ["rsync"]
             + rsync_opts
             + [
-                "--files-from=./sources/.file_list",
                 "--exclude-from=./sources/.ex_list",
                 "--no-perms",
-                str(source_dir),
+                src,
                 str(dest_dir),
             ]
         )
 
         self.run_command(cmd, check=True)
-        logger.info("Dotfiles backup complete!")
+        logger.info("Dotfiles staged successfully!")
 
-    def restore_dotfiles(self, backup_dir, restore_dir):
-        logger.info("Restoring dotfiles...")
-        if not self.dry_run and not os.path.isdir(backup_dir):
-            logger.error("Backup directory does not exist")
-            sys.exit(1)
-
-        if not self.dry_run and os.path.isdir(restore_dir):
-            logger.info("Destination directory already exists, backing it up first...")
-            self.backup_dotfiles(restore_dir, f"./bkp/{Path(restore_dir).name}.bkp")
-
-        rsync_opts = ["-a", "-v", "-h", "-C", "--recursive"]
-        if self.verbose:
-            rsync_opts.append("-P")
-        if self.dry_run:
-            rsync_opts.append("-n")
-
-        cmd = (
-            ["rsync"]
-            + rsync_opts
-            + [
-                "--files-from=./sources/.file_list",
-                "--exclude-from=./sources/.ex_list",
-                "--no-perms",
-                str(backup_dir),
-                str(restore_dir),
-            ]
-        )
-
-        self.run_command(cmd, check=True)
-        logger.info("Dotfiles restored successfully!")
+    def _staging_has_unlinked_items(self, staging: Path, home: Path) -> bool:
+        """Return True if any direct child of staging is not correctly symlinked in home."""
+        for item in staging.iterdir():
+            dest = home / item.name
+            if not (dest.is_symlink() and dest.resolve() == item.resolve()):
+                return True
+        return False
 
     def link_dotfiles(self, source_dir, dest_dir):
         logger.info(f"Linking dotfiles from {source_dir} to {dest_dir}...")
@@ -259,26 +237,43 @@ class DotfilesManager:
         if not dest_dir.exists():
             dest_dir.mkdir(parents=True, exist_ok=True)
 
-        for dir_path, dir_name, file_name in os.walk(source_dir):
+        for dir_path, dir_name, file_name in os.walk(source_dir, topdown=True):
             for file in file_name:
                 src = Path(dir_path) / file
                 dest = Path(dest_dir) / src.relative_to(source_dir)
-                if dest.exists():
+                if dest.is_symlink():
                     if dest.resolve() == src.resolve():
                         logger.debug(f"Already linked {src} to {dest}")
                         continue
                     dest.unlink()
-                    logger.debug(f"Removed {dest}")
+                    logger.debug(f"Replaced wrong symlink {dest}")
+                elif dest.exists():
+                    logger.debug(f"Skipping real file {dest}")
+                    continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.symlink_to(src)
                 logger.debug(f"Linked {src} to {dest}")
 
+            dirs_to_skip = []
             for dir_ in dir_name:
                 src = Path(dir_path) / dir_
                 dest = Path(dest_dir) / src.relative_to(source_dir)
+                if dest.is_symlink():
+                    if dest.resolve() == src.resolve():
+                        logger.debug(f"Already linked directory {src} to {dest}")
+                        dirs_to_skip.append(dir_)
+                        continue
+                    dest.unlink()
+                    logger.debug(f"Replaced wrong directory symlink {dest}")
                 if not dest.exists():
-                    dest.mkdir(parents=True, exist_ok=True)
-                    logger.debug(f"Created directory {dest}")
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.symlink_to(src)
+                    logger.debug(f"Linked directory {src} to {dest}")
+                    dirs_to_skip.append(dir_)
+                # else: real directory — recurse into it
+
+            for d in dirs_to_skip:
+                dir_name.remove(d)
 
         logger.info("Dotfiles linked successfully!")
 
@@ -348,7 +343,13 @@ class DotfilesManager:
         self.install_starship(interactive=interactive)
 
         staging = _dotfiles_staging_dir()
-        self.restore_dotfiles(Path("./sources/root"), staging)
+        if staging.exists() and self._staging_has_unlinked_items(staging, Path.home()):
+            logger.warning(
+                f"Staging dir {staging} already exists but home is missing symlinks — "
+                "skipping rsync to preserve staging customisations; running link step only."
+            )
+        else:
+            self.stage_dotfiles(Path("./sources/root"), staging)
         self.link_dotfiles(staging, Path.home())
 
     def run(self):
@@ -396,20 +397,10 @@ def main():
         ),
     )
 
-    # Optional direct commands for just backup or restore or proxy
     subparsers = parser.add_subparsers(dest="command", help="sub-command help")
 
-    # backup
-    parser_bkp = subparsers.add_parser("backup", help="Backup dotfiles")
-
-    # restore
-    parser_res = subparsers.add_parser("restore", help="Restore dotfiles")
-
-    # proxy
-    parser_proxy = subparsers.add_parser(
-        "set-proxy", help="Set Git proxy based on environment variables"
-    )
-    parser_proxy_unset = subparsers.add_parser("unset-proxy", help="Unset Git proxy")
+    subparsers.add_parser("set-proxy", help="Set Git proxy based on environment variables")
+    subparsers.add_parser("unset-proxy", help="Unset Git proxy")
 
     args = parser.parse_args()
 
@@ -427,13 +418,7 @@ def main():
         dry_run=args.dry_run, verbose=args.verbose, options=options
     )
 
-    if args.command == "backup":
-        manager.backup_dotfiles(_dotfiles_staging_dir(), Path("./sources/root"))
-    elif args.command == "restore":
-        staging = _dotfiles_staging_dir()
-        manager.restore_dotfiles(Path("./sources/root"), staging)
-        manager.link_dotfiles(staging, Path.home())
-    elif args.command == "set-proxy":
+    if args.command == "set-proxy":
         manager.set_git_proxy()
     elif args.command == "unset-proxy":
         manager.unset_git_proxy()
