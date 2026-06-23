@@ -77,14 +77,30 @@ if [ "$current_home" = "$target_home" ]; then
   exit 0
 fi
 
-if ! command -v usermod >/dev/null 2>&1; then
-  error "usermod is required on Linux but was not found."
-  exit 1
-fi
-
 if [ ! -d "$target_home" ]; then
   mkdir -p "$target_home"
 fi
 
-usermod -d "$target_home" -m "$current_user"
-printf 'Updated %s home directory from %s to %s\n' "$current_user" "$current_home" "$target_home"
+if command -v usermod >/dev/null 2>&1; then
+  usermod_out=$(usermod -d "$target_home" -m "$current_user" 2>&1) && {
+    printf 'Updated %s home directory from %s to %s\n' "$current_user" "$current_home" "$target_home"
+    exit 0
+  }
+  # usermod refuses to modify a user that owns PID 1 (common for root in containers)
+  case "$usermod_out" in
+    *"currently used by process 1"*) ;;
+    *) error "$usermod_out"; exit 1 ;;
+  esac
+fi
+
+# Fall back: edit /etc/passwd directly (safe when usermod is blocked by PID 1)
+passwd_file=/etc/passwd
+if [ ! -f "$passwd_file" ]; then
+  error "Cannot find $passwd_file; cannot update home directory."
+  exit 1
+fi
+# Replace field 6 (home dir) for the matching user
+awk -v user="$current_user" -v home="$target_home" -F: 'BEGIN{OFS=":"} $1==user{$6=home}1' \
+  "$passwd_file" > "${passwd_file}.tmp" \
+  && mv "${passwd_file}.tmp" "$passwd_file"
+printf 'Updated %s home directory from %s to %s (via /etc/passwd)\n' "$current_user" "$current_home" "$target_home"
