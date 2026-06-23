@@ -16,6 +16,7 @@ A component declares:
 """
 
 import logging
+import os
 import pathlib
 import tempfile
 
@@ -223,6 +224,45 @@ class FdFind(OptionalComponent):
             manager.run_command(["brew", "install", "fd"])
         else:
             debian.install_fdfind(manager.run_command)
+
+
+class Node(OptionalComponent):
+    name = "node"
+    description = "Node.js (nvm + LTS) and pnpm"
+    supported_os = None  # nvm's install script covers macOS, Linux, and WSL
+    groups = frozenset({"all"})
+
+    # Pinned tag — v0.40.5 carries the CVE-2026-10796 fix. Bump deliberately.
+    NVM_VERSION = "v0.40.5"
+
+    def install(self, manager):
+        # nvm is a shell *function*, not a binary on PATH — installing it does
+        # not make `nvm` callable in a fresh subprocess. So: fetch + run the
+        # install script, then source nvm.sh and drive the Node + pnpm install
+        # inside a single shell that has the freshly-installed nvm loaded.
+        # Direct curl (no gitee mirror) matches the claude/starship components.
+        install_url = (
+            "https://raw.githubusercontent.com/nvm-sh/nvm/"
+            f"{self.NVM_VERSION}/install.sh"
+        )
+        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
+            tmp_path = pathlib.Path(tmp.name)
+        try:
+            manager.run_command(["curl", "-fsSL", install_url, "-o", str(tmp_path)])
+            manager.run_command(["bash", str(tmp_path)])
+            # nvm installs into $NVM_DIR (default ~/.nvm). Source it, install the
+            # LTS Node (which provides node/npm/npx), then enable pnpm via the
+            # Corepack shim that ships with Node.
+            nvm_dir = os.environ.get("NVM_DIR") or str(pathlib.Path.home() / ".nvm")
+            bootstrap = (
+                f'export NVM_DIR="{nvm_dir}"; '
+                '. "$NVM_DIR/nvm.sh"; '
+                "nvm install --lts; "
+                "corepack enable pnpm"
+            )
+            manager.run_command(["bash", "-c", bootstrap])
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
 
 def main():
