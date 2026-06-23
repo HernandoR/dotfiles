@@ -197,6 +197,32 @@ class ClaudeCode(OptionalComponent):
             tmp_path.unlink(missing_ok=True)
 
 
+class Bottom(OptionalComponent):
+    name = "btm"
+    description = "bottom (system monitor)"
+    supported_os = None
+    groups = frozenset({"all"})
+
+    def install(self, manager):
+        if manager.os_type == "darwin":
+            manager.run_command(["brew", "install", "bottom"])
+        else:
+            debian.install_btm(manager.run_command)
+
+
+class FdFind(OptionalComponent):
+    name = "fdfind"
+    description = "fd-find (fast file finder)"
+    supported_os = None
+    groups = frozenset({"all"})
+
+    def install(self, manager):
+        if manager.os_type == "darwin":
+            manager.run_command(["brew", "install", "fd"])
+        else:
+            debian.install_fdfind(manager.run_command)
+
+
 def main():
     """Print all available optional components."""
     print("Available Optional Components:")
