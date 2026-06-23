@@ -276,6 +276,23 @@ class DotfilesManager:
 
         logger.info("Dotfiles linked successfully!")
 
+    def install_fzf(self):
+        logger.info("Installing fzf...")
+        fzf_bin = Path.home() / ".fzf" / "bin" / "fzf"
+        if fzf_bin.is_file():
+            logger.info("fzf is already installed")
+            return
+
+        fzf_dir = Path.home() / ".fzf"
+        github_reachable = self.is_github_reachable()
+        fzf_url = (
+            "https://github.com/junegunn/fzf.git"
+            if github_reachable
+            else "https://gitee.com/mirrors/fzf.git"
+        )
+        self.run_command(["git", "clone", "--depth", "1", fzf_url, str(fzf_dir)])
+        self.run_command([str(fzf_dir / "install"), "--all", "--no-update-rc"])
+
     def install_starship(self, interactive=False):
         logger.info("Installing Starship prompt...")
         with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
@@ -318,6 +335,7 @@ class DotfilesManager:
     def run_legacy_scripts(self):
         interactive = self.options.get("interactive", False)
         self.config_ohmyzsh(interactive=interactive)
+        self.install_fzf()
 
         self.install_starship(interactive=interactive)
 

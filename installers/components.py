@@ -19,7 +19,8 @@ import logging
 import pathlib
 import tempfile
 
-from installers import debian, macos
+import debian
+import macos
 
 logger = logging.getLogger("dotfiles")
 
@@ -188,7 +189,9 @@ class ClaudeCode(OptionalComponent):
         with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
             tmp_path = pathlib.Path(tmp.name)
         try:
-            manager.run_command(["curl", "-fsSL", "https://claude.ai/install.sh", "-o", str(tmp_path)])
+            manager.run_command(
+                ["curl", "-fsSL", "https://claude.ai/install.sh", "-o", str(tmp_path)]
+            )
             manager.run_command(["bash", str(tmp_path)])
         finally:
             tmp_path.unlink(missing_ok=True)
