@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 from installers import macos
+
 # Importing components registers every OptionalComponent subclass at
 # class-definition time, populating the registry used below.
 from installers.components import OptionalComponent
@@ -303,9 +304,11 @@ class DotfilesManager:
         with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
             tmp_path = Path(tmp.name)
         try:
-            self.run_command(["curl", "-fsSL", "https://starship.rs/install.sh", "-o", str(tmp_path)])
+            self.run_command(
+                ["curl", "-fsSL", "https://starship.rs/install.sh", "-o", str(tmp_path)]
+            )
             flags = [] if interactive else ["-y"]
-            self.run_command(["sh", str(tmp_path), "--"] + flags)
+            self.run_command(["sh", str(tmp_path)] + flags)
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -373,7 +376,9 @@ def main():
     )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
     parser.add_argument(
-        "--interactive", action="store_true", help="Enable interactive prompts during installation"
+        "--interactive",
+        action="store_true",
+        help="Enable interactive prompts during installation",
     )
 
     # Optional components — comma-separated list via flag or env var.
