@@ -28,6 +28,9 @@ antigen bundle zsh-users/zsh-apple-touchbar
 
 antigen apply
 
+# fzf key bindings and fuzzy completion
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
 eval "$(starship init zsh)"
 
 # eval $(thefuck --alias fuck)
