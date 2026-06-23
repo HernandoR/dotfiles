@@ -98,7 +98,14 @@ def install_llvm(run_cmd, version="18", dry_run=False):
 
 
 def install_btm(run_cmd):
-    run_cmd(["sudo", "apt-get", "install", "-y", "bottom"])
+    version = "0.12.3"
+    deb_name = f"bottom_{version}-1_amd64.deb"
+    deb_path = Path(f"/tmp/{deb_name}")
+    url = f"https://github.com/ClementTsang/bottom/releases/download/{version}/{deb_name}"
+    run_cmd(f"curl -LO {url} --output-dir /tmp", shell=True)
+    run_cmd(["sudo", "dpkg", "-i", str(deb_path)])
+    if deb_path.exists():
+        deb_path.unlink()
 
 
 def install_fdfind(run_cmd):
