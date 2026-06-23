@@ -40,3 +40,5 @@ antigen.zsh
 .wgetrc
 .zshenv
 .zshrc
+.agents/
+.claude/

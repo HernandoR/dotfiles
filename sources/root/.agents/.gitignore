@@ -1,0 +1,6 @@
+# Track this directory but ignore generated/sensitive agent files
+*.log
+*.tmp
+__pycache__/
+*.pyc
+.env

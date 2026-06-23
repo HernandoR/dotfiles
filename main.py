@@ -21,6 +21,11 @@ logging.basicConfig(
 logger = logging.getLogger("dotfiles")
 
 
+def _dotfiles_staging_dir() -> Path:
+    target = os.environ.get("DOTFILE_EDIT_HOME_TARGET")
+    return Path(target) / "dotfiles" if target else Path.home() / "dotfiles"
+
+
 class DotfilesManager:
     def __init__(self, dry_run=False, verbose=False, options=None):
         self.is_root = os.geteuid() == 0
@@ -339,8 +344,9 @@ class DotfilesManager:
 
         self.install_starship(interactive=interactive)
 
-        self.restore_dotfiles(Path("./sources/root"), Path.home() / "dotfiles")
-        self.link_dotfiles(Path.home() / "dotfiles", Path.home())
+        staging = _dotfiles_staging_dir()
+        self.restore_dotfiles(Path("./sources/root"), staging)
+        self.link_dotfiles(staging, Path.home())
 
     def run(self):
         logger.info("Initializing python-based dotfiles bootstrap...")
@@ -417,10 +423,11 @@ def main():
     )
 
     if args.command == "backup":
-        manager.backup_dotfiles(Path.home() / "dotfiles", Path("./sources/root"))
+        manager.backup_dotfiles(_dotfiles_staging_dir(), Path("./sources/root"))
     elif args.command == "restore":
-        manager.restore_dotfiles(Path("./sources/root"), Path.home() / "dotfiles")
-        manager.link_dotfiles(Path.home() / "dotfiles", Path.home())
+        staging = _dotfiles_staging_dir()
+        manager.restore_dotfiles(Path("./sources/root"), staging)
+        manager.link_dotfiles(staging, Path.home())
     elif args.command == "set-proxy":
         manager.set_git_proxy()
     elif args.command == "unset-proxy":
