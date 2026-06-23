@@ -36,7 +36,10 @@
 
 	# Remove branches that have already been merged with main.
 	# a.k.a. ‘delete merged’
-	dm = "!git branch --merged | grep -v '\\*' | xargs -n 1 git branch -d"
+	dm = "!git fetch --prune && git branch --merged | grep -v ‘\\*’ | xargs -n 1 git branch -d"
+
+	# Force-delete local branches whose remote tracking branch is gone (merged+deleted on remote).
+	Dlo = "!git fetch --prune && git branch -vv | grep ‘: gone]’ | awk ‘{print $1}’ | xargs -I{} git branch -D {}"
 
 	# Find branches containing commit
 	fb = "!f() { git branch -a --contains $1; }; f"
