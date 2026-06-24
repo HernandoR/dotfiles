@@ -18,6 +18,7 @@ A component declares:
 import logging
 import os
 import pathlib
+import shutil
 import tempfile
 
 # import debian
@@ -263,6 +264,118 @@ class Node(OptionalComponent):
             manager.run_command(["bash", "-c", bootstrap])
         finally:
             tmp_path.unlink(missing_ok=True)
+
+
+class Rustup(OptionalComponent):
+    name = "rustup"
+    description = "rustup (Rust toolchain installer) + stable toolchain"
+    supported_os = None  # rustup-init.sh covers macOS, Linux, and WSL
+    groups = frozenset({"all"})
+
+    def install(self, manager):
+        # Idempotent: if rustup is already on PATH, just refresh the default
+        # toolchain and exit — rustup itself owns its self-update cadence.
+        # `shutil.which` reads the live PATH, which matches what `run_command`
+        # will see; rustup ships into ~/.cargo/bin so users who already
+        # installed it via brew / another bootstrap won't be reinstalled.
+        if shutil.which("rustup"):
+            logger.info("rustup already installed; ensuring stable toolchain.")
+            manager.run_command(["rustup", "default", "stable"])
+            return
+
+        # Official Unix installer per https://rustup.rs and the rustup book.
+        # Flags follow the documented headless contract:
+        #   -y                       : accept defaults, skip prompts
+        #   --default-toolchain stable
+        #   --profile default        : rustc + cargo + rust-std + rustfmt + clippy
+        #   --no-modify-path         : the dotfiles already export ~/.cargo/bin
+        #                              (see sources/root/.exports), so don't let
+        #                              rustup append duplicate lines to shell rc.
+        # Download then execute separately so a curl failure raises instead of
+        # silently feeding an empty script to sh (matches the Claude component).
+        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
+            tmp_path = pathlib.Path(tmp.name)
+        try:
+            manager.run_command(
+                [
+                    "curl",
+                    "--proto",
+                    "=https",
+                    "--tlsv1.2",
+                    "-sSf",
+                    "https://sh.rustup.rs",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+            manager.run_command(
+                [
+                    "sh",
+                    str(tmp_path),
+                    "-y",
+                    "--default-toolchain",
+                    "stable",
+                    "--profile",
+                    "default",
+                    "--no-modify-path",
+                ]
+            )
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+
+class Codegraph(OptionalComponent):
+    name = "codegraph"
+    description = (
+        "CodeGraph (colbymchenry/codegraph) — local code knowledge graph + MCP server"
+    )
+    supported_os = None  # self-contained bundled-Node builds for macOS, Linux, WSL
+    # Deliberately excluded from `all`: agent wiring (`codegraph install`)
+    # touches MCP configs across multiple editors and shouldn't run unattended.
+    groups = frozenset()
+
+    def install(self, manager):
+        # Idempotent: if codegraph is already on PATH, defer to its own
+        # in-place updater rather than re-running the installer script —
+        # this matches the upstream guidance ("Already installed? Run
+        # `codegraph upgrade` to update in place.").
+        if shutil.which("codegraph"):
+            logger.info("codegraph already installed; running self-update.")
+            manager.run_command(["codegraph", "upgrade"], check=False)
+            return
+
+        # Official self-contained installer (no Node.js required): the script
+        # fetches the right per-platform bundled-Node build for the OS/arch
+        # and drops a `codegraph` shim onto PATH. Download then execute
+        # separately so a curl failure raises cleanly instead of feeding an
+        # empty script to sh.
+        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
+            tmp_path = pathlib.Path(tmp.name)
+        try:
+            manager.run_command(
+                [
+                    "curl",
+                    "-fsSL",
+                    "https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+            manager.run_command(["sh", str(tmp_path)])
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        # NOTE: We intentionally do NOT auto-run `codegraph install` here.
+        # That step wires CodeGraph's MCP server into every detected agent
+        # (Claude Code, Cursor, Codex, …) and is interactive by default; the
+        # user can opt in afterwards with:
+        #   codegraph install                # interactive, recommended
+        #   codegraph install --yes          # auto-detect, non-interactive
+        logger.info(
+            "codegraph CLI installed. Run `codegraph install` to wire it "
+            "into your AI agents (Claude Code, Cursor, etc.), then "
+            "`codegraph init` inside each project."
+        )
 
 
 def main():
