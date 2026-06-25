@@ -59,9 +59,9 @@ class Ripgrep(OptionalComponent):
 
 The base-class `install()` resolves this table automatically. Components whose
 install is genuinely multi-step (e.g. `docker`'s `groupadd`/`usermod`/ppa
-setup, `llvm`'s `update-alternatives`) **override `install(ctx)`** as they do
-today. The two paths coexist: declarative for the common case, imperative for
-the awkward ~20%.
+setup, `llvm`'s `update-alternatives`) **override `install(ctx)`** and carry
+that logic inline (see §7 — there are no per-OS helper modules). The two paths
+coexist: declarative for the common case, imperative for the awkward ~20%.
 
 ### 2. The orchestrator selects the PackageManager, not the component
 
