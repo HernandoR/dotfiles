@@ -125,8 +125,11 @@ class Rustup(OptionalComponent):
                               "--profile", "default", "--no-modify-path"]))
 ```
 
-Thus `scripts` is both the backend for declarative script components (`claude`)
-and a reusable helper for the imperative ones (`node`, `rustup`, `codegraph`).
+Thus `scripts` is both the backend for declarative script components (`claude`,
+`docker-rootless`) and a reusable helper for *every* imperative override that
+fetches a script — `node` (nvm), `rustup`, `codegraph`, `docker`
+(get.docker.com), `llvm` (apt.llvm.org), `mac-brew` (getnf). No override
+re-implements the curl-tempfile-run dance.
 
 ### 6. PackageManager interface and registration
 
@@ -134,6 +137,25 @@ and a reusable helper for the imperative ones (`node`, `rustup`, `codegraph`).
 a subclass declares `id`, `supported_os` (or `None` for all), `priority`, and
 implements `install(ctx, spec)`. Declaring the subclass registers it; no
 parallel lookup table.
+
+### 7. File layout: managers, components, and core bootstrap are separate
+
+- Backends live in their own module **`installers/managers.py`**
+  (`PackageManager` + `Script`/`Deb` specs + `apt`/`brew`/`scripts`), kept apart
+  from the component catalog in `installers/components.py`.
+- There are **no per-OS helper modules**. The old `installers/debian.py` and
+  `installers/macos.py` are deleted; every component's install logic — whether a
+  declarative table or an imperative `install(ctx)` — lives on the component
+  itself in `components.py`.
+- **Core (non-optional) bootstrap is not a component.** Installing Homebrew and
+  the base packages is a prerequisite, not optional software, so it lives as
+  `DotfilesManager` methods (`bootstrap_debian`, `bootstrap_macos`,
+  `install_homebrew`) in `main.py` — symmetric across the two OSes, and outside
+  the `OptionalComponent` / `PackageManager` system entirely.
+- We deliberately did **not** add a `ppa` manager. After dropping the unused
+  deadsnakes PPA, the only remaining PPA use is `docker`'s single
+  `add-apt-repository` call, which stays inline in its override — not enough
+  recurrence to justify an abstraction.
 
 ## Consequences
 
@@ -143,8 +165,9 @@ parallel lookup table.
 - Simple components (`ripgrep`, `fdfind`, `bottom`, `1password`) become a few
   lines of data with no per-component code and no OS branching.
 - Cross-platform package-name differences are expressed in one table per
-  component instead of being split across `debian.py` / `macos.py` / inline
-  branches.
+  component instead of being split across per-OS helper modules and inline
+  branches. All component logic now lives in one file (`components.py`); the
+  per-OS helper modules are gone.
 - `supported_os` for declarative components can no longer drift from reality;
   it is computed from the managers actually listed.
 - Cost: two component code paths (declarative vs. imperative override) to
@@ -155,11 +178,11 @@ parallel lookup table.
 - ADR-0002's `node` toolchain decision (nvm → Node LTS → pnpm) is unchanged in
   intent; the `node` component is re-expressed as an imperative override that
   reuses the `scripts` manager for the nvm install step.
-- `installers/debian.py` / `installers/macos.py` free functions remain only for
-  the imperative-override components; single-package helpers are absorbed into
-  the declarative tables and can be deleted as components migrate.
-- Migration can be incremental: components move to the declarative table one at
-  a time; until migrated, an un-migrated component keeps its current
-  `install()` override and explicit `supported_os`.
+- The old `cmdl-tools` component is retired: its deadsnakes PPA was unused and
+  is dropped, leaving only the `software-properties` component
+  (`software-properties-common`).
+- `components.py` grows the inlined override bodies (notably `mac-brew`'s
+  formula/cask lists and `cuda`'s repo setup) that previously lived in the
+  per-OS modules — accepted as the cost of a single home for component logic.
 ```
 

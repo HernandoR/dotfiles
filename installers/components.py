@@ -1,149 +1,28 @@
-"""Registry of optional install components and their package-manager backends.
+"""Registry of optional install components.
 
-Two self-registering hierarchies live here (see ADR-0003):
+Each optional component is a self-registering subclass of
+:class:`OptionalComponent`. Declaring a subclass with a ``name`` makes it
+available on the command line (``--optional-components``) and via the
+``DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS`` env var.
 
-* :class:`PackageManager` -- an *install backend* keyed by ``id`` (``apt``,
-  ``brew``, ``scripts``). Each knows how to install one ``spec`` on the OSes it
-  supports. The orchestrator (``DotfilesManager``) selects the backend; a
-  component never chooses its own.
-* :class:`OptionalComponent` -- an optional piece of software. Declaring a
-  subclass with a ``name`` makes it available on the command line
-  (``--optional-components``) and via ``DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS``.
-
-A component is declarative-first: it lists ``installs = {manager_id: spec}`` and
-the base class resolves it through the manager the orchestrator picks. Multi-step
+A component is declarative-first (see ADR-0003): it lists
+``installs = {manager_id: spec}`` and the base class resolves it through the
+backend the orchestrator picks (see :mod:`installers.managers`). Multi-step
 installs (docker post-setup, llvm update-alternatives, the nvm + pnpm dance)
-instead override ``install(ctx)`` and may reuse a manager via
-``ctx.package_manager(id)``.
+instead override ``install(ctx)`` and may reuse a backend via
+``ctx.package_manager(id)`` -- so there is no per-OS helper module.
 """
 
 import logging
 import os
 import pathlib
 import shutil
-import tempfile
+import subprocess
 
-from installers import debian, macos
+from installers.managers import Deb, PackageManager, Script
 
 
 logger = logging.getLogger("dotfiles")
-
-
-# -- install specs --------------------------------------------------------
-#
-# Each PackageManager defines (and accepts) its own spec type. A bare string is
-# shorthand for that manager's primary parameter (package name / script URL).
-
-
-class Script:
-    """Spec for the ``scripts`` manager: fetch a URL and run it.
-
-    URL alone is not enough -- rustup needs ``sh`` plus a list of flags,
-    codegraph needs ``sh``, claude/nvm need ``bash``.
-    """
-
-    def __init__(self, url, interpreter="bash", args=()):
-        self.url = url
-        self.interpreter = interpreter
-        self.args = list(args)
-
-
-class Deb:
-    """Spec for the ``apt`` manager: download a ``.deb`` and ``apt install -f`` it.
-
-    Lets the single ``apt`` backend express "install from a downloaded package"
-    (e.g. 1Password) without a separate ``deb`` manager id.
-    """
-
-    def __init__(self, url):
-        self.url = url
-
-
-# -- package-manager backends --------------------------------------------
-
-
-class PackageManager:
-    """Base class for install backends.
-
-    Subclasses register themselves at class-definition time keyed on ``id``.
-    """
-
-    _registry = {}
-
-    id = ""
-    supported_os = None  # None means "all operating systems"
-    priority = 0  # higher wins when several backends match (native > scripts)
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if cls.id:
-            PackageManager._registry[cls.id] = cls
-
-    @classmethod
-    def exists(cls, manager_id):
-        return manager_id in cls._registry
-
-    @classmethod
-    def get(cls, manager_id):
-        return cls._registry[manager_id]()
-
-    def applicable(self, os_type):
-        return self.supported_os is None or os_type in self.supported_os
-
-    def install(self, ctx, spec):
-        raise NotImplementedError
-
-
-class AptManager(PackageManager):
-    id = "apt"
-    supported_os = ("debian", "ubuntu")
-    priority = 100
-
-    def install(self, ctx, spec):
-        if isinstance(spec, Deb):
-            # Download then `apt install -f` the local file so dependencies
-            # resolve (dpkg -i alone would leave them unmet).
-            with tempfile.NamedTemporaryFile(suffix=".deb", delete=False) as tmp:
-                deb_path = pathlib.Path(tmp.name)
-            try:
-                ctx.run_command(["wget", spec.url, "-O", str(deb_path)])
-                ctx.run_command(["sudo", "apt", "install", "-f", "-y", str(deb_path)])
-            finally:
-                deb_path.unlink(missing_ok=True)
-        else:
-            ctx.run_command(["sudo", "apt", "install", "-y", spec])
-
-
-class BrewManager(PackageManager):
-    id = "brew"
-    supported_os = ("darwin",)
-    priority = 100
-
-    def install(self, ctx, spec):
-        ctx.run_command(["brew", "install", spec])
-
-
-class ScriptsManager(PackageManager):
-    id = "scripts"
-    supported_os = None  # remote bootstrap scripts run anywhere
-    priority = 10  # fallback: a native package manager is preferred when present
-
-    def install(self, ctx, spec):
-        if isinstance(spec, str):
-            spec = Script(url=spec)
-        # Download then execute separately so a curl failure raises instead of
-        # silently feeding an empty script to the interpreter -- a piped
-        # `curl | sh` returns the interpreter's exit code, masking curl's.
-        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
-            tmp_path = pathlib.Path(tmp.name)
-        try:
-            ctx.run_command(["curl", "-fsSL", spec.url, "-o", str(tmp_path)])
-            ctx.run_command([spec.interpreter, str(tmp_path), *spec.args])
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-
-# -- optional components --------------------------------------------------
 
 
 class OptionalComponent:
@@ -270,7 +149,19 @@ class Docker(OptionalComponent):
     groups = frozenset({"all"})
 
     def install(self, ctx):
-        debian.install_docker(ctx.run_command)
+        # Official convenience installer via the scripts manager (avoids the
+        # `curl | sh` pipe that masks a curl failure behind sh's exit code).
+        ctx.package_manager("scripts").install(
+            ctx, Script("https://get.docker.com/", interpreter="sh")
+        )
+        user = os.environ.get("USER", os.environ.get("LOGNAME"))
+        ctx.run_command(["sudo", "groupadd", "-f", "docker"])
+        if user:
+            ctx.run_command(["sudo", "usermod", "-aG", "docker", user])
+        # NVIDIA driver PPA + DKMS toolchain for GPU containers.
+        ctx.run_command(["sudo", "add-apt-repository", "-y", "ppa:graphics-drivers/ppa"])
+        ctx.run_command(["sudo", "apt-get", "update"])
+        ctx.run_command(["sudo", "apt-get", "install", "-y", "dkms", "build-essential"])
 
 
 class DockerRootless(OptionalComponent):
@@ -280,14 +171,11 @@ class DockerRootless(OptionalComponent):
     installs = {"scripts": Script("https://get.docker.com/rootless", interpreter="sh")}
 
 
-class CmdlTools(OptionalComponent):
-    name = "cmdl-tools"
-    description = "command-line tools"
-    supported_os = ("debian", "ubuntu")
+class SoftwareProperties(OptionalComponent):
+    name = "software-properties"
+    description = "software-properties-common (provides add-apt-repository)"
     groups = frozenset({"all"})
-
-    def install(self, ctx):
-        debian.install_cmdl_tools(ctx.run_command)
+    installs = {"apt": "software-properties-common"}
 
 
 class Cuda(OptionalComponent):
@@ -297,7 +185,29 @@ class Cuda(OptionalComponent):
     groups = frozenset({"all"})
 
     def install(self, ctx):
-        debian.install_cuda(ctx.run_command)
+        # NVIDIA's local-repo installer: pin the repo, register it via the
+        # local-installer .deb, trust its keyring, then apt-install the toolkit.
+        ctx.run_command(
+            "wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-ubuntu2404.pin",
+            shell=True,
+        )
+        ctx.run_command(
+            "sudo mv cuda-ubuntu2404.pin /etc/apt/preferences.d/cuda-repository-pin-600",
+            shell=True,
+        )
+        deb_name = "cuda-repo-ubuntu2404-12-6-local_12.6.2-560.35.03-1_amd64.deb"
+        url = f"https://developer.download.nvidia.com/compute/cuda/12.6.2/local_installers/{deb_name}"
+        deb_path = pathlib.Path(f"/tmp/{deb_name}")
+        ctx.run_command(f"wget {url} -O {deb_path}", shell=True)
+        ctx.run_command(["sudo", "dpkg", "-i", str(deb_path)])
+        ctx.run_command(
+            "sudo cp /var/cuda-repo-ubuntu2404-12-6-local/cuda-*-keyring.gpg /usr/share/keyrings/",
+            shell=True,
+        )
+        ctx.run_command(["sudo", "apt-get", "update"])
+        ctx.run_command(["sudo", "apt-get", "-y", "install", "cuda-toolkit-12-6"])
+        if deb_path.exists():
+            deb_path.unlink()
 
 
 class Llvm(OptionalComponent):
@@ -306,8 +216,62 @@ class Llvm(OptionalComponent):
     supported_os = ("debian", "ubuntu")
     groups = frozenset({"all"})
 
+    VERSION = "18"
+
     def install(self, ctx):
-        debian.install_llvm(ctx.run_command, version="18", dry_run=ctx.dry_run)
+        # apt.llvm.org's official installer (a bash script), run via the scripts
+        # manager with `<version> all` to pull the full toolchain.
+        ctx.package_manager("scripts").install(
+            ctx,
+            Script(
+                "https://apt.llvm.org/llvm.sh",
+                interpreter="bash",
+                args=[self.VERSION, "all"],
+            ),
+        )
+
+        # Wire the versioned binaries onto the unversioned names via
+        # update-alternatives, with clang as the primary + its tools as slaves.
+        version = self.VERSION
+        slaves = [
+            "clang++",
+            "clang-cpp",
+            "clangd",
+            "clang-format",
+            "clang-tidy",
+            "clang-cl",
+            "clang-query",
+            "clang-rename",
+        ]
+        cmd = [
+            "update-alternatives",
+            "--install",
+            "/usr/bin/clang",
+            "clang",
+            f"/usr/bin/clang-{version}",
+            "100",
+        ]
+        for name in slaves:
+            cmd.extend(["--slave", f"/usr/bin/{name}", name, f"/usr/bin/{name}-{version}"])
+        ctx.run_command(cmd)
+
+        # Register any other `*-<version>` binaries whose unversioned name is
+        # still free (e.g. llvm tools), so they resolve too.
+        bin_dir = pathlib.Path("/usr/bin")
+        if bin_dir.exists():
+            for file in bin_dir.glob(f"*-{version}"):
+                base_name = file.name.replace(f"-{version}", "")
+                if not (bin_dir / base_name).exists():
+                    ctx.run_command(
+                        [
+                            "update-alternatives",
+                            "--install",
+                            f"/usr/bin/{base_name}",
+                            base_name,
+                            str(file),
+                            "1",
+                        ]
+                    )
 
 
 class MacBrew(OptionalComponent):
@@ -316,8 +280,81 @@ class MacBrew(OptionalComponent):
     supported_os = ("darwin",)
     groups = frozenset({"all"})
 
+    FORMULAE = (
+        "coreutils",
+        "moreutils",
+        "findutils",
+        "gnu-sed",
+        "wget",
+        "rsync",
+        "vim",
+        "grep",
+        "openssh",
+        "xmake",
+        "tmux",
+        "thefuck",
+        "tldr",
+        "ack",
+        "git",
+        "git-lfs",
+        "gs",
+        "lua",
+        "lynx",
+        "p7zip",
+        "pigz",
+        "pv",
+        "rename",
+        "rlwrap",
+        "ssh-copy-id",
+        "tree",
+        "vbindiff",
+        "zopfli",
+    )
+
+    CASKS = (
+        "rsyncui",
+        "visual-studio-code",
+        "microsoft-edge",
+        "termius",
+        "texlive",
+        "qspace-pro",
+        "fliqlo",
+    )
+
     def install(self, ctx):
-        macos.install_mac_brew(ctx.run_command)
+        # Refresh Homebrew and upgrade what's already there before installing.
+        ctx.run_command(["brew", "update"])
+        ctx.run_command(["brew", "upgrade"])
+
+        for formula in self.FORMULAE:
+            ctx.run_command(["brew", "install", formula])
+
+        # Symlink sha256sum -> coreutils' gsha256sum.
+        try:
+            brew_prefix = subprocess.run(
+                ["brew", "--prefix"], capture_output=True, text=True, check=True
+            ).stdout.strip()
+            ctx.run_command(
+                f"ln -sf {brew_prefix}/bin/gsha256sum {brew_prefix}/bin/sha256sum",
+                shell=True,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to set up sha256sum symlink: {e}")
+
+        # Nerd Font installer (getnf), via the scripts manager.
+        ctx.package_manager("scripts").install(
+            ctx,
+            Script(
+                "https://raw.githubusercontent.com/HernandoR/getnf/master/install.sh",
+                interpreter="sh",
+            ),
+        )
+
+        for cask in self.CASKS:
+            ctx.run_command(["brew", "install", "--cask", cask])
+
+        # Remove outdated versions from the cellar.
+        ctx.run_command(["brew", "cleanup"])
 
 
 class ClaudeCode(OptionalComponent):

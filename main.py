@@ -8,11 +8,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from installers import macos
-
 # Importing components registers every OptionalComponent subclass at
 # class-definition time, populating the registry used below.
-from installers.components import OptionalComponent, PackageManager
+from installers.components import OptionalComponent
+from installers.managers import PackageManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -109,6 +108,44 @@ class DotfilesManager:
         packages = ["git", "zsh", "rsync", "aptitude", "wget"]
         logger.info(f"Installing core packages: {', '.join(packages)}")
         self.run_command(["sudo", "apt", "-y", "install"] + packages)
+
+    def install_homebrew(self):
+        if shutil.which("brew"):
+            logger.info("Homebrew is already installed.")
+            return
+
+        # Install from the BFSU mirror, non-interactively.
+        logger.info("Installing Homebrew from BFSU mirror...")
+        self.run_command(["sudo", "ls", ">/dev/null"], shell=True)
+        self.run_command(
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                "https://mirrors.bfsu.edu.cn/git/homebrew/install.git",
+                "brew-install",
+            ]
+        )
+        # The run_command wrapper takes no env dict, so export the mirror vars
+        # inline in the shell that runs the installer.
+        install_cmd = (
+            "export HOMEBREW_API_DOMAIN=https://mirrors.bfsu.edu.cn/homebrew-bottles/api && "
+            "export HOMEBREW_BOTTLE_DOMAIN=https://mirrors.bfsu.edu.cn/homebrew-bottles && "
+            "export HOMEBREW_BREW_GIT_REMOTE=https://mirrors.bfsu.edu.cn/git/homebrew/brew.git && "
+            "export NONINTERACTIVE=1 && "
+            "/bin/bash brew-install/install.sh"
+        )
+        self.run_command(install_cmd, shell=True)
+        self.run_command(["rm", "-rf", "brew-install"])
+
+    def bootstrap_macos(self):
+        logger.info("Bootstrapping macOS via Homebrew...")
+        self.install_homebrew()
+        if not shutil.which("curl"):
+            self.run_command(["brew", "install", "curl"])
+        packages = ["git", "zsh", "rsync", "rclone"]
+        logger.info(f"Installing core packages: {', '.join(packages)}")
+        self.run_command(["brew", "install"] + packages)
 
     def is_github_reachable(self):
         if self.dry_run:
@@ -379,7 +416,7 @@ class DotfilesManager:
 
         if self.os_type == "darwin":
             logger.info("macOS detected. Bootstrapping via Homebrew.")
-            macos.bootstrap_macos(self.run_command)
+            self.bootstrap_macos()
         elif self.os_type in ["debian", "ubuntu"]:
             self.bootstrap_debian()
         else:
