@@ -5,12 +5,12 @@ import platform
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 # Importing components registers every OptionalComponent subclass at
-# class-definition time, populating the registry used below.
-from installers.components import OptionalComponent
+# class-definition time, populating the registry used below. NECESSARY is the
+# ordered tuple of always-run shell tooling (ADR-0004).
+from installers.components import NECESSARY, OptionalComponent
 from installers.managers import PackageManager
 
 logging.basicConfig(
@@ -54,7 +54,7 @@ class DotfilesManager:
                 pass
         return "unknown"
 
-    def run_command(self, cmd, check=True, shell=False, capture_output=False):
+    def run_command(self, cmd, check=True, shell=False, capture_output=False, env=None):
         # Strip sudo when already running as root
         if self.is_root:
             if isinstance(cmd, str) and cmd.startswith("sudo "):
@@ -63,7 +63,10 @@ class DotfilesManager:
             elif isinstance(cmd, list) and cmd and cmd[0] == "sudo":
                 cmd = cmd[1:]
                 logger.debug("Running as root, stripped 'sudo' element")
-        cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
+        # Overlay any extra vars onto the inherited environment (None = inherit).
+        run_env = {**os.environ, **env} if env else None
+        env_prefix = " ".join(f"{k}={v}" for k, v in env.items()) + " " if env else ""
+        cmd_str = env_prefix + (cmd if isinstance(cmd, str) else " ".join(cmd))
         logger.info(f"Running: {cmd_str}")
         if self.dry_run:
             logger.info(f"[DRY-RUN] Would run: {cmd_str}")
@@ -73,7 +76,7 @@ class DotfilesManager:
 
         try:
             return subprocess.run(
-                cmd, check=check, shell=shell, capture_output=capture_output
+                cmd, check=check, shell=shell, capture_output=capture_output, env=run_env
             )
         except subprocess.CalledProcessError as e:
             logger.error(f"Error executing command: {e}")
@@ -160,77 +163,6 @@ class DotfilesManager:
         except (subprocess.CalledProcessError, Exception):
             return False
 
-    def config_ohmyzsh(self, use_github=True, interactive=False):
-        if not Path("./sources").is_dir():
-            logger.error("Please execute this script in the dotfiles directory")
-            sys.exit(1)
-
-        output_dir = Path("./output")
-        if not self.dry_run:
-            output_dir.mkdir(exist_ok=True)
-
-        github_reachable = self.is_github_reachable() if use_github else False
-        logger.info(
-            f"GitHub is {'reachable' if github_reachable else 'not reachable, using gitee'}"
-        )
-
-        logger.info("Updating submodules...")
-        self.run_command(["git", "submodule", "init"])
-        self.run_command(["git", "submodule", "update"])
-
-        oh_my_zsh_path = Path.home() / ".oh-my-zsh" / "oh-my-zsh.sh"
-        if oh_my_zsh_path.is_file():
-            logger.info("oh-my-zsh is already installed")
-        else:
-            oh_my_zsh_dir = Path.home() / ".oh-my-zsh"
-            if oh_my_zsh_dir.is_dir() and not self.dry_run:
-                logger.info("Backing up existing omz dir...")
-                shutil.rmtree(Path.home() / "oh-my-zsh.bkp", ignore_errors=True)
-                shutil.move(str(oh_my_zsh_dir), str(Path.home() / "oh-my-zsh.bkp"))
-
-            logger.info("Installing oh-my-zsh...")
-            install_url = (
-                "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
-                if github_reachable
-                else "https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh"
-            )
-            install_script = output_dir / "install.sh"
-            self.run_command(["curl", "-fsSL", install_url, "-o", str(install_script)])
-            install_args = [] if interactive else ["--unattended"]
-            self.run_command(["sh", str(install_script)] + install_args)
-            if not self.dry_run:
-                install_script.unlink(missing_ok=True)
-
-        logger.info("Installing antigen...")
-        if not self.dry_run:
-            self.run_command(
-                [
-                    "curl",
-                    "-fsSL",
-                    "https://git.io/antigen",
-                    "-o",
-                    str(Path.home() / "antigen.zsh"),
-                ]
-            )
-
-        logger.info("Copying zsh plugins config...")
-        if not self.dry_run:
-            custom_plugins = Path.home() / ".oh-my-zsh" / "custom" / "plugins"
-
-            zsh_auto_dir = custom_plugins / "zsh-autosuggestions"
-            zsh_auto_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(
-                "./sources/zsh_plugins/zsh-autosuggestions.plugin.zsh",
-                str(zsh_auto_dir / "zsh-autosuggestions.plugin.zsh"),
-            )
-
-            zsh_syn_dir = custom_plugins / "zsh-syntax-highlighting"
-            zsh_syn_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(
-                "./sources/zsh_plugins/zsh-syntax-highlighting.plugin.zsh",
-                str(zsh_syn_dir / "zsh-syntax-highlighting.plugin.zsh"),
-            )
-
     def stage_dotfiles(self, source_dir, dest_dir):
         logger.info(f"Staging dotfiles from {source_dir} to {dest_dir}...")
         if not self.dry_run:
@@ -314,36 +246,6 @@ class DotfilesManager:
 
         logger.info("Dotfiles linked successfully!")
 
-    def install_fzf(self):
-        logger.info("Installing fzf...")
-        fzf_bin = Path.home() / ".fzf" / "bin" / "fzf"
-        if fzf_bin.is_file():
-            logger.info("fzf is already installed")
-            return
-
-        fzf_dir = Path.home() / ".fzf"
-        github_reachable = self.is_github_reachable()
-        fzf_url = (
-            "https://github.com/junegunn/fzf.git"
-            if github_reachable
-            else "https://gitee.com/mirrors/fzf.git"
-        )
-        self.run_command(["git", "clone", "--depth", "1", fzf_url, str(fzf_dir)])
-        self.run_command([str(fzf_dir / "install"), "--all", "--no-update-rc"])
-
-    def install_starship(self, interactive=False):
-        logger.info("Installing Starship prompt...")
-        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
-        try:
-            self.run_command(
-                ["curl", "-fsSL", "https://starship.rs/install.sh", "-o", str(tmp_path)]
-            )
-            flags = [] if interactive else ["-y"]
-            self.run_command(["sh", str(tmp_path)] + flags)
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
     def set_git_proxy(self):
         http_proxy = os.environ.get("http_proxy", "")
         https_proxy = os.environ.get("https_proxy", "")
@@ -393,13 +295,13 @@ class DotfilesManager:
         for name in self.options.get("optional_components", []):
             OptionalComponent.get(name).run(self)
 
-    def run_legacy_scripts(self):
-        interactive = self.options.get("interactive", False)
-        self.config_ohmyzsh(interactive=interactive)
-        self.install_fzf()
+    def run_necessary_components(self):
+        """Install the always-run shell tooling, in strict order (ADR-0004)."""
+        for component in NECESSARY:
+            component().run(self)
 
-        self.install_starship(interactive=interactive)
-
+    def migrate_dotfiles(self):
+        """Stage then link the repo's dotfiles into $HOME (ADR-0001)."""
         staging = _dotfiles_staging_dir()
         if staging.exists() and self._staging_has_unlinked_items(staging, Path.home()):
             logger.warning(
@@ -414,6 +316,7 @@ class DotfilesManager:
         logger.info("Initializing python-based dotfiles bootstrap...")
         logger.info(f"Detected OS Type: {self.os_type}")
 
+        # Phase 1: OS prerequisites (not a component -- ADR-0003 §7).
         if self.os_type == "darwin":
             logger.info("macOS detected. Bootstrapping via Homebrew.")
             self.bootstrap_macos()
@@ -423,9 +326,18 @@ class DotfilesManager:
             logger.error(f"Unknown OS: {self.os_type}")
             sys.exit(1)
 
-        self.run_legacy_scripts()
+        # Phase 2: necessary tools, Phase 3: dotfiles, Phase 4: optional tools.
+        # Order matters: tools install before migration so the repo's rc files
+        # (linked in phase 3) stay canonical (ADR-0004 §4).
+        self.run_necessary_components()
+        self.migrate_dotfiles()
         self.run_optional_installers()
+
         logger.info("Bootstrap completed successfully!")
+        logger.info(
+            "Shell tooling installed — open a new shell or run `exec zsh` to "
+            "activate oh-my-zsh, starship, and fzf."
+        )
 
 
 def main():

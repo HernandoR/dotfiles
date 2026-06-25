@@ -1,16 +1,21 @@
-"""Registry of optional install components.
+"""Install components: necessary (defaulted-on) and optional (user-selected).
 
-Each optional component is a self-registering subclass of
-:class:`OptionalComponent`. Declaring a subclass with a ``name`` makes it
-available on the command line (``--optional-components``) and via the
-``DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS`` env var.
+Both kinds share the install machinery on :class:`Component` (see ADR-0003): a
+component is declarative-first -- it lists ``installs = {manager_id: spec}`` and
+the base resolves it through the backend the orchestrator picks (see
+:mod:`installers.managers`) -- with an imperative ``install(ctx)`` override for
+multi-step installs (docker post-setup, the nvm + pnpm dance) that may reuse a
+backend via ``ctx.package_manager(id)``. There is no per-OS helper module.
 
-A component is declarative-first (see ADR-0003): it lists
-``installs = {manager_id: spec}`` and the base class resolves it through the
-backend the orchestrator picks (see :mod:`installers.managers`). Multi-step
-installs (docker post-setup, llvm update-alternatives, the nvm + pnpm dance)
-instead override ``install(ctx)`` and may reuse a backend via
-``ctx.package_manager(id)`` -- so there is no per-OS helper module.
+The two kinds differ only in lifecycle (see ADR-0004):
+
+- :class:`NecessaryComponent` -- always-run shell tooling (oh-my-zsh, fzf,
+  starship). The install order is correctness-critical, so the catalog is the
+  explicit ``NECESSARY`` tuple at the bottom of this module rather than
+  registration order; these are not user-selectable.
+- :class:`OptionalComponent` -- self-registering, user-selected via
+  ``--optional-components`` / the ``DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS`` env
+  var. Order is incidental, so registration order drives ``resolve()``.
 """
 
 import logging
@@ -18,6 +23,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 
 from installers.managers import Deb, PackageManager, Script
 
@@ -25,19 +31,91 @@ from installers.managers import Deb, PackageManager, Script
 logger = logging.getLogger("dotfiles")
 
 
-class OptionalComponent:
-    """Base class for optional install components.
+class Component:
+    """Shared base for install components -- the ADR-0003 install machinery.
 
-    Subclasses register themselves by class-definition time keyed on ``name``.
+    Carries the declarative ``installs`` table and its resolution, plus the
+    imperative ``install(ctx)`` escape hatch. Subclasses add their own lifecycle
+    (an ordered tuple for necessary components, a self-registering catalog for
+    optional ones); registration is intentionally *not* here.
     """
-
-    _registry = {}
 
     name = ""
     description = ""
     supported_os = None  # explicit list for imperative-override components
-    groups = frozenset()
     installs = {}  # {manager_id: spec}; empty => override install() below
+
+    # -- per-component behavior ------------------------------------------
+
+    def effective_supported_os(self):
+        """OS tuple this component applies to (``None`` == all).
+
+        For declarative components it is *derived* from the managers listed in
+        ``installs`` -- so it can never drift out of sync with the entries. For
+        imperative-override components it is the explicit ``supported_os``.
+        """
+        if not self.installs:
+            return self.supported_os
+        oses = set()
+        for manager_id in self.installs:
+            if not PackageManager.exists(manager_id):
+                continue
+            manager_os = PackageManager.get(manager_id).supported_os
+            if manager_os is None:
+                return None  # an all-OS backend (scripts) makes the whole thing all-OS
+            oses.update(manager_os)
+        return tuple(sorted(oses)) if oses else None
+
+    def applicable(self, ctx):
+        supported = self.effective_supported_os()
+        return supported is None or ctx.os_type in supported
+
+    def install(self, ctx):
+        """Default declarative resolution; override for multi-step installs."""
+        manager = ctx.select_manager(self.installs)
+        if manager is None:
+            raise RuntimeError(
+                f"No package manager available for {self.name} on {ctx.os_type}"
+            )
+        manager.install(ctx, self.installs[manager.id])
+
+    def run(self, ctx):
+        if not self.applicable(ctx):
+            logger.info(
+                f"{self.description} is not applicable on {ctx.os_type}. Skipping."
+            )
+            return
+        logger.info(f"Installing {self.description}...")
+        self.install(ctx)
+
+
+class NecessaryComponent(Component):
+    """Defaulted-on shell tooling installed on every run.
+
+    Not user-selectable and not self-registering: install order is
+    correctness-critical, so the catalog is the explicit ``NECESSARY`` tuple at
+    the bottom of this module (see ADR-0004 -- a reordering must be a one-line
+    diff, not a subtle class move). Subclasses inherit the install machinery
+    from :class:`Component`; each of the current three is an imperative
+    multi-step ``install(ctx)`` override.
+
+    Per ADR-0004, necessary components install binaries/frameworks only -- shell
+    rc files belong to the dotfiles migration phase, so the repo's ``.zshrc``
+    (which sources these tools) stays canonical.
+    """
+
+
+class OptionalComponent(Component):
+    """User-selected install component; self-registers by ``name``.
+
+    Declaring a subclass with a ``name`` makes it available via
+    ``--optional-components`` and ``DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS``.
+    Order is incidental, so registration order drives ``resolve()``.
+    """
+
+    _registry = {}
+
+    groups = frozenset()
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -86,49 +164,6 @@ class OptionalComponent:
     @classmethod
     def get(cls, name):
         return cls._registry[name]()
-
-    # -- per-component behavior ------------------------------------------
-
-    def effective_supported_os(self):
-        """OS tuple this component applies to (``None`` == all).
-
-        For declarative components it is *derived* from the managers listed in
-        ``installs`` -- so it can never drift out of sync with the entries. For
-        imperative-override components it is the explicit ``supported_os``.
-        """
-        if not self.installs:
-            return self.supported_os
-        oses = set()
-        for manager_id in self.installs:
-            if not PackageManager.exists(manager_id):
-                continue
-            manager_os = PackageManager.get(manager_id).supported_os
-            if manager_os is None:
-                return None  # an all-OS backend (scripts) makes the whole thing all-OS
-            oses.update(manager_os)
-        return tuple(sorted(oses)) if oses else None
-
-    def applicable(self, ctx):
-        supported = self.effective_supported_os()
-        return supported is None or ctx.os_type in supported
-
-    def install(self, ctx):
-        """Default declarative resolution; override for multi-step installs."""
-        manager = ctx.select_manager(self.installs)
-        if manager is None:
-            raise RuntimeError(
-                f"No package manager available for {self.name} on {ctx.os_type}"
-            )
-        manager.install(ctx, self.installs[manager.id])
-
-    def run(self, ctx):
-        if not self.applicable(ctx):
-            logger.info(
-                f"{self.description} is not applicable on {ctx.os_type}. Skipping."
-            )
-            return
-        logger.info(f"Installing {self.description}...")
-        self.install(ctx)
 
 
 class OnePassword(OptionalComponent):
@@ -499,6 +534,135 @@ class Codegraph(OptionalComponent):
             "into your AI agents (Claude Code, Cursor, etc.), then "
             "`codegraph init` inside each project."
         )
+
+
+class OhMyZsh(NecessaryComponent):
+    description = "Oh My Zsh (+ antigen, zsh plugins)"
+
+    def install(self, ctx):
+        if not pathlib.Path("./sources").is_dir():
+            logger.error("Please execute this script in the dotfiles directory")
+            sys.exit(1)
+
+        output_dir = pathlib.Path("./output")
+        if not ctx.dry_run:
+            output_dir.mkdir(exist_ok=True)
+
+        github_reachable = ctx.is_github_reachable()
+        logger.info(
+            f"GitHub is {'reachable' if github_reachable else 'not reachable, using gitee'}"
+        )
+
+        logger.info("Updating submodules...")
+        ctx.run_command(["git", "submodule", "init"])
+        ctx.run_command(["git", "submodule", "update"])
+
+        interactive = ctx.options.get("interactive", False)
+        oh_my_zsh_path = pathlib.Path.home() / ".oh-my-zsh" / "oh-my-zsh.sh"
+        if oh_my_zsh_path.is_file():
+            logger.info("oh-my-zsh is already installed")
+        else:
+            oh_my_zsh_dir = pathlib.Path.home() / ".oh-my-zsh"
+            if oh_my_zsh_dir.is_dir() and not ctx.dry_run:
+                logger.info("Backing up existing omz dir...")
+                shutil.rmtree(pathlib.Path.home() / "oh-my-zsh.bkp", ignore_errors=True)
+                shutil.move(
+                    str(oh_my_zsh_dir), str(pathlib.Path.home() / "oh-my-zsh.bkp")
+                )
+
+            logger.info("Installing oh-my-zsh...")
+            install_url = (
+                "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
+                if github_reachable
+                else "https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh"
+            )
+            install_script = output_dir / "install.sh"
+            ctx.run_command(["curl", "-fsSL", install_url, "-o", str(install_script)])
+            install_args = [] if interactive else ["--unattended"]
+            # KEEP_ZSHRC=yes installs the framework without writing ~/.zshrc --
+            # the repo's .zshrc, linked by the migration phase, stays canonical
+            # (ADR-0004 §4).
+            ctx.run_command(
+                ["sh", str(install_script)] + install_args,
+                env={"KEEP_ZSHRC": "yes"},
+            )
+            if not ctx.dry_run:
+                install_script.unlink(missing_ok=True)
+
+        logger.info("Installing antigen...")
+        if not ctx.dry_run:
+            ctx.run_command(
+                [
+                    "curl",
+                    "-fsSL",
+                    "https://git.io/antigen",
+                    "-o",
+                    str(pathlib.Path.home() / "antigen.zsh"),
+                ]
+            )
+
+        logger.info("Copying zsh plugins config...")
+        if not ctx.dry_run:
+            custom_plugins = pathlib.Path.home() / ".oh-my-zsh" / "custom" / "plugins"
+
+            zsh_auto_dir = custom_plugins / "zsh-autosuggestions"
+            zsh_auto_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(
+                "./sources/zsh_plugins/zsh-autosuggestions.plugin.zsh",
+                str(zsh_auto_dir / "zsh-autosuggestions.plugin.zsh"),
+            )
+
+            zsh_syn_dir = custom_plugins / "zsh-syntax-highlighting"
+            zsh_syn_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(
+                "./sources/zsh_plugins/zsh-syntax-highlighting.plugin.zsh",
+                str(zsh_syn_dir / "zsh-syntax-highlighting.plugin.zsh"),
+            )
+
+
+class Fzf(NecessaryComponent):
+    description = "fzf (fuzzy finder)"
+
+    def install(self, ctx):
+        fzf_bin = pathlib.Path.home() / ".fzf" / "bin" / "fzf"
+        if fzf_bin.is_file():
+            logger.info("fzf is already installed")
+            return
+
+        fzf_dir = pathlib.Path.home() / ".fzf"
+        github_reachable = ctx.is_github_reachable()
+        fzf_url = (
+            "https://github.com/junegunn/fzf.git"
+            if github_reachable
+            else "https://gitee.com/mirrors/fzf.git"
+        )
+        ctx.run_command(["git", "clone", "--depth", "1", fzf_url, str(fzf_dir)])
+        # --no-update-rc: fzf must not touch shell rc files; the repo's .zshrc
+        # sources fzf itself (ADR-0004 §4).
+        ctx.run_command([str(fzf_dir / "install"), "--all", "--no-update-rc"])
+
+
+class Starship(NecessaryComponent):
+    description = "Starship prompt"
+
+    def install(self, ctx):
+        # Plain download-run-cleanup: reuse the scripts backend (ADR-0003 §5)
+        # rather than re-implementing the temp-file dance. The installer drops a
+        # binary on PATH and does not edit rc files.
+        interactive = ctx.options.get("interactive", False)
+        ctx.package_manager("scripts").install(
+            ctx,
+            Script(
+                "https://starship.rs/install.sh",
+                interpreter="sh",
+                args=[] if interactive else ["-y"],
+            ),
+        )
+
+
+# Ordered catalog of always-run shell tooling. The order is correctness-critical
+# and lives here as an explicit, reviewable tuple (ADR-0004 §3).
+NECESSARY = (OhMyZsh, Fzf, Starship)
 
 
 def main():
