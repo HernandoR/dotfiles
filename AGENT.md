@@ -11,7 +11,6 @@ The installer architecture is recorded in ADRs under `docs/plans/`: staging/link
 ```
 bootstrap.sh      POSIX entrypoint: ensures uv, runs `uv run main.py "$@"`
 main.py           DotfilesManager — OS detection, bootstrap, phase orchestration, sub-commands
-install_llvm.py   Standalone PEP-723 script (uv run); legacy helper, not wired into main.py
 pyproject.toml    Project metadata; dependencies = [] (no third-party deps)
 installers/
   __init__.py     Empty — marks the package
@@ -77,7 +76,7 @@ Both subclass a shared `Component` base (`components.py:34`) that carries the in
 
 ## Conventions
 
-- **Language:** Python ≥ 3.9 (`pyproject.toml:6`); `install_llvm.py` declares its own `requires-python = ">=3.10"` in a PEP-723 inline block (`install_llvm.py:2-4`).
+- **Language:** Python ≥ 3.9 (`pyproject.toml:6`).
 - **No third-party dependencies** — `dependencies = []` (`pyproject.toml:7`); standard library only (`subprocess`, `pathlib`, `argparse`, `logging`, `shutil`, `tempfile`, `os`, `sys`).
 - **Command execution goes through `DotfilesManager.run_command`** (`main.py:57`): it strips a leading `sudo` when running as root (`main.py:59-65`), logs every command, overlays an optional `env` dict onto the inherited environment (`main.py:67`), honors `--dry-run` by returning a fake `CompletedProcess` (`main.py:68-72`), and `sys.exit(1)` on failure when `check=True` (`main.py:83-84`). Components reach it as `ctx.run_command`.
 - **Prefer argument-list commands over `shell=True`.** Lists are the norm; use `shell=True` only for genuine pipelines/redirects/globs (`components.py` `Cuda.install`). To set an env var, pass `env={...}` to `run_command` (`main.py:57`) rather than embedding `VAR=val` in a shell string.
