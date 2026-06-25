@@ -2,17 +2,6 @@ import os
 from pathlib import Path
 
 
-def install_1password(run_cmd):
-    deb_path = Path("/tmp/1password-latest.deb")
-    url = (
-        "https://downloads.1password.com/linux/debian/amd64/stable/1password-latest.deb"
-    )
-    run_cmd(f"wget {url} -O {deb_path}", shell=True)
-    run_cmd(["sudo", "apt", "install", "-f", "-y", str(deb_path)])
-    if deb_path.exists():
-        deb_path.unlink()
-
-
 def install_docker(run_cmd):
     run_cmd("curl -fsSL https://get.docker.com/ | sh", shell=True)
     user = os.environ.get("USER", os.environ.get("LOGNAME"))
@@ -22,10 +11,6 @@ def install_docker(run_cmd):
     run_cmd(["sudo", "add-apt-repository", "-y", "ppa:graphics-drivers/ppa"])
     run_cmd(["sudo", "apt-get", "update"])
     run_cmd(["sudo", "apt-get", "install", "-y", "dkms", "build-essential"])
-
-
-def install_docker_rootless(run_cmd):
-    run_cmd("curl -fsSL https://get.docker.com/rootless | sh", shell=True)
 
 
 def install_cmdl_tools(run_cmd):
@@ -95,21 +80,6 @@ def install_llvm(run_cmd, version="18", dry_run=False):
                     str(file),
                     "1",
                 ])
-
-
-def install_btm(run_cmd):
-    version = "0.12.3"
-    deb_name = f"bottom_{version}-1_amd64.deb"
-    deb_path = Path(f"/tmp/{deb_name}")
-    url = f"https://github.com/ClementTsang/bottom/releases/download/{version}/{deb_name}"
-    run_cmd(f"curl -LO {url} --output-dir /tmp", shell=True)
-    run_cmd(["sudo", "dpkg", "-i", str(deb_path)])
-    if deb_path.exists():
-        deb_path.unlink()
-
-
-def install_fdfind(run_cmd):
-    run_cmd(["sudo", "apt-get", "install", "-y", "fd-find"])
 
 
 def install_cuda(run_cmd):

@@ -12,7 +12,7 @@ from installers import macos
 
 # Importing components registers every OptionalComponent subclass at
 # class-definition time, populating the registry used below.
-from installers.components import OptionalComponent
+from installers.components import OptionalComponent, PackageManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -330,6 +330,27 @@ class DotfilesManager:
         self.run_command(
             ["git", "config", "--global", "--unset", "https.proxy"], check=False
         )
+
+    def package_manager(self, manager_id):
+        """Return an install backend by id, for components that reuse one."""
+        return PackageManager.get(manager_id)
+
+    def select_manager(self, installs):
+        """Pick the best backend for this OS from a component's ``installs``.
+
+        Filters to backends that support the current OS and that the component
+        has a spec for, then takes the highest-priority match (native package
+        managers rank above ``scripts``). Returns ``None`` if none apply.
+        """
+        candidates = [
+            PackageManager.get(manager_id)
+            for manager_id in installs
+            if PackageManager.exists(manager_id)
+            and PackageManager.get(manager_id).applicable(self.os_type)
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda manager: manager.priority)
 
     def run_optional_installers(self):
         for name in self.options.get("optional_components", []):

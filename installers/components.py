@@ -1,18 +1,20 @@
-"""Registry of optional install components.
+"""Registry of optional install components and their package-manager backends.
 
-Each optional component is a self-registering subclass of
-:class:`OptionalComponent`. Declaring a subclass with a ``name`` is enough to
-make it available on the command line (``--optional-components``) and via the
-``DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS`` env var — no parallel lookup tables
-to keep in sync.
+Two self-registering hierarchies live here (see ADR-0003):
 
-A component declares:
+* :class:`PackageManager` -- an *install backend* keyed by ``id`` (``apt``,
+  ``brew``, ``scripts``). Each knows how to install one ``spec`` on the OSes it
+  supports. The orchestrator (``DotfilesManager``) selects the backend; a
+  component never chooses its own.
+* :class:`OptionalComponent` -- an optional piece of software. Declaring a
+  subclass with a ``name`` makes it available on the command line
+  (``--optional-components``) and via ``DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS``.
 
-* ``name``        -- the CLI identifier (e.g. ``"docker"``)
-* ``description`` -- human-readable label used in logs and help text
-* ``supported_os``-- iterable of OS types it applies to, or ``None`` for all
-* ``groups``      -- alias groups it belongs to (e.g. ``{"all", "mac"}``)
-* ``install``     -- performs the actual installation given the manager
+A component is declarative-first: it lists ``installs = {manager_id: spec}`` and
+the base class resolves it through the manager the orchestrator picks. Multi-step
+installs (docker post-setup, llvm update-alternatives, the nvm + pnpm dance)
+instead override ``install(ctx)`` and may reuse a manager via
+``ctx.package_manager(id)``.
 """
 
 import logging
@@ -21,12 +23,127 @@ import pathlib
 import shutil
 import tempfile
 
-# import debian
-# import macos
 from installers import debian, macos
 
 
 logger = logging.getLogger("dotfiles")
+
+
+# -- install specs --------------------------------------------------------
+#
+# Each PackageManager defines (and accepts) its own spec type. A bare string is
+# shorthand for that manager's primary parameter (package name / script URL).
+
+
+class Script:
+    """Spec for the ``scripts`` manager: fetch a URL and run it.
+
+    URL alone is not enough -- rustup needs ``sh`` plus a list of flags,
+    codegraph needs ``sh``, claude/nvm need ``bash``.
+    """
+
+    def __init__(self, url, interpreter="bash", args=()):
+        self.url = url
+        self.interpreter = interpreter
+        self.args = list(args)
+
+
+class Deb:
+    """Spec for the ``apt`` manager: download a ``.deb`` and ``apt install -f`` it.
+
+    Lets the single ``apt`` backend express "install from a downloaded package"
+    (e.g. 1Password) without a separate ``deb`` manager id.
+    """
+
+    def __init__(self, url):
+        self.url = url
+
+
+# -- package-manager backends --------------------------------------------
+
+
+class PackageManager:
+    """Base class for install backends.
+
+    Subclasses register themselves at class-definition time keyed on ``id``.
+    """
+
+    _registry = {}
+
+    id = ""
+    supported_os = None  # None means "all operating systems"
+    priority = 0  # higher wins when several backends match (native > scripts)
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.id:
+            PackageManager._registry[cls.id] = cls
+
+    @classmethod
+    def exists(cls, manager_id):
+        return manager_id in cls._registry
+
+    @classmethod
+    def get(cls, manager_id):
+        return cls._registry[manager_id]()
+
+    def applicable(self, os_type):
+        return self.supported_os is None or os_type in self.supported_os
+
+    def install(self, ctx, spec):
+        raise NotImplementedError
+
+
+class AptManager(PackageManager):
+    id = "apt"
+    supported_os = ("debian", "ubuntu")
+    priority = 100
+
+    def install(self, ctx, spec):
+        if isinstance(spec, Deb):
+            # Download then `apt install -f` the local file so dependencies
+            # resolve (dpkg -i alone would leave them unmet).
+            with tempfile.NamedTemporaryFile(suffix=".deb", delete=False) as tmp:
+                deb_path = pathlib.Path(tmp.name)
+            try:
+                ctx.run_command(["wget", spec.url, "-O", str(deb_path)])
+                ctx.run_command(["sudo", "apt", "install", "-f", "-y", str(deb_path)])
+            finally:
+                deb_path.unlink(missing_ok=True)
+        else:
+            ctx.run_command(["sudo", "apt", "install", "-y", spec])
+
+
+class BrewManager(PackageManager):
+    id = "brew"
+    supported_os = ("darwin",)
+    priority = 100
+
+    def install(self, ctx, spec):
+        ctx.run_command(["brew", "install", spec])
+
+
+class ScriptsManager(PackageManager):
+    id = "scripts"
+    supported_os = None  # remote bootstrap scripts run anywhere
+    priority = 10  # fallback: a native package manager is preferred when present
+
+    def install(self, ctx, spec):
+        if isinstance(spec, str):
+            spec = Script(url=spec)
+        # Download then execute separately so a curl failure raises instead of
+        # silently feeding an empty script to the interpreter -- a piped
+        # `curl | sh` returns the interpreter's exit code, masking curl's.
+        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
+            tmp_path = pathlib.Path(tmp.name)
+        try:
+            ctx.run_command(["curl", "-fsSL", spec.url, "-o", str(tmp_path)])
+            ctx.run_command([spec.interpreter, str(tmp_path), *spec.args])
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+
+# -- optional components --------------------------------------------------
 
 
 class OptionalComponent:
@@ -39,8 +156,9 @@ class OptionalComponent:
 
     name = ""
     description = ""
-    supported_os = None  # None means "all operating systems"
+    supported_os = None  # explicit list for imperative-override components
     groups = frozenset()
+    installs = {}  # {manager_id: spec}; empty => override install() below
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -92,30 +210,57 @@ class OptionalComponent:
 
     # -- per-component behavior ------------------------------------------
 
-    def applicable(self, manager):
-        return self.supported_os is None or manager.os_type in self.supported_os
+    def effective_supported_os(self):
+        """OS tuple this component applies to (``None`` == all).
 
-    def install(self, manager):
-        raise NotImplementedError
+        For declarative components it is *derived* from the managers listed in
+        ``installs`` -- so it can never drift out of sync with the entries. For
+        imperative-override components it is the explicit ``supported_os``.
+        """
+        if not self.installs:
+            return self.supported_os
+        oses = set()
+        for manager_id in self.installs:
+            if not PackageManager.exists(manager_id):
+                continue
+            manager_os = PackageManager.get(manager_id).supported_os
+            if manager_os is None:
+                return None  # an all-OS backend (scripts) makes the whole thing all-OS
+            oses.update(manager_os)
+        return tuple(sorted(oses)) if oses else None
 
-    def run(self, manager):
-        if not self.applicable(manager):
+    def applicable(self, ctx):
+        supported = self.effective_supported_os()
+        return supported is None or ctx.os_type in supported
+
+    def install(self, ctx):
+        """Default declarative resolution; override for multi-step installs."""
+        manager = ctx.select_manager(self.installs)
+        if manager is None:
+            raise RuntimeError(
+                f"No package manager available for {self.name} on {ctx.os_type}"
+            )
+        manager.install(ctx, self.installs[manager.id])
+
+    def run(self, ctx):
+        if not self.applicable(ctx):
             logger.info(
-                f"{self.description} is not applicable on {manager.os_type}. Skipping."
+                f"{self.description} is not applicable on {ctx.os_type}. Skipping."
             )
             return
         logger.info(f"Installing {self.description}...")
-        self.install(manager)
+        self.install(ctx)
 
 
 class OnePassword(OptionalComponent):
     name = "1password"
     description = "1Password"
-    supported_os = ("debian", "ubuntu")
     groups = frozenset({"all"})
-
-    def install(self, manager):
-        debian.install_1password(manager.run_command)
+    installs = {
+        "apt": Deb(
+            "https://downloads.1password.com/linux/debian/amd64/stable/1password-latest.deb"
+        ),
+    }
 
 
 class Docker(OptionalComponent):
@@ -124,18 +269,15 @@ class Docker(OptionalComponent):
     supported_os = ("debian", "ubuntu")
     groups = frozenset({"all"})
 
-    def install(self, manager):
-        debian.install_docker(manager.run_command)
+    def install(self, ctx):
+        debian.install_docker(ctx.run_command)
 
 
 class DockerRootless(OptionalComponent):
     name = "docker-rootless"
     description = "Docker (rootless)"
-    supported_os = None
     groups = frozenset({"all"})
-
-    def install(self, manager):
-        debian.install_docker_rootless(manager.run_command)
+    installs = {"scripts": Script("https://get.docker.com/rootless", interpreter="sh")}
 
 
 class CmdlTools(OptionalComponent):
@@ -144,8 +286,8 @@ class CmdlTools(OptionalComponent):
     supported_os = ("debian", "ubuntu")
     groups = frozenset({"all"})
 
-    def install(self, manager):
-        debian.install_cmdl_tools(manager.run_command)
+    def install(self, ctx):
+        debian.install_cmdl_tools(ctx.run_command)
 
 
 class Cuda(OptionalComponent):
@@ -154,8 +296,8 @@ class Cuda(OptionalComponent):
     supported_os = ("debian", "ubuntu")
     groups = frozenset({"all"})
 
-    def install(self, manager):
-        debian.install_cuda(manager.run_command)
+    def install(self, ctx):
+        debian.install_cuda(ctx.run_command)
 
 
 class Llvm(OptionalComponent):
@@ -164,8 +306,8 @@ class Llvm(OptionalComponent):
     supported_os = ("debian", "ubuntu")
     groups = frozenset({"all"})
 
-    def install(self, manager):
-        debian.install_llvm(manager.run_command, version="18", dry_run=manager.dry_run)
+    def install(self, ctx):
+        debian.install_llvm(ctx.run_command, version="18", dry_run=ctx.dry_run)
 
 
 class MacBrew(OptionalComponent):
@@ -174,57 +316,39 @@ class MacBrew(OptionalComponent):
     supported_os = ("darwin",)
     groups = frozenset({"all"})
 
-    def install(self, manager):
-        macos.install_mac_brew(manager.run_command)
+    def install(self, ctx):
+        macos.install_mac_brew(ctx.run_command)
 
 
 class ClaudeCode(OptionalComponent):
     name = "claude"
     description = "Claude Code CLI"
-    supported_os = None  # cross-platform native installer (macOS, Linux, WSL)
     groups = frozenset({"all"})
-
-    def install(self, manager):
-        # Official native installer; auto-updates in the background.
-        # npm fallback: npm install -g @anthropic-ai/claude-code
-        # Download then execute separately so a curl failure raises instead of
-        # silently feeding an empty script to bash (shell pipelines return the
-        # last command's exit code, masking upstream failures).
-        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
-            tmp_path = pathlib.Path(tmp.name)
-        try:
-            manager.run_command(
-                ["curl", "-fsSL", "https://claude.ai/install.sh", "-o", str(tmp_path)]
-            )
-            manager.run_command(["bash", str(tmp_path)])
-        finally:
-            tmp_path.unlink(missing_ok=True)
+    # Official native installer; auto-updates in the background.
+    # npm fallback: npm install -g @anthropic-ai/claude-code
+    installs = {"scripts": Script("https://claude.ai/install.sh", interpreter="bash")}
 
 
 class Bottom(OptionalComponent):
     name = "btm"
     description = "bottom (system monitor)"
-    supported_os = None
     groups = frozenset({"all"})
-
-    def install(self, manager):
-        if manager.os_type == "darwin":
-            manager.run_command(["brew", "install", "bottom"])
-        else:
-            debian.install_btm(manager.run_command)
+    # Pinned release .deb on Debian (bottom isn't in the default repos); brew
+    # formula on macOS. Bump the version in the URL deliberately.
+    installs = {
+        "brew": "bottom",
+        "apt": Deb(
+            "https://github.com/ClementTsang/bottom/releases/download/0.12.3/"
+            "bottom_0.12.3-1_amd64.deb"
+        ),
+    }
 
 
 class FdFind(OptionalComponent):
     name = "fdfind"
     description = "fd-find (fast file finder)"
-    supported_os = None
     groups = frozenset({"all"})
-
-    def install(self, manager):
-        if manager.os_type == "darwin":
-            manager.run_command(["brew", "install", "fd"])
-        else:
-            debian.install_fdfind(manager.run_command)
+    installs = {"brew": "fd", "apt": "fd-find"}
 
 
 class Node(OptionalComponent):
@@ -236,34 +360,30 @@ class Node(OptionalComponent):
     # Pinned tag — v0.40.5 carries the CVE-2026-10796 fix. Bump deliberately.
     NVM_VERSION = "v0.40.5"
 
-    def install(self, manager):
+    def install(self, ctx):
         # nvm is a shell *function*, not a binary on PATH — installing it does
         # not make `nvm` callable in a fresh subprocess. So: fetch + run the
-        # install script, then source nvm.sh and drive the Node + pnpm install
-        # inside a single shell that has the freshly-installed nvm loaded.
-        # Direct curl (no gitee mirror) matches the claude/starship components.
+        # install script (reusing the scripts manager), then source nvm.sh and
+        # drive the Node + pnpm install inside a single shell that has the
+        # freshly-installed nvm loaded.
         install_url = (
             "https://raw.githubusercontent.com/nvm-sh/nvm/"
             f"{self.NVM_VERSION}/install.sh"
         )
-        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
-            tmp_path = pathlib.Path(tmp.name)
-        try:
-            manager.run_command(["curl", "-fsSL", install_url, "-o", str(tmp_path)])
-            manager.run_command(["bash", str(tmp_path)])
-            # nvm installs into $NVM_DIR (default ~/.nvm). Source it, install the
-            # LTS Node (which provides node/npm/npx), then enable pnpm via the
-            # Corepack shim that ships with Node.
-            nvm_dir = os.environ.get("NVM_DIR") or str(pathlib.Path.home() / ".nvm")
-            bootstrap = (
-                f'export NVM_DIR="{nvm_dir}"; '
-                '. "$NVM_DIR/nvm.sh"; '
-                "nvm install --lts; "
-                "corepack enable pnpm"
-            )
-            manager.run_command(["bash", "-c", bootstrap])
-        finally:
-            tmp_path.unlink(missing_ok=True)
+        ctx.package_manager("scripts").install(
+            ctx, Script(install_url, interpreter="bash")
+        )
+        # nvm installs into $NVM_DIR (default ~/.nvm). Source it, install the
+        # LTS Node (which provides node/npm/npx), then enable pnpm via the
+        # Corepack shim that ships with Node.
+        nvm_dir = os.environ.get("NVM_DIR") or str(pathlib.Path.home() / ".nvm")
+        bootstrap = (
+            f'export NVM_DIR="{nvm_dir}"; '
+            '. "$NVM_DIR/nvm.sh"; '
+            "nvm install --lts; "
+            "corepack enable pnpm"
+        )
+        ctx.run_command(["bash", "-c", bootstrap])
 
 
 class Rustup(OptionalComponent):
@@ -272,56 +392,36 @@ class Rustup(OptionalComponent):
     supported_os = None  # rustup-init.sh covers macOS, Linux, and WSL
     groups = frozenset({"all"})
 
-    def install(self, manager):
+    def install(self, ctx):
         # Idempotent: if rustup is already on PATH, just refresh the default
-        # toolchain and exit — rustup itself owns its self-update cadence.
-        # `shutil.which` reads the live PATH, which matches what `run_command`
-        # will see; rustup ships into ~/.cargo/bin so users who already
-        # installed it via brew / another bootstrap won't be reinstalled.
+        # toolchain and exit — rustup owns its own self-update cadence.
         if shutil.which("rustup"):
             logger.info("rustup already installed; ensuring stable toolchain.")
-            manager.run_command(["rustup", "default", "stable"])
+            ctx.run_command(["rustup", "default", "stable"])
             return
 
-        # Official Unix installer per https://rustup.rs and the rustup book.
-        # Flags follow the documented headless contract:
+        # Official Unix installer per https://rustup.rs, run via the scripts
+        # manager. Flags follow the documented headless contract:
         #   -y                       : accept defaults, skip prompts
         #   --default-toolchain stable
         #   --profile default        : rustc + cargo + rust-std + rustfmt + clippy
         #   --no-modify-path         : the dotfiles already export ~/.cargo/bin
-        #                              (see sources/root/.exports), so don't let
-        #                              rustup append duplicate lines to shell rc.
-        # Download then execute separately so a curl failure raises instead of
-        # silently feeding an empty script to sh (matches the Claude component).
-        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
-            tmp_path = pathlib.Path(tmp.name)
-        try:
-            manager.run_command(
-                [
-                    "curl",
-                    "--proto",
-                    "=https",
-                    "--tlsv1.2",
-                    "-sSf",
-                    "https://sh.rustup.rs",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-            manager.run_command(
-                [
-                    "sh",
-                    str(tmp_path),
+        #                              (see sources/root/.exports).
+        ctx.package_manager("scripts").install(
+            ctx,
+            Script(
+                "https://sh.rustup.rs",
+                interpreter="sh",
+                args=[
                     "-y",
                     "--default-toolchain",
                     "stable",
                     "--profile",
                     "default",
                     "--no-modify-path",
-                ]
-            )
-        finally:
-            tmp_path.unlink(missing_ok=True)
+                ],
+            ),
+        )
 
 
 class Codegraph(OptionalComponent):
@@ -334,43 +434,29 @@ class Codegraph(OptionalComponent):
     # touches MCP configs across multiple editors and shouldn't run unattended.
     groups = frozenset()
 
-    def install(self, manager):
-        # Idempotent: if codegraph is already on PATH, defer to its own
-        # in-place updater rather than re-running the installer script —
-        # this matches the upstream guidance ("Already installed? Run
-        # `codegraph upgrade` to update in place.").
+    def install(self, ctx):
+        # Idempotent: if codegraph is already on PATH, defer to its own in-place
+        # updater rather than re-running the installer — matches upstream
+        # guidance ("Already installed? Run `codegraph upgrade`.").
         if shutil.which("codegraph"):
             logger.info("codegraph already installed; running self-update.")
-            manager.run_command(["codegraph", "upgrade"], check=False)
+            ctx.run_command(["codegraph", "upgrade"], check=False)
             return
 
-        # Official self-contained installer (no Node.js required): the script
-        # fetches the right per-platform bundled-Node build for the OS/arch
-        # and drops a `codegraph` shim onto PATH. Download then execute
-        # separately so a curl failure raises cleanly instead of feeding an
-        # empty script to sh.
-        with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
-            tmp_path = pathlib.Path(tmp.name)
-        try:
-            manager.run_command(
-                [
-                    "curl",
-                    "-fsSL",
-                    "https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-            manager.run_command(["sh", str(tmp_path)])
-        finally:
-            tmp_path.unlink(missing_ok=True)
+        # Official self-contained installer (no Node.js required): fetches the
+        # right per-platform bundled-Node build and drops a `codegraph` shim on
+        # PATH. Run via the scripts manager.
+        ctx.package_manager("scripts").install(
+            ctx,
+            Script(
+                "https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh",
+                interpreter="sh",
+            ),
+        )
 
-        # NOTE: We intentionally do NOT auto-run `codegraph install` here.
-        # That step wires CodeGraph's MCP server into every detected agent
-        # (Claude Code, Cursor, Codex, …) and is interactive by default; the
-        # user can opt in afterwards with:
-        #   codegraph install                # interactive, recommended
-        #   codegraph install --yes          # auto-detect, non-interactive
+        # NOTE: We intentionally do NOT auto-run `codegraph install` here — that
+        # wires CodeGraph's MCP server into every detected agent and is
+        # interactive by default. The user opts in afterwards.
         logger.info(
             "codegraph CLI installed. Run `codegraph install` to wire it "
             "into your AI agents (Claude Code, Cursor, etc.), then "
@@ -386,10 +472,13 @@ def main():
     for name in OptionalComponent.names():
         comp = OptionalComponent.get(name)
         groups_str = ", ".join(sorted(comp.groups)) if comp.groups else "none"
-        os_str = ", ".join(comp.supported_os) if comp.supported_os else "all OS"
+        supported = comp.effective_supported_os()
+        os_str = ", ".join(supported) if supported else "all OS"
+        backends = ", ".join(comp.installs) if comp.installs else "custom"
         print(f"\n  {name}")
         print(f"    Description: {comp.description}")
         print(f"    OS: {os_str}")
+        print(f"    Backends: {backends}")
         print(f"    Groups: {groups_str}")
 
     print("\n" + "=" * 50)
