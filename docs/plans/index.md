@@ -4,3 +4,4 @@
 |---|---|---|---|
 | [ADR-0001](adr-0001-dotfiles-staging-and-linking-strategy-2026-06-23.md) | Dotfiles staging-and-linking strategy | accepted | 2026-06-23 |
 | [ADR-0002](adr-0002-optional-node-toolchain-2026-06-23.md) | Optional Node toolchain (nvm + Node LTS + pnpm) | accepted | 2026-06-23 |
+| [ADR-0003](adr-0003-package-manager-install-abstraction-2026-06-25.md) | PackageManager install abstraction for optional components | accepted | 2026-06-25 |
