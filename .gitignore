@@ -14,3 +14,7 @@ venv/
 
 # uv
 uv.lock
+
+# SSH private keys must never be committed (ADR-0006); public keys are fine.
+sources/root/.ssh/id_*
+!sources/root/.ssh/id_*.pub

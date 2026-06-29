@@ -2,9 +2,9 @@
 
 ## Project
 
-Cross-platform **dotfiles installer** written in **Python ≥ 3.9** (`pyproject.toml:6`). A thin POSIX shell entrypoint (`bootstrap.sh`) installs [`uv`](https://docs.astral.sh/uv/) if missing, then hands off to `main.py` (`bootstrap.sh:23`). `main.py` runs four ordered phases: OS bootstrap (core packages), necessary shell tooling (Oh My Zsh → fzf → Starship), dotfiles migration (rsync to a staging dir, then symlink into `$HOME`), and user-selected optional components. The actual shell config files being deployed live under `sources/root/`. Targets macOS and Debian/Ubuntu; several downloads default to Chinese mirrors (BFSU/Gitee) for CN-network speed.
+Cross-platform **dotfiles installer** written in **Python ≥ 3.9** (`pyproject.toml:6`). A thin POSIX shell entrypoint (`bootstrap.sh`) installs [`uv`](https://docs.astral.sh/uv/) if missing, then hands off to `main.py` (`bootstrap.sh:23`). `main.py` runs four ordered phases: OS bootstrap (core packages), necessary shell tooling (Oh My Zsh → fzf → Starship → Node), dotfiles migration (rsync to a staging dir, then symlink into `$HOME`), and user-selected optional components. The actual shell config files being deployed live under `sources/root/`. Targets macOS and Debian/Ubuntu; several downloads default to Chinese mirrors (BFSU/Gitee) for CN-network speed.
 
-The installer architecture is recorded in ADRs under `docs/plans/`: staging/linking (ADR-0001), the `PackageManager` install abstraction (ADR-0003), and necessary-components + phase separation (ADR-0004). Read those before reshaping the installer model.
+The installer architecture is recorded in ADRs under `docs/plans/`: staging/linking (ADR-0001), the `PackageManager` install abstraction (ADR-0003), necessary-components + phase separation (ADR-0004), the install-driven Claude post-setup that rebuilds `~/.claude` (ADR-0005), and SSH keys deployed by copy (ADR-0006). Read those before reshaping the installer model.
 
 ## Layout
 
@@ -62,14 +62,14 @@ Lint: no project-level lint config exists. `sources/root/ruff.toml` is a _deploy
 
 Both subclass a shared `Component` base (`components.py:34`) that carries the install machinery; they differ only in lifecycle:
 
-- **`NecessaryComponent` (`components.py:92`)** — always-run shell tooling. **Not** self-registering: install order is correctness-critical, so the catalog is the explicit ordered tuple `NECESSARY = (OhMyZsh, Fzf, Starship)` (`components.py:665`), iterated by `run_necessary_components` (`main.py:298`). Per ADR-0004, these install binaries/frameworks only — shell rc files belong to the migration phase, so the repo's `.zshrc` stays canonical. `OhMyZsh` installs with `KEEP_ZSHRC=yes` (`components.py:542`); `Fzf` uses `--no-update-rc` (`components.py:626`).
+- **`NecessaryComponent` (`components.py:92`)** — always-run shell tooling. **Not** self-registering: install order is correctness-critical, so the catalog is the explicit ordered tuple `NECESSARY = (OhMyZsh, Fzf, Starship, Node)`, iterated by `run_necessary_components` (`main.py:298`). Per ADR-0004, these install binaries/frameworks only — shell rc files belong to the migration phase, so the repo's `.zshrc` stays canonical. `OhMyZsh` installs with `KEEP_ZSHRC=yes`; `Fzf` uses `--no-update-rc`; `Node` (nvm) runs with `PROFILE=/dev/null` so nvm never edits rc files (the repo `.zshrc` already wires `NVM_DIR`). `Node` is necessary because the Claude post-setup and several optional components assume it.
 - **`OptionalComponent` (`components.py:108`)** — user-selected via `--optional-components` / `DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS`. Self-registers by `name` through `__init_subclass__` (`components.py:120`) into `_registry` (`components.py:116`); `resolve()` (`components.py:142`) maps a comma list (names + alias groups like `all`) to an ordered name list.
 
 ### The four phases (`main.py:315` `run()`)
 
 1. `bootstrap_macos()` / `bootstrap_debian()` — OS prerequisites.
 2. `run_necessary_components()` (`main.py:298`) — the `NECESSARY` tuple, in order.
-3. `migrate_dotfiles()` (`main.py:303`) — `stage_dotfiles` then `link_dotfiles` (ADR-0001). Runs **after** the tools so the repo's rc files win.
+3. `migrate_dotfiles()` (`main.py:303`) — `stage_dotfiles` then `link_dotfiles` (ADR-0001). Runs **after** the tools so the repo's rc files win. Both calls exclude `CLAUDE_MANAGED_PATHS` (`.claude`, `.claude.json`) — not deployed from staging; the `claude` component rebuilds `~/.claude` fresh via an install-driven post-setup (ADR-0005) — and `.ssh`, whose keys are *copied* (not symlinked) by `deploy_ssh_keys` (ADR-0006).
 4. `run_optional_installers()` (`main.py:294`) — user-selected components.
 
 `run()` ends with an advisory notice to open a new shell — purely informational; no later phase depends on an activated shell.

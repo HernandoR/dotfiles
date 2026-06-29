@@ -10,7 +10,7 @@ from pathlib import Path
 # Importing components registers every OptionalComponent subclass at
 # class-definition time, populating the registry used below. NECESSARY is the
 # ordered tuple of always-run shell tooling (ADR-0004).
-from installers.components import NECESSARY, OptionalComponent
+from installers.components import CLAUDE_MANAGED_PATHS, NECESSARY, OptionalComponent
 from installers.managers import PackageManager
 
 logging.basicConfig(
@@ -24,6 +24,19 @@ logger = logging.getLogger("dotfiles")
 def _dotfiles_staging_dir() -> Path:
     target = os.environ.get("DOTFILE_EDIT_HOME_TARGET")
     return Path(target) / "dotfiles" if target else Path.home() / "dotfiles"
+
+
+SSH_DIR = ".ssh"
+
+
+def _unique_backup(path: Path) -> Path:
+    """A non-clobbering ``<name>.pre-dotfiles.bak`` sibling for ``path``."""
+    backup = path.with_name(path.name + ".pre-dotfiles.bak")
+    i = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.pre-dotfiles.bak.{i}")
+        i += 1
+    return backup
 
 
 class DotfilesManager:
@@ -190,23 +203,37 @@ class DotfilesManager:
         self.run_command(cmd, check=True)
         logger.info("Dotfiles staged successfully!")
 
-    def _staging_has_unlinked_items(self, staging: Path, home: Path) -> bool:
-        """Return True if any direct child of staging is not correctly symlinked in home."""
+    def _staging_has_unlinked_items(self, staging: Path, home: Path, exclude=()) -> bool:
+        """Return True if any direct child of staging is not correctly symlinked in home.
+
+        ``exclude`` names are skipped: they are owned by a post-setup step
+        (e.g. the Claude component links ``.claude`` itself) and are
+        intentionally not symlinked by ``link_dotfiles``, so they must not
+        count as "missing symlinks" here.
+        """
         for item in staging.iterdir():
+            if item.name in exclude:
+                continue
             dest = home / item.name
             if not (dest.is_symlink() and dest.resolve() == item.resolve()):
                 return True
         return False
 
-    def link_dotfiles(self, source_dir, dest_dir):
+    def link_dotfiles(self, source_dir, dest_dir, exclude=()):
         logger.info(f"Linking dotfiles from {source_dir} to {dest_dir}...")
         if self.dry_run:
             return
 
+        source_dir = Path(source_dir)
         if not dest_dir.exists():
             dest_dir.mkdir(parents=True, exist_ok=True)
 
         for dir_path, dir_name, file_name in os.walk(source_dir, topdown=True):
+            # Top-level only: drop entries a post-setup step owns (e.g. the
+            # Claude component links ``.claude``/``.claude.json`` itself).
+            if exclude and Path(dir_path) == source_dir:
+                dir_name[:] = [d for d in dir_name if d not in exclude]
+                file_name = [f for f in file_name if f not in exclude]
             for file in file_name:
                 src = Path(dir_path) / file
                 dest = Path(dest_dir) / src.relative_to(source_dir)
@@ -301,16 +328,65 @@ class DotfilesManager:
             component().run(self)
 
     def migrate_dotfiles(self):
-        """Stage then link the repo's dotfiles into $HOME (ADR-0001)."""
+        """Stage then link the repo's dotfiles into $HOME (ADR-0001).
+
+        Some paths are excluded from the generic symlink walk:
+        ``CLAUDE_MANAGED_PATHS`` are wired by the Claude post-setup (ADR-0005);
+        ``.ssh`` keys are *copied* (not symlinked) by ``deploy_ssh_keys`` so
+        SSH gets real files with strict perms (ADR-0006).
+        """
+        link_exclude = (*CLAUDE_MANAGED_PATHS, SSH_DIR)
         staging = _dotfiles_staging_dir()
-        if staging.exists() and self._staging_has_unlinked_items(staging, Path.home()):
+        if staging.exists() and self._staging_has_unlinked_items(
+            staging, Path.home(), exclude=link_exclude
+        ):
             logger.warning(
                 f"Staging dir {staging} already exists but home is missing symlinks — "
                 "skipping rsync to preserve staging customisations; running link step only."
             )
         else:
             self.stage_dotfiles(Path("./sources/root"), staging)
-        self.link_dotfiles(staging, Path.home())
+        self.link_dotfiles(staging, Path.home(), exclude=link_exclude)
+        self.deploy_ssh_keys()
+
+    def deploy_ssh_keys(self):
+        """Copy SSH keys from staging into ``~/.ssh`` (ADR-0006).
+
+        Keys are *copied*, not symlinked — SSH wants real files it owns, with
+        strict perms — and are git-ignored in staging so the private material
+        is never committed. Staging is authoritative; a differing pre-existing
+        home key is backed up (never silently overwritten). Only ``id_*`` key
+        pairs are touched: ``authorized_keys`` is owned by ``edit_home.sh`` and
+        ``known_hosts`` is machine-local.
+        """
+        staging_ssh = _dotfiles_staging_dir() / SSH_DIR
+        home_ssh = Path.home() / SSH_DIR
+        if not staging_ssh.is_dir():
+            return
+        if self.dry_run:
+            logger.info(f"[DRY-RUN] Would copy ssh keys from {staging_ssh} to {home_ssh}")
+            return
+
+        home_ssh.mkdir(parents=True, exist_ok=True)
+        home_ssh.chmod(0o700)
+        for src in sorted(staging_ssh.iterdir()):
+            is_pub = src.name.endswith(".pub")
+            is_priv = src.name.startswith("id_") and not is_pub
+            if not (is_priv or is_pub):
+                continue  # not a managed key (authorized_keys, known_hosts, ...)
+            dest = home_ssh / src.name
+            if dest.is_symlink():
+                dest.unlink()  # a prior link run may have symlinked it; we want a copy
+            elif dest.exists():
+                if dest.read_bytes() == src.read_bytes():
+                    dest.chmod(0o600 if is_priv else 0o644)
+                    continue
+                backup = _unique_backup(dest)
+                shutil.move(str(dest), str(backup))
+                logger.info(f"Backed up existing {dest} to {backup}")
+            shutil.copy2(str(src), str(dest))
+            dest.chmod(0o600 if is_priv else 0o644)
+            logger.info(f"Deployed ssh {'key' if is_priv else 'pubkey'}: {dest}")
 
     def run(self):
         logger.info("Initializing python-based dotfiles bootstrap...")

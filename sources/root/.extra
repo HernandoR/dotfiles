@@ -30,3 +30,11 @@ ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS=(
     vi-find-next-char
     vi-find-next-char-skip
 )
+
+# Machine-injected environment, sourced last so it overrides.
+# Cluster/cloud nodes (e.g. AWS HyperPod) write ~/.jc_env.sh with per-node
+# CUDA/NVIDIA/AWS vars and secrets. That file is machine-specific and holds
+# credentials, so it stays OUT of the dotfiles repo — only this hook is tracked.
+if [ -r "$HOME/.jc_env.sh" ] && [ -f "$HOME/.jc_env.sh" ]; then
+	. "$HOME/.jc_env.sh"
+fi

@@ -28,10 +28,13 @@ class Script:
     codegraph needs ``sh``, claude/nvm need ``bash``.
     """
 
-    def __init__(self, url, interpreter="bash", args=()):
+    def __init__(self, url, interpreter="bash", args=(), env=None):
         self.url = url
         self.interpreter = interpreter
         self.args = list(args)
+        # Optional env overlay for the run step (e.g. nvm honors PROFILE to skip
+        # editing shell rc files). Applied only to running the script, not curl.
+        self.env = env
 
 
 class Deb:
@@ -124,6 +127,8 @@ class ScriptsManager(PackageManager):
             tmp_path = pathlib.Path(tmp.name)
         try:
             ctx.run_command(["curl", "-fsSL", spec.url, "-o", str(tmp_path)])
-            ctx.run_command([spec.interpreter, str(tmp_path), *spec.args])
+            ctx.run_command(
+                [spec.interpreter, str(tmp_path), *spec.args], env=spec.env
+            )
         finally:
             tmp_path.unlink(missing_ok=True)

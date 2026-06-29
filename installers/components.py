@@ -392,13 +392,85 @@ class MacBrew(OptionalComponent):
         ctx.run_command(["brew", "cleanup"])
 
 
+# Home paths NOT deployed from staging by the generic symlink walk (ADR-0005).
+# Under the install-driven model the Claude post-setup rebuilds ~/.claude fresh
+# on each machine (plugins, MCP servers, agent tooling), so the migration phase
+# (see main.migrate_dotfiles) must NOT symlink staging's stale .claude state in.
+CLAUDE_MANAGED_PATHS = (".claude", ".claude.json")
+
+# agent-skillset marketplace + the plugins to install from it (no bulk-install
+# command exists yet, so they are enumerated).
+AGENT_SKILLSET_REPO = "hernandor/agent-skillset"
+AGENT_SKILLSET_MARKET = "agent-skillset"
+AGENT_SKILLSET_PLUGINS = ("discuss", "implement", "dev_loop", "fetch_external_knowledge")
+
+# MCP servers managed via Smithery (slug -> smithery package). Smithery wires
+# them into Claude's MCP config; needs Node (a necessary component) for npx.
+SMITHERY_MCP_SERVERS = (
+    "@upstash/context7-mcp",            # context7: up-to-date library docs
+    "@modelcontextprotocol/server-memory",  # persistent knowledge-graph memory
+)
+
+
 class ClaudeCode(OptionalComponent):
     name = "claude"
-    description = "Claude Code CLI"
+    description = "Claude Code CLI + plugins, MCP servers, and agent tooling"
     groups = frozenset({"all"})
     # Official native installer; auto-updates in the background.
     # npm fallback: npm install -g @anthropic-ai/claude-code
     installs = {"scripts": Script("https://claude.ai/install.sh", interpreter="bash")}
+
+    def install(self, ctx):
+        # Install-driven post-setup (ADR-0005): rebuild the Claude config on each
+        # machine rather than carrying an opaque ~/.claude across machines. Runs
+        # in the optional phase, after migration linked the other dotfiles and
+        # the necessary Node component made npx available.
+        super().install(ctx)            # 1. CLI
+        self._install_plugins(ctx)      # 2. agent-skillset marketplace + plugins
+        self._install_mcp_servers(ctx)  # 3. Smithery: context7 + memory
+        self._install_lark(ctx)         # 4. lark-cli agent skills
+        self._install_codegraph(ctx)    # 5. codegraph + Claude agent wiring
+
+    def _shell(self, ctx, cmd, check=False):
+        """Run ``cmd`` in a shell that has nvm loaded and ~/.local/bin on PATH.
+
+        npx (nvm), `claude`, and `codegraph` are all freshly installed this run
+        and are not on the inherited PATH; a plain subprocess wouldn't find them.
+        """
+        nvm_dir = os.environ.get("NVM_DIR") or str(pathlib.Path.home() / ".nvm")
+        prelude = (
+            f'export NVM_DIR="{nvm_dir}"; '
+            '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; '
+            'export PATH="$HOME/.local/bin:$PATH"; '
+        )
+        ctx.run_command(["bash", "-c", prelude + cmd], check=check)
+
+    def _install_plugins(self, ctx):
+        # Idempotent: re-adding a marketplace / re-installing a plugin is a no-op.
+        self._shell(ctx, f"claude plugin marketplace add {AGENT_SKILLSET_REPO}")
+        for plugin in AGENT_SKILLSET_PLUGINS:
+            self._shell(
+                ctx, f"claude plugin install {plugin}@{AGENT_SKILLSET_MARKET} --scope user"
+            )
+
+    def _install_mcp_servers(self, ctx):
+        # check=False: a hosted server may need a Smithery key / interactive auth;
+        # a failure here must not abort the rest of the bootstrap.
+        for pkg in SMITHERY_MCP_SERVERS:
+            self._shell(
+                ctx, f"npx -y @smithery/cli@latest install {pkg} --client claude"
+            )
+
+    def _install_lark(self, ctx):
+        # @larksuite/cli's `install` wires its AI agent skills into Claude Code.
+        self._shell(ctx, "npx -y @larksuite/cli@latest install")
+
+    def _install_codegraph(self, ctx):
+        # Reuse the standalone installer, then wire CodeGraph's MCP into Claude
+        # non-interactively (--yes). `codegraph init` is per-project and is
+        # intentionally not run here (a bootstrap has no project context).
+        Codegraph().install(ctx)
+        self._shell(ctx, "codegraph install --target=claude --yes")
 
 
 class Bottom(OptionalComponent):
@@ -423,11 +495,14 @@ class FdFind(OptionalComponent):
     installs = {"brew": "fd", "apt": "fd-find"}
 
 
-class Node(OptionalComponent):
-    name = "node"
+class Node(NecessaryComponent):
+    # Necessary (always-run): the Claude post-setup uses npx for Smithery, and
+    # several optional components assume Node, so it must exist before phase 4.
+    # Necessary components leave ``name`` empty and rely on ``description``
+    # (ADR-0004); they also must not write shell rc files -- the repo's .zshrc
+    # already sources NVM_DIR, so the nvm installer runs with PROFILE=/dev/null.
     description = "Node.js (nvm + LTS) and pnpm"
     supported_os = None  # nvm's install script covers macOS, Linux, and WSL
-    groups = frozenset({"all"})
 
     # Pinned tag — v0.40.5 carries the CVE-2026-10796 fix. Bump deliberately.
     NVM_VERSION = "v0.40.5"
@@ -442,8 +517,10 @@ class Node(OptionalComponent):
             "https://raw.githubusercontent.com/nvm-sh/nvm/"
             f"{self.NVM_VERSION}/install.sh"
         )
+        # PROFILE=/dev/null: nvm must not append its source block to shell rc
+        # files (ADR-0004) -- the repo's linked .zshrc already wires NVM_DIR.
         ctx.package_manager("scripts").install(
-            ctx, Script(install_url, interpreter="bash")
+            ctx, Script(install_url, interpreter="bash", env={"PROFILE": "/dev/null"})
         )
         # nvm installs into $NVM_DIR (default ~/.nvm). Source it, install the
         # LTS Node (which provides node/npm/npx), then enable pnpm via the
@@ -662,7 +739,7 @@ class Starship(NecessaryComponent):
 
 # Ordered catalog of always-run shell tooling. The order is correctness-critical
 # and lives here as an explicit, reviewable tuple (ADR-0004 §3).
-NECESSARY = (OhMyZsh, Fzf, Starship)
+NECESSARY = (OhMyZsh, Fzf, Starship, Node)
 
 
 def main():
