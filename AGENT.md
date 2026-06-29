@@ -70,7 +70,8 @@ Both subclass a shared `Component` base (`components.py:34`) that carries the in
 1. `bootstrap_macos()` / `bootstrap_debian()` — OS prerequisites.
 2. `run_necessary_components()` (`main.py:298`) — the `NECESSARY` tuple, in order.
 3. `migrate_dotfiles()` (`main.py:303`) — `stage_dotfiles` then `link_dotfiles` (ADR-0001). Runs **after** the tools so the repo's rc files win. Both calls exclude `CLAUDE_MANAGED_PATHS` (`.claude`, `.claude.json`) — not deployed from staging; the `claude` component rebuilds `~/.claude` fresh via an install-driven post-setup (ADR-0005) — and `.ssh`, whose keys are *copied* (not symlinked) by `deploy_ssh_keys` (ADR-0006).
-4. `run_optional_installers()` (`main.py:294`) — user-selected components.
+4. `set_default_shell()` — make zsh the login shell (idempotent, non-fatal: `chsh` → `usermod` fallback, warns on failure).
+5. `run_optional_installers()` (`main.py:294`) — user-selected components.
 
 `run()` ends with an advisory notice to open a new shell — purely informational; no later phase depends on an activated shell.
 

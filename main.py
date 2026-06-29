@@ -388,6 +388,61 @@ class DotfilesManager:
             dest.chmod(0o600 if is_priv else 0o644)
             logger.info(f"Deployed ssh {'key' if is_priv else 'pubkey'}: {dest}")
 
+    def set_default_shell(self, shell_name="zsh"):
+        """Make zsh the user's login shell (idempotent, non-fatal).
+
+        zsh is installed in the OS-bootstrap phase. Tries ``chsh`` first, then
+        ``usermod`` (chsh can be blocked in containers); a failure only warns so
+        it never aborts the bootstrap. No-op if zsh is already the login shell.
+        """
+        import pwd
+
+        shell_path = shutil.which(shell_name)
+        if not shell_path:
+            for cand in ("/usr/bin/zsh", "/bin/zsh"):
+                if Path(cand).exists():
+                    shell_path = cand
+                    break
+        if not shell_path:
+            logger.warning(f"{shell_name} not found; leaving the login shell unchanged.")
+            return
+
+        user = os.environ.get("USER") or os.environ.get("LOGNAME")
+        try:
+            entry = pwd.getpwnam(user) if user else pwd.getpwuid(os.geteuid())
+        except KeyError:
+            entry = pwd.getpwuid(os.geteuid())
+        user, current = entry.pw_name, entry.pw_shell
+
+        if current == shell_path:
+            logger.info(f"Login shell already {shell_path}; skipping.")
+            return
+
+        logger.info(f"Setting login shell for {user} to {shell_path}...")
+        if self.dry_run:
+            logger.info(f"[DRY-RUN] Would set login shell to {shell_path}")
+            return
+
+        # chsh validates against /etc/shells; make sure zsh is listed.
+        shells = Path("/etc/shells")
+        try:
+            if shells.exists() and shell_path not in shells.read_text().split():
+                with shells.open("a") as fh:
+                    fh.write(shell_path + "\n")
+        except OSError:
+            logger.debug("Could not update /etc/shells; continuing.")
+
+        if self.run_command(
+            ["sudo", "chsh", "-s", shell_path, user], check=False
+        ).returncode != 0:
+            if self.run_command(
+                ["sudo", "usermod", "-s", shell_path, user], check=False
+            ).returncode != 0:
+                logger.warning(
+                    f"Could not change login shell automatically; run "
+                    f"`chsh -s {shell_path}` manually."
+                )
+
     def run(self):
         logger.info("Initializing python-based dotfiles bootstrap...")
         logger.info(f"Detected OS Type: {self.os_type}")
@@ -407,11 +462,12 @@ class DotfilesManager:
         # (linked in phase 3) stay canonical (ADR-0004 §4).
         self.run_necessary_components()
         self.migrate_dotfiles()
+        self.set_default_shell()
         self.run_optional_installers()
 
         logger.info("Bootstrap completed successfully!")
         logger.info(
-            "Shell tooling installed — open a new shell or run `exec zsh` to "
+            "zsh is now the login shell — open a new shell or run `exec zsh` to "
             "activate oh-my-zsh, starship, and fzf."
         )
 
