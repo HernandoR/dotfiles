@@ -38,3 +38,12 @@ ZSH_AUTOSUGGEST_PARTIAL_ACCEPT_WIDGETS=(
 if [ -r "$HOME/.jc_env.sh" ] && [ -f "$HOME/.jc_env.sh" ]; then
 	. "$HOME/.jc_env.sh"
 fi
+
+# One-shot post-login setup written by the dotfiles bootstrap (e.g. Claude
+# plugin / MCP / Lark auth steps that need an interactive shell). Self-removes
+# after running so subsequent logins are unaffected.
+_dotfiles_post_login="$HOME/.local/share/dotfiles/post-login-setup.sh"
+if [ -f "$_dotfiles_post_login" ]; then
+	bash "$_dotfiles_post_login"
+fi
+unset _dotfiles_post_login

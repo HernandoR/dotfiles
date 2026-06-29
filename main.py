@@ -244,8 +244,9 @@ class DotfilesManager:
                     dest.unlink()
                     logger.debug(f"Replaced wrong symlink {dest}")
                 elif dest.exists():
-                    logger.debug(f"Skipping real file {dest}")
-                    continue
+                    backup = _unique_backup(dest)
+                    shutil.move(str(dest), str(backup))
+                    logger.info(f"Backed up {dest} → {backup}")
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.symlink_to(src)
                 logger.debug(f"Linked {src} to {dest}")
