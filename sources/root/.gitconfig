@@ -1,7 +1,8 @@
 [user]
-	name = hernandor
+	name = HernandoR
 	email = lzhen.dev@outlook.com
 	signingkey = ~/.ssh/id_ed25519.pub
+
 [alias]
 	# Clone a repository including all submodules.
 	c = clone --recursive
@@ -36,10 +37,9 @@
 
 	# Remove branches that have already been merged with main.
 	# a.k.a. ‘delete merged’
-	dm = "!git fetch --prune && git branch --merged | grep -v ‘\\*’ | xargs -n 1 git branch -d"
-
+	dm = "!git fetch --prune && git branch --merged | grep -v '\\*' | xargs -n 1 git branch -d"
 	# Force-delete local branches whose remote tracking branch is gone (merged+deleted on remote).
-	Dlo = "!git fetch --prune && git branch -vv | grep ‘: gone]’ | awk ‘{print $1}’ | xargs -I{} git branch -D {}"
+	Dlo = "!git fetch --prune && git branch -vv | grep ': gone]' | awk '{print $1}' | xargs -I{} git branch -D {}"
 
 	# Find branches containing commit
 	fb = "!f() { git branch -a --contains $1; }; f"
@@ -117,7 +117,7 @@
 	defaultBranch = main
 
 [commit]
-	gpgsign = false
+	gpgsign = true
 	sshsign = true
 
 
@@ -136,7 +136,7 @@
 	# Use custom `.gitignore` and `.gitattributes`.
 	excludesfile = ~/.gitignore
 	attributesfile = ~/.gitattributes
-    	# Treat spaces before tabs and all kinds of trailing whitespace as an error.
+    # Treat spaces before tabs and all kinds of trailing whitespace as an error.
 	# [default] trailing-space: looks for spaces at the end of a line
 	# [default] space-before-tab: looks for spaces before tabs at the beginning of a line
 	whitespace = space-before-tab,-indent-with-non-tab,trailing-space
