@@ -539,6 +539,54 @@ class FdFind(OptionalComponent):
     installs = {"brew": "fd", "apt": "fd-find"}
 
 
+class GitHubCLI(OptionalComponent):
+    name = "gh"
+    description = "GitHub CLI (gh)"
+    groups = frozenset({"all"})
+    # brew formula on macOS; pinned release .deb on Debian (gh isn't reliably in
+    # the default apt repos). Bump the version in the URL deliberately.
+    installs = {
+        "brew": "gh",
+        "apt": Deb(
+            "https://github.com/cli/cli/releases/download/v2.96.0/"
+            "gh_2.96.0_linux_amd64.deb"
+        ),
+    }
+
+
+class Jujutsu(OptionalComponent):
+    name = "jj"
+    description = "Jujutsu (jj) — Git-compatible version control system"
+    supported_os = None  # brew on macOS; prebuilt musl binary on Linux
+    groups = frozenset({"all"})
+
+    # Pinned release — bump deliberately (cf. Bottom / CUDA / nvm). jj ships no
+    # apt package or official installer script, so Linux uses the statically
+    # linked musl release tarball.
+    VERSION = "v0.43.0"
+
+    def install(self, ctx):
+        # macOS: the brew formula is the upstream-recommended path.
+        if ctx.os_type == "darwin":
+            ctx.package_manager("brew").install(ctx, "jj")
+            return
+
+        # Linux: fetch the musl tarball (portable across distros) and drop its
+        # `jj` binary onto ~/.local/bin — already on PATH via sources/root/.path.
+        # The archive holds `./jj` at the top level (plus README/LICENSE); pull
+        # out only the binary.
+        tarball = f"jj-{self.VERSION}-x86_64-unknown-linux-musl.tar.gz"
+        url = f"https://github.com/jj-vcs/jj/releases/download/{self.VERSION}/{tarball}"
+        tar_path = pathlib.Path("/tmp") / tarball
+        bin_dir = pathlib.Path.home() / ".local" / "bin"
+        if not ctx.dry_run:
+            bin_dir.mkdir(parents=True, exist_ok=True)
+        ctx.run_command(["wget", url, "-O", str(tar_path)])
+        ctx.run_command(["tar", "-xzf", str(tar_path), "-C", str(bin_dir), "./jj"])
+        if not ctx.dry_run:
+            tar_path.unlink(missing_ok=True)
+
+
 class Node(NecessaryComponent):
     # Necessary (always-run): the Claude post-setup uses npx for Smithery, and
     # several optional components assume Node, so it must exist before phase 4.
