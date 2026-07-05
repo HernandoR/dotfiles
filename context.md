@@ -71,12 +71,19 @@ sources/root/              ~/dotfiles                 $HOME
 - **位置**：`NecessaryComponent`（`components.py:92`）。
 - **含义**：每次运行都装的基础 shell 工具，**不可由用户选择**。
   安装顺序对正确性至关重要，因此目录不是靠注册顺序，而是文件底部一条显式元组：
-  `NECESSARY = (OhMyZsh, Fzf, Starship, Node)`（`components.py:786`），由
+  `NECESSARY = (OhMyZsh, Fzf, Starship, Node, Mergiraf)`（见 `components.py` 底部），由
   `run_necessary_components()`（`main.py:326`）按序执行。
 - **约束（ADR-0004）**：只装二进制/框架，**绝不写 shell rc 文件**——
   仓库的 `.zshrc` 才是权威（`KEEP_ZSHRC=yes`、fzf `--no-update-rc`、
-  nvm `PROFILE=/dev/null`）。`Node` 之所以是必要组件，是因为 Claude 后置安装与
-  多个可选组件都依赖它。
+  nvm `PROFILE=/dev/null`）。同理，`Mergiraf` 只放二进制，其 merge driver 配置由仓库
+  已有的 `.gitconfig` / `.gitattributes`（迁移阶段软链接进家目录）负责。
+- **为何是必要组件**：
+  - `Node`：Claude 后置安装与多个可选组件都依赖它。
+  - `Mergiraf`：仓库的 `.gitconfig` 把 `mergiraf` 注册为 merge driver，
+    `.gitattributes` 又把 `.py`/`.rs`/`.ts` 等大量文件类型路由到它——
+    因此二进制必须在每台机器上存在，否则这些文件的合并会失败。
+    macOS 走 brew 公式；Linux 下载 musl 预编译包，把 `mergiraf` 二进制放进 `~/.local/bin`
+    （该路径已在 `sources/root/.path` 中加入 PATH）。
 
 ### 3. `optional component`（可选组件）
 

@@ -829,9 +829,54 @@ class Starship(NecessaryComponent):
         )
 
 
+class Mergiraf(NecessaryComponent):
+    # Necessary (always-run): the repo's .gitconfig registers `mergiraf` as a
+    # merge driver and .gitattributes routes many file types through it (see
+    # sources/root/.gitconfig, .gitattributes), so the binary must exist on
+    # every machine or those merges break. Necessary components leave ``name``
+    # empty and rely on ``description`` (ADR-0004); this one only drops a binary
+    # on PATH — the driver config lives in the repo's linked .gitconfig.
+    description = "Mergiraf (syntax-aware git merge driver)"
+    supported_os = None  # brew on macOS; prebuilt musl binary on Linux
+
+    # Pinned release — bump deliberately (cf. Jujutsu / Bottom / nvm). Mergiraf
+    # ships no apt package or installer script, so Linux uses the statically
+    # linked musl release tarball from Codeberg.
+    VERSION = "v0.17.0"
+
+    def install(self, ctx):
+        # Idempotent: unlike optional components this runs on every bootstrap,
+        # so skip the download/brew step when mergiraf is already on PATH.
+        if shutil.which("mergiraf"):
+            logger.info("mergiraf already installed; skipping.")
+            return
+
+        # macOS: the brew formula is the upstream-recommended path.
+        if ctx.os_type == "darwin":
+            ctx.package_manager("brew").install(ctx, "mergiraf")
+            return
+
+        # Linux: fetch the musl tarball (portable across distros) and drop its
+        # `mergiraf` binary onto ~/.local/bin — already on PATH via
+        # sources/root/.path. The archive holds `mergiraf` at the top level.
+        tarball = "mergiraf_x86_64-unknown-linux-musl.tar.gz"
+        url = (
+            "https://codeberg.org/mergiraf/mergiraf/releases/download/"
+            f"{self.VERSION}/{tarball}"
+        )
+        tar_path = pathlib.Path("/tmp") / tarball
+        bin_dir = pathlib.Path.home() / ".local" / "bin"
+        if not ctx.dry_run:
+            bin_dir.mkdir(parents=True, exist_ok=True)
+        ctx.run_command(["wget", url, "-O", str(tar_path)])
+        ctx.run_command(["tar", "-xzf", str(tar_path), "-C", str(bin_dir), "mergiraf"])
+        if not ctx.dry_run:
+            tar_path.unlink(missing_ok=True)
+
+
 # Ordered catalog of always-run shell tooling. The order is correctness-critical
 # and lives here as an explicit, reviewable tuple (ADR-0004 §3).
-NECESSARY = (OhMyZsh, Fzf, Starship, Node)
+NECESSARY = (OhMyZsh, Fzf, Starship, Node, Mergiraf)
 
 
 def main():
