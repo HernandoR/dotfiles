@@ -19,9 +19,14 @@
           system = "aarch64-darwin";
           username = "lz";
         };
-        # OrbStack Debian test host (ADR-0007 verification sandbox).
+        # Generic x86_64 Linux host (real servers / x86 boxes / amd64 containers).
         "dotfiles-debian" = {
           system = "x86_64-linux";
+          username = "lz";
+        };
+        # aarch64 Linux host — Apple-silicon OrbStack containers and ARM servers.
+        "dotfiles-linux-arm" = {
+          system = "aarch64-linux";
           username = "lz";
         };
       };
