@@ -8,3 +8,4 @@
 | [ADR-0004](adr-0004-necessary-components-and-phase-separation-2026-06-25.md) | Necessary components and main-path phase separation | accepted | 2026-06-25 |
 | [ADR-0005](adr-0005-claude-post-setup-ownership-2026-06-29.md) | Claude config owned by a post-setup, excluded from linking | accepted | 2026-06-29 |
 | [ADR-0006](adr-0006-ssh-key-deployment-2026-06-29.md) | SSH keys deployed by copy, git-ignored in staging | accepted | 2026-06-29 |
+| [ADR-0007](adr-0007-nix-home-manager-migration-2026-07-09.md) | Migrate to Nix flake + standalone Home Manager | accepted | 2026-07-09 |
