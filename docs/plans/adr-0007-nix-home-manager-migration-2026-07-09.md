@@ -146,7 +146,7 @@ GUI casks, Claude deferred OAuth (ADR-0005), SSH-key copy (ADR-0006), codegraph
 
 These opt-in system components are selected with `--system <list>` or the
 `DOTFILE_SYSTEM_COMPONENTS` env var (flag wins); the `all` keyword installs every
-component (rootful docker wins over rootless). The Claude/Lark/MCP setup is
+component (rootless docker wins over rootful). The Claude/Lark/MCP setup is
 **interactive** so it is not auto-run: `setup.py` writes
 `~/.local/share/dotfiles/post-login-setup.sh`, the HM zsh prints a reminder while
 it is pending, and the user runs it once via the `dotfiles-postsetup` function

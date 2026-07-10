@@ -131,7 +131,7 @@ plus the `installers` package only). Steps: `set_login_shell` (chsh to
   `docker`, `docker-rootless`, `cuda`, `nvidia`, `llvm`, `software-properties`.
   Selected via `--system <list>` **or** the `DOTFILE_SYSTEM_COMPONENTS` env var
   (flag wins). `OptionalComponent.resolve()` accepts names, alias groups, and
-  the `all` keyword (every component; rootful docker wins over rootless). These
+  the `all` keyword (every component; rootless docker wins over rootful). These
   are Linux-only, need privilege, and run last. The ADR-0003 install machinery
   (declarative `installs = {manager_id: spec}` resolved through a
   `PackageManager` backend, with an imperative `install(ctx)` override for

@@ -468,3 +468,7 @@ Net changes this round: `dotfiles-postsetup` + login reminder; `--system all` +
 `DOTFILE_SYSTEM_COMPONENTS`; removed `edit_home.sh`/`DOTFILE_EDIT_HOME_TARGET`;
 rewrote `AGENT.md`. The active env-var set is now `DOTFILE_NETWORK_ENV`,
 `DOTFILE_SYSTEM_COMPONENTS`, `DOTFILE_FLAKE_CACHE`, `DOTFILE_SSH_SRC`.
+
+Correction (same day): the docker/docker-rootless tie-break above was first
+implemented as "rootful wins"; the owner reversed it — **rootless docker wins
+over rootful** when both are selected (e.g. via `all`). Code + ADR-0007 updated.

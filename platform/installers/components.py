@@ -87,7 +87,7 @@ class OptionalComponent(Component):
         """Resolve a comma-separated spec to a de-duplicated, ordered component
         list. Accepts individual names, alias groups, and the special ``all``
         keyword (every registered component). Mutually exclusive components are
-        reconciled (rootful Docker wins over rootless)."""
+        reconciled (rootless Docker wins over rootful)."""
         groups = cls.alias_groups()
         requested = set()
         for part in raw.split(","):
@@ -103,8 +103,8 @@ class OptionalComponent(Component):
             else:
                 logger.warning("Unknown component: %s", part)
         if "docker" in requested and "docker-rootless" in requested:
-            requested.discard("docker-rootless")
-            logger.info("docker + docker-rootless both selected; keeping rootful docker")
+            requested.discard("docker")
+            logger.info("docker + docker-rootless both selected; keeping rootless docker")
         return [name for name in cls._registry if name in requested]
 
     @classmethod
