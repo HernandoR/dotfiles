@@ -23,20 +23,21 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLATFORM_DIR="$REPO_DIR/platform"
 export REPO_DIR
 
-DRY_RUN=0 VERBOSE=0 HOST="" SYSTEM_COMPONENTS=""
+DF_DRY_RUN=0 DF_VERBOSE=0 HOST="" SYSTEM_COMPONENTS="" NO_CLAUDE=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dry-run) DRY_RUN=1 ;;
-    --verbose) VERBOSE=1 ;;
+    --dry-run) DF_DRY_RUN=1 ;;
+    --verbose) DF_VERBOSE=1 ;;
     --host) HOST="$2"; shift ;;
     --system) SYSTEM_COMPONENTS="$2"; shift ;;
+    --no-claude) NO_CLAUDE=1 ;;
     --network) export DOTFILE_NETWORK_ENV="$2"; shift ;;
     -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
   shift
 done
-export DRY_RUN VERBOSE
+export DF_DRY_RUN DF_VERBOSE
 # shellcheck source=platform/lib.sh
 . "$PLATFORM_DIR/lib.sh"
 
@@ -82,19 +83,42 @@ load_nix_path
 # when PRIV=none, but still persists the network-env marker for the HM shell)
 "$PLATFORM_DIR/nix-cn.sh"
 
-log "home-manager switch --flake .#$HOST -b backup"
-run "nix run home-manager/master -- switch -b backup $IMPURE --flake \"$REPO_DIR#$HOST\""
+# Optional: seed flake input sources from a local cache (CN / offline / CI) so
+# nixpkgs + home-manager are not fetched from github. Point DOTFILE_FLAKE_CACHE
+# at a `nix copy --to file://…` cache dir that contains a seed-paths.txt.
+if [ -n "${DOTFILE_FLAKE_CACHE:-}" ] && [ -f "$DOTFILE_FLAKE_CACHE/seed-paths.txt" ]; then
+  log "seeding flake inputs from $DOTFILE_FLAKE_CACHE (bypass github)"
+  run "nix copy --no-check-sigs --from \"file://$DOTFILE_FLAKE_CACHE\" \$(cat \"$DOTFILE_FLAKE_CACHE/seed-paths.txt\") || true"
+fi
+
+# Build the activation package from the flake's LOCKED home-manager (avoids a
+# separate `home-manager/master` fetch — more reproducible and one less CN
+# github round-trip) and activate it. HOME_MANAGER_BACKUP_EXT=backup is the
+# raw-activate equivalent of `switch -b backup`.
+if [ "$DF_DRY_RUN" = 1 ]; then
+  log "[dry-run] nix build .#homeConfigurations.$HOST.activationPackage $IMPURE ; <out>/activate (HOME_MANAGER_BACKUP_EXT=backup)"
+else
+  log "home-manager: build activationPackage + activate ($HOST)"
+  hm_out="$(nix build --no-link --print-out-paths $IMPURE "$REPO_DIR#homeConfigurations.\"$HOST\".activationPackage")"
+  HOME_MANAGER_BACKUP_EXT=backup "$hm_out/activate"
+  # HM packages (uv, zsh, …) live in the generation's home-path, not
+  # ~/.nix-profile. Put them on PATH so the post-HM Python steps can find uv.
+  export PATH="$hm_out/home-path/bin:$PATH"
+fi
 
 # ---- post-HM (python via uv; uv now exists on the HM profile) ---------------
 load_nix_path
-if ! command -v uv >/dev/null 2>&1 && [ "$DRY_RUN" != 1 ]; then
+if ! command -v uv >/dev/null 2>&1 && [ "$DF_DRY_RUN" != 1 ]; then
   warn "uv not found after switch; skipping the Python post-setup"
 else
   log "post-setup (uv run platform/setup.py): login shell, SSH keys, Claude, system SW"
   post_args="--priv $PRIV"
-  [ "$DRY_RUN" = 1 ] && post_args="$post_args --dry-run"
+  [ "$DF_DRY_RUN" = 1 ] && post_args="$post_args --dry-run"
   [ -n "$SYSTEM_COMPONENTS" ] && post_args="$post_args --system $SYSTEM_COMPONENTS"
-  run "uv run \"$PLATFORM_DIR/setup.py\" $post_args"
+  [ "$NO_CLAUDE" = 1 ] && post_args="$post_args --no-claude"
+  # Prefer a system Python for the stdlib-only platform scripts so uv does not
+  # download an interpreter from astral (slow/unreliable on CN networks).
+  run "UV_PYTHON_PREFERENCE=system uv run \"$PLATFORM_DIR/setup.py\" $post_args"
 fi
 
 log "Bootstrap complete. Open a new shell (or 'exec zsh') to activate the Nix env."
