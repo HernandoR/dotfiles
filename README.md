@@ -1,136 +1,185 @@
-# lzhen's dotfiles
+# lz's dotfiles
 
-Cross-platform dotfiles with a Python-based bootstrap. A thin POSIX shell
-entrypoint hands off to [`uv`](https://docs.astral.sh/uv/), which runs the
-real installer (`main.py`). The installer detects your OS, installs core
-packages, sets up Oh My Zsh + Starship, links the dotfiles into `$HOME`, and
-optionally installs extra components from a registry.
+Cross-platform dotfiles built on a **Nix flake + standalone
+[Home Manager](https://nix-community.github.io/home-manager/)** running on
+[**Lix**](https://lix.systems/), with a thin **imperative layer**
+([`platform/`](platform/)) for the few things Home Manager can't do on a
+non-NixOS host. Targets macOS (aarch64) and Debian/Ubuntu (x86_64 + aarch64).
+The zsh + Starship (catppuccin_mocha) + fzf-tab experience is preserved.
 
-> **Warning:** These are my personal settings. Fork the repo and review the
-> code before running it — don't blindly apply someone else's configuration.
+Design is recorded in [ADR-0007](docs/plans/adr-0007-nix-home-manager-migration-2026-07-09.md)
+(intent) and [RFC-0001](docs/rfc/rfc-0001-nix-home-manager-migration-2026-07-09.md)
+(discussion trail); [AGENT.md](AGENT.md) is the contributor/agent guide.
+
+> **Warning:** These are my personal settings. Fork the repo and review the code
+> before running it — don't blindly apply someone else's configuration. The
+> bootstrap can install Nix, change your login shell, and install system
+> software. See **[Trying it on a new machine](#trying-it-on-a-new-machine-and-how-to-recover)**
+> for the (fully recoverable) safety model first.
 
 ## Quick start
 
 ```bash
 git clone git@github.com:HernandoR/dotfiles.git
 cd dotfiles
-./bootstrap.sh
+./bootstrap.sh --dry-run --verbose   # preview every step, run nothing (recommended first)
+./bootstrap.sh                       # then run for real
 ```
 
-`bootstrap.sh` requires `curl`. It installs `uv` if it isn't already present,
-then runs `uv run main.py` and forwards any extra arguments to it. So anything
-documented below for `main.py` can be passed straight through:
-
-```bash
-./bootstrap.sh --dry-run --verbose
-```
+`bootstrap.sh` needs `curl` and `git`. No privilege is required if Nix is
+already installed; otherwise it needs root/sudo to install Lix (with no
+init system — bare container/CI — it falls back to a single-user install).
 
 ## What the bootstrap does
 
-Running with no sub-command (`./bootstrap.sh` or `uv run main.py`) performs a
-full bootstrap:
+Split around the Home Manager switch:
 
-1. **Detect OS** — `darwin`, `debian`/`ubuntu`, or `unknown` (read from
-   `platform.system()` and `/etc/os-release`).
-2. **Install core packages**
-   - **macOS:** installs Homebrew (from the BFSU mirror) and `git`, `zsh`,
-     `rsync`, `rclone`.
-   - **Debian/Ubuntu:** `apt update`, ensures `curl` is present, then installs
-     `git`, `zsh`, `rsync`, `aptitude`, `wget`.
-3. **Configure the shell** — installs Oh My Zsh (falling back to a Gitee
-   mirror when GitHub is unreachable), Antigen, the `zsh-autosuggestions` and
-   `zsh-syntax-highlighting` plugins, and the Starship prompt.
-4. **Restore + link dotfiles** — rsyncs the tracked files from `sources/root`
-   into `~/dotfiles`, then symlinks them into `$HOME`.
-5. **Run optional components** — anything you requested via
-   `--optional-components` (see below).
+1. **Pre-HM (shell):** detect privilege (root / sudo / none) → install
+   prerequisites → **install Lix** → configure Nix (+ optional CERNET mirror) →
+   **build & activate Home Manager** with `-b backup`.
+2. **Post-HM (Python via `uv`):** set the login shell to the Nix zsh (`chsh`) →
+   deploy SSH keys → write the deferred Claude setup → install any opt-in Linux
+   system components.
 
-### Flags
-
-| Flag                           | Effect                                                          |
-| ------------------------------ | --------------------------------------------------------------- |
-| `--dry-run`                    | Print every command without executing it.                       |
-| `--verbose`                    | Enable debug logging (and `rsync -P` progress).                 |
-| `--interactive`                | Allow interactive prompts during install (Oh My Zsh, Starship). |
-| `--optional-components <list>` | Comma-separated optional components / alias groups.             |
-
-## Sub-commands
-
-`main.py` also exposes targeted commands for managing dotfiles without a full
-bootstrap:
+When it finishes, the shell that launched it keeps its **old** PATH, so a bare
+`zsh` won't be found yet. Start the new environment with the absolute path it
+prints, or just re-login (your login shell is already zsh):
 
 ```bash
-./bootstrap.sh backup        # rsync $HOME/dotfiles back into sources/root
-./bootstrap.sh restore       # restore sources/root into $HOME/dotfiles and re-link
-./bootstrap.sh set-proxy     # set git http/https proxy from $http_proxy / $https_proxy
-./bootstrap.sh unset-proxy   # clear the git proxy config
+exec ~/.nix-profile/bin/zsh -l
 ```
 
-If you want to repoint the current user's home directory on Linux, use `edit_home.sh`:
+## Flags & environment variables
+
+| Flag | Effect |
+| --- | --- |
+| `--dry-run` | Print every command without executing it. |
+| `--verbose` | Echo each command as it runs. |
+| `--network CN` | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
+| `--system <list>` | Install opt-in Linux system components (`all` = every one). |
+| `--host NAME` | Force a named flake host instead of auto-detecting. |
+| `--no-claude` | Skip writing the Claude/Lark/MCP post-setup. |
+
+| Env var | Effect |
+| --- | --- |
+| `DOTFILE_NETWORK_ENV=CN` | Same as `--network CN` (also read by the zsh env for pypi/rustup). |
+| `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins. |
+| `DOTFILE_FLAKE_CACHE` | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI). |
+| `DOTFILE_SSH_SRC` | Override the SSH key source dir (default `sources/root/.ssh`). |
+
+## Trying it on a new machine (and how to recover)
+
+**Safety model — nothing is destroyed:**
+
+- **Preview first:** `./bootstrap.sh --dry-run --verbose` runs nothing.
+- **Existing dotfiles are backed up, not deleted.** Activation uses `-b backup`
+  (`HOME_MANAGER_BACKUP_EXT=backup`), so a pre-existing `~/.zshrc` /
+  `~/.gitconfig` / etc. is renamed to `~/.zshrc.backup` before the Home Manager
+  symlink is placed.
+- **The old setup stays intact.** This lives on the `feat/lix-based` branch; the
+  previous config remains on `main`, and previous Home Manager generations are
+  kept until you expire them.
+
+**Roll back (after the `home-manager` CLI is on PATH):**
 
 ```bash
-sudo ./edit_home.sh /path/to/new/home
-sudo DOTFILE_EDIT_HOME_TARGET=/path/to/new/home ./edit_home.sh
+# 1) step back exactly one generation (no rebuild, no flake needed)
+home-manager switch --rollback
+
+# 2) or activate a specific earlier generation
+home-manager generations                                   # list them (newest first)
+PROFILE=~/.local/state/nix/profiles/home-manager           # or /nix/var/nix/profiles/per-user/$USER/home-manager
+nix-env --profile "$PROFILE" --switch-generation <id>
+"$PROFILE"/activate
+
+# 3) restore a file that was backed up
+mv ~/.zshrc.backup ~/.zshrc                                # repeat for any *.backup
+
+# 4) restore your previous login shell
+chsh -s "$(command -v bash)"                               # or your prior shell
 ```
 
-## Optional components
-
-Optional components live in a self-registering registry
-(`installers/components.py`). Each is selected by name, or by an **alias
-group** (currently `all`). Select them in two ways — the CLI flag wins over the
-environment variable:
+**Fully uninstall Home Manager:**
 
 ```bash
-# via flag
-./bootstrap.sh --optional-components docker,claude
-
-# via env var
-DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS=all ./bootstrap.sh
+home-manager uninstall        # prompts; removes the HM symlinks + generations
 ```
 
-Unknown names are logged and skipped. Components only run on their supported
-OS; non-applicable ones are skipped automatically.
+`uninstall` removes the symlinks Home Manager created but **does not restore your
+`*.backup` files** — move those back manually (`mv ~/.zshrc.backup ~/.zshrc`) and
+`chsh` back to your old shell. Reclaim store space with `nix-collect-garbage -d`.
+To remove Nix/Lix entirely, follow the Lix uninstall docs.
 
-| Name              | Description                               | OS             |
-| ----------------- | ----------------------------------------- | -------------- |
-| `1password`       | 1Password                                 | debian, ubuntu |
-| `docker`          | Docker                                    | debian, ubuntu |
-| `docker-rootless` | Docker (rootless)                         | all            |
-| `cmdl-tools`      | command-line tools (deadsnakes PPA, etc.) | debian, ubuntu |
-| `cuda`            | CUDA Toolkit 12.6                         | debian, ubuntu |
-| `llvm`            | LLVM 18 (+ `update-alternatives`)         | debian, ubuntu |
-| `mac-brew`        | Homebrew formulae & casks                 | darwin         |
-| `claude`          | Claude Code CLI                           | all            |
-
-To list everything available at any time:
+**Prune old generations** later:
 
 ```bash
-uv run -m installers.components
+home-manager expire-generations "-30 days"   # keep the last 30 days (current is always kept)
+home-manager remove-generations <id> [<id>…] # remove specific ones
+nix-collect-garbage -d                        # then reclaim disk
 ```
+
+## Optional system components
+
+User-level tools are always installed declaratively (see
+[home/packages.nix](home/packages.nix)). *System-level* software is opt-in and
+Linux-only — select it with `--system` or `DOTFILE_SYSTEM_COMPONENTS` (the flag
+wins). `all` selects every component; if both Docker variants are selected,
+**rootless wins over rootful**.
+
+```bash
+./bootstrap.sh --system docker,llvm
+./bootstrap.sh --system all
+DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
+```
+
+| Name | Description | OS |
+| --- | --- | --- |
+| `software-properties` | `add-apt-repository` support | debian, ubuntu |
+| `docker` | Docker Engine (rootful) | debian, ubuntu |
+| `docker-rootless` | Docker (rootless) | debian, ubuntu |
+| `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
+| `nvidia` | NVIDIA driver + container toolkit | debian, ubuntu |
+| `llvm` | LLVM 18 (+ `update-alternatives`) | debian, ubuntu |
+
+List them anytime: `uv run platform/installers/components.py`.
+
+## Post-login interactive setup
+
+The Claude/Lark/MCP setup (plugins, MCP servers, Lark CLI auth) is *interactive*,
+so it is **not** auto-run. `setup.py` writes it to
+`~/.local/share/dotfiles/post-login-setup.sh`; the zsh prints a reminder while
+it's pending. Run it once when you're ready to authorize:
+
+```bash
+dotfiles-postsetup    # needs a TTY; self-removes on success
+```
+
+## China mirrors
+
+Everything mirror-related is gated on one switch. With `--network CN` (or
+`DOTFILE_NETWORK_ENV=CN`) the bootstrap wires the CERNET substituter into the
+system `nix.conf` and the zsh exports pypi/uv + rustup mirrors. Unset = upstream
+defaults.
 
 ## Repository layout
 
-```
-bootstrap.sh             POSIX entrypoint — installs uv, runs main.py
-main.py                  DotfilesManager: OS detection, core install, dotfile linking, sub-commands
-installers/
-  components.py          OptionalComponent registry (--optional-components)
-  debian.py              Debian/Ubuntu installers (1Password, Docker, CUDA, LLVM, …)
-  macos.py               macOS bootstrap (Homebrew + formulae/casks)
-sources/
-  root/                  the actual dotfiles, rsynced into $HOME
-  .file_list             files rsync includes
-  .ex_list               patterns rsync excludes
-  zsh_plugins/           zsh plugin configs copied into Oh My Zsh custom/
-  install/, templates/   supporting assets
-init/                    editor/terminal preferences (Sublime, iTerm, etc.)
+```text
+bootstrap.sh      Thin entry → platform/bootstrap.sh
+flake.nix         Inputs (nixpkgs + home-manager), hosts, homeConfigurations
+home/             Home Manager modules — the declarative user environment
+  packages.nix    All user-level CLI tools
+  shell.nix       zsh (fzf-tab order), fzf, zoxide, sessionPath/Variables
+  starship.nix    + starship.toml (catppuccin_mocha theme)
+  git.nix, tmux.nix, mise.nix, zsh/
+platform/         Imperative layer (see platform/README.md)
+  bootstrap.sh    Orchestrator; lib.sh; nix-cn.sh; setup.py; installers/
+docs/plans/       ADRs (0007 governs)
+docs/rfc/         RFCs (0001 = migration log)
+sources/          Legacy assets (not deployed by Home Manager)
 ```
 
 ## Notes
 
-- Requires Python ≥ 3.9; `uv` manages the interpreter and (currently empty)
-  dependency set, so no manual `pip install` is needed.
-- Several downloads default to Chinese mirrors (BFSU for Homebrew, Gitee for
-  Oh My Zsh when GitHub is unreachable) for faster installs in CN networks.
-- Run the installer from inside the cloned `dotfiles` directory — it expects
-  the `sources/` directory to be present.
+- **Runtimes:** node/rust via [mise](https://mise.jdx.dev/), Python via
+  [uv](https://docs.astral.sh/uv/). Nix does **not** provide a system Python.
+- Run the bootstrap from inside the cloned repo.
