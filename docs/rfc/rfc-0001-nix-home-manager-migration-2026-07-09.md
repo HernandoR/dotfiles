@@ -472,3 +472,9 @@ rewrote `AGENT.md`. The active env-var set is now `DOTFILE_NETWORK_ENV`,
 Correction (same day): the docker/docker-rootless tie-break above was first
 implemented as "rootful wins"; the owner reversed it — **rootless docker wins
 over rootful** when both are selected (e.g. via `all`). Code + ADR-0007 updated.
+
+Verification plan change: rather than switching the owner's daily-driver mac
+(Increment C), the migration will be validated on a **fresh machine**. The
+recoverable bootstrap + rollback procedure (activation with `-b backup`,
+`home-manager switch --rollback` / `uninstall`, restoring `*.backup`, `chsh`
+back) is now documented in `README.md` for that run.
