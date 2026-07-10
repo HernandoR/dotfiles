@@ -27,6 +27,8 @@ Two layers, split around the Home Manager switch:
 
 ```text
 bootstrap.sh          Thin entry → exec platform/bootstrap.sh "$@"
+brew-cask-interactive-install.sh   Manual macOS cask picker (→ platform/brew_cask_install.py); NOT auto-run
+nix-system-interactive-install.sh  Manual system-component picker (→ platform/nix_system_install.py); NOT auto-run
 flake.nix             Inputs (nixpkgs-unstable + home-manager); hosts; mkHome; homeConfigurations
 flake.lock            Pinned inputs
 home/                 Home Manager modules (the declarative user environment)
@@ -44,10 +46,12 @@ platform/             Imperative layer (see platform/README.md)
   lib.sh              Shared shell helpers (log/run, detect_priv, load_nix_path, install_lix, …)
   nix-cn.sh           Persist network-env; wire CERNET into system nix.conf when CN
   setup.py            PEP723 uv script: post-HM steps (login shell, SSH, Claude, system SW)
-  brew-cask-interactive-install.sh + brew_cask_install.py   Manual macOS cask picker (uv + questionary); NOT auto-run
+  brew_cask_install.py   uv/questionary impl of the root cask picker
+  nix_system_install.py  uv/questionary impl of the root system-component picker
   installers/
     managers.py       PackageManager backends (apt/brew/scripts) + Script/Deb specs (ADR-0003)
-    components.py     System-level OptionalComponent registry (docker/cuda/nvidia/llvm/…)
+    components.py     System-level OptionalComponent registry (docker/cuda/nvidia/llvm/brew/…)
+    context.py        Shared Ctx + detect_priv (used by setup.py + the pickers)
 hosts/                (reserved for per-host modules)
 docs/plans/           ADRs (0007 governs; 0001–0006 legacy/superseded)
 docs/rfc/             RFCs (0001 = migration discussion log)

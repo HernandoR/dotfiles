@@ -18,12 +18,11 @@ import logging
 import os
 import pathlib
 import shutil
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from installers.components import OptionalComponent  # noqa: E402
-from installers.managers import PackageManager  # noqa: E402
+from installers.context import Ctx  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,67 +32,6 @@ logging.basicConfig(
 logger = logging.getLogger("dotfiles")
 
 REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
-
-
-class Ctx:
-    """Execution context passed to components (the ADR-0003 `ctx`)."""
-
-    def __init__(self, priv="sudo", dry_run=False, options=None):
-        self.priv = priv  # root | sudo | none
-        self.is_root = priv == "root"
-        self.dry_run = dry_run
-        self.options = options or {}
-        self.os_type = self._detect_os()
-
-    @staticmethod
-    def _detect_os():
-        if sys.platform == "darwin":
-            return "darwin"
-        try:
-            for line in pathlib.Path("/etc/os-release").read_text().splitlines():
-                if line.startswith("ID_LIKE=") and "debian" in line:
-                    return "debian"
-                if line.startswith("ID=") and "ubuntu" in line:
-                    return "ubuntu"
-                if line.startswith("ID=") and "debian" in line:
-                    return "debian"
-        except FileNotFoundError:
-            pass
-        return "unknown" if sys.platform != "linux" else "debian"
-
-    def run_command(self, cmd, check=True, shell=False, capture_output=False, env=None):
-        # Strip sudo when already root (mirrors the old DotfilesManager).
-        if self.is_root:
-            if isinstance(cmd, str) and cmd.startswith("sudo "):
-                cmd = cmd[5:]
-            elif isinstance(cmd, list) and cmd and cmd[0] == "sudo":
-                cmd = cmd[1:]
-        run_env = {**os.environ, **env} if env else None
-        cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
-        logger.info("Running: %s", cmd_str)
-        if self.dry_run:
-            logger.info("[DRY-RUN] would run: %s", cmd_str)
-            return subprocess.CompletedProcess(cmd, 0, b"", b"")
-        try:
-            return subprocess.run(
-                cmd, check=check, shell=shell, capture_output=capture_output, env=run_env
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error("command failed: %s", e)
-            if check:
-                sys.exit(1)
-            return e
-
-    def package_manager(self, manager_id):
-        return PackageManager.get(manager_id)
-
-    def select_manager(self, installs):
-        candidates = [
-            PackageManager.get(mid)
-            for mid in installs
-            if PackageManager.exists(mid) and PackageManager.get(mid).applicable(self.os_type)
-        ]
-        return max(candidates, key=lambda m: m.priority) if candidates else None
 
 
 # --- post-HM steps -----------------------------------------------------------

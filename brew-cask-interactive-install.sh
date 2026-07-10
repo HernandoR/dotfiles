@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# platform/brew-cask-interactive-install.sh — MANUAL, interactive Homebrew cask
-# picker (macOS). NOT called by the bootstrap. It runs the uv script
-# (brew_cask_install.py), which lists the recommended casks to check off (edge +
-# alacritty on by default), lets you pick a mirror, then installs the selection.
+# brew-cask-interactive-install.sh — MANUAL, interactive Homebrew cask picker
+# (macOS). NOT called by the bootstrap. It runs the uv script
+# (platform/brew_cask_install.py), which lists the recommended casks to check off
+# (edge + alacritty on by default), lets you pick a mirror, then installs them.
 #
-#   ./platform/brew-cask-interactive-install.sh
+#   ./brew-cask-interactive-install.sh
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -19,4 +19,4 @@ command -v brew >/dev/null 2>&1 || {
 }
 
 # uv reads the inline PEP723 deps (questionary) and provisions them on demand.
-exec uv run "$DIR/brew_cask_install.py" "$@"
+exec uv run "$DIR/platform/brew_cask_install.py" "$@"

@@ -139,6 +139,16 @@ its OS, so a spec only installs what applies to the host.
 DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 ```
 
+To add components **after** the bootstrap, there's a manual interactive picker
+(not auto-run) — it lists the components that apply to this OS as a checklist
+(the default group pre-checked), lets you toggle the network for the run, then
+installs via the same machinery:
+
+```bash
+./nix-system-interactive-install.sh            # pick + install
+./nix-system-interactive-install.sh --dry-run  # preview only
+```
+
 | Name | Description | OS |
 | --- | --- | --- |
 | `software-properties` | `add-apt-repository` support **(default on Linux)** | debian, ubuntu |
@@ -157,7 +167,7 @@ BFSU mirror. It installs Homebrew *itself* only — add GUI apps yourself with
 For the GUI apps, there's a manual **interactive cask picker** (not auto-run):
 
 ```bash
-./platform/brew-cask-interactive-install.sh
+./brew-cask-interactive-install.sh
 ```
 
 It runs a small `uv` script ([platform/brew_cask_install.py](platform/brew_cask_install.py),
