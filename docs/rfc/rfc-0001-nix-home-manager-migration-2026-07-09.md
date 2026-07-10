@@ -516,3 +516,16 @@ skips system components entirely. This revises ADR-0007's earlier "zero system
 components by default" stance (ADR updated). Verified per-OS: macOS default →
 brew (software-properties skips), Linux default → software-properties (brew
 skips), `--system none` → nothing.
+
+### 2026-07-10 — Interactive installers at repo root
+
+Owner asked to move `brew-cask-interactive-install.sh` to the repo root and add a
+sibling `nix-system-interactive-install.sh` for adding system components after
+the bootstrap. Both root wrappers delegate to uv/questionary scripts under
+`platform/` (`brew_cask_install.py`, `nix_system_install.py`). The system picker
+lists the components applicable to the current OS as a checklist (the `default`
+group pre-checked), offers a network/mirror toggle for the run, and installs via
+the **same machinery** the bootstrap uses. To share that machinery, `Ctx` +
+`detect_priv` were factored out of `setup.py` into `installers/context.py`
+(imported by `setup.py` and both pickers). Verified: uv resolves the inline
+`questionary` dep and both scripts run to their prompt.
