@@ -339,3 +339,26 @@ The mac host config builds green and every generated file is correct (`.zshrc`
 ordering, `.zshenv` CN gate, git config with SSH signing + mergiraf +
 difftastic, gitattributes, starship catppuccin_mocha theme). Remaining: Linux
 container behavior test and the real-machine switch.
+
+### 2026-07-10 — Verification round (containers + real NixOS)
+
+The Linux path was verified end-to-end (bring up nix → seed flake input sources
+from a mac-side cache to bypass CN→github → CERNET substituter → build the
+aarch64-linux host → `home-manager` activate → checks):
+
+- **Debian (aarch64 container):** 29/29 checks PASS.
+- **Ubuntu (aarch64 container):** 29/29 checks PASS.
+- **NixOS 25.11 (real OrbStack machine):** 28/28 checks PASS.
+
+Every run confirmed: generated `.zshrc` orders fzf-tab < autosuggestions <
+syntax-highlighting; starship catppuccin_mocha theme; git identity + mergiraf
+driver + difftastic external diff; CN mirrors OFF by default and ON only under
+`DOTFILE_NETWORK_ENV=CN`; all CLI binaries on the profile; interactive zsh
+starts with no fatal errors; a `#!/usr/bin/env bash` project script runs from
+the HM shell; mise has node+rust.
+
+Two environmental facts (not config faults): OrbStack on Apple silicon runs
+**aarch64** containers, so an `aarch64-linux` host was added; and CN **github**
+flake-input fetches return 504, worked around by pre-seeding the (arch-neutral)
+input sources from the mac store into each environment. Remaining: real-macOS
+activation and the `platform/` imperative layer.
