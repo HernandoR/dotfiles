@@ -44,6 +44,7 @@ platform/             Imperative layer (see platform/README.md)
   lib.sh              Shared shell helpers (log/run, detect_priv, load_nix_path, install_lix, …)
   nix-cn.sh           Persist network-env; wire CERNET into system nix.conf when CN
   setup.py            PEP723 uv script: post-HM steps (login shell, SSH, Claude, system SW)
+  brew-cask-interactive-install.sh + brew_cask_install.py   Manual macOS cask picker (uv + questionary); NOT auto-run
   installers/
     managers.py       PackageManager backends (apt/brew/scripts) + Script/Deb specs (ADR-0003)
     components.py     System-level OptionalComponent registry (docker/cuda/nvidia/llvm/…)
