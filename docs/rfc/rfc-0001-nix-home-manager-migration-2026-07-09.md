@@ -362,3 +362,32 @@ Two environmental facts (not config faults): OrbStack on Apple silicon runs
 flake-input fetches return 504, worked around by pre-seeding the (arch-neutral)
 input sources from the mac store into each environment. Remaining: real-macOS
 activation and the `platform/` imperative layer.
+
+### 2026-07-10 — Full `./bootstrap.sh` e2e in a bare docker container
+
+The whole new imperative layer (`platform/bootstrap.sh`) was run end-to-end in a
+bare `debian:stable` container (root, no systemd → the single-user nix fallback),
+seeding flake inputs from the mac cache and using CERNET: **25/25 checks pass,
+rc=0**. It exercised: single-user nix install, flakes + CERNET config, input
+seeding, build-of-locked-home-manager + activate, home-file linking, all CLI
+tools, interactive zsh, `DOTFILE_NETWORK_ENV` gating, and a `#!/usr/bin/env bash`
+script — all as root via the impure `generic` host.
+
+Bugs found and fixed along the way (all in the imperative layer, not the flake):
+
+- **`DRY_RUN` env collision (subtle).** home-manager's `activate` treats
+  `DRY_RUN` as set-or-unset (`[[ -v DRY_RUN ]]`), not by value; the bootstrap
+  exported `DRY_RUN=0`, silently putting activation into dry-run so it *echoed*
+  the link commands instead of running them (home files never appeared). Renamed
+  the internal vars to `DF_DRY_RUN` / `DF_VERBOSE`.
+- **Container support:** the Lix multi-user installer needs systemd/launchd, so
+  bare docker gets a **single-user (`--no-daemon`) fallback** (with
+  `build-users-group =` so root needs no `nixbld` pool); the HM step now **builds
+  the locked home-manager + activates** (no `home-manager/master` fetch) and puts
+  the generation's `home-path/bin` on PATH so the post-HM `uv run` finds uv;
+  `UV_PYTHON_PREFERENCE=system` avoids a CN interpreter download; a
+  `DOTFILE_FLAKE_CACHE` seeds inputs; the nix-installer fetch got `--retry`
+  (nixos.org TLS is flaky on CN).
+
+Net: bare docker containers now run the full bootstrap. Remaining: the real-macOS
+switch (owner's daily driver).
