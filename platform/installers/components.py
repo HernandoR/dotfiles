@@ -116,6 +116,7 @@ class OptionalComponent(Component):
 class SoftwareProperties(OptionalComponent):
     name = "software-properties"
     description = "software-properties-common (provides add-apt-repository)"
+    groups = frozenset({"default"})  # installed by default on Linux
     installs = {"apt": "software-properties-common"}
 
 
@@ -248,6 +249,7 @@ class Homebrew(OptionalComponent):
     name = "brew"
     description = "Homebrew (macOS) — the package manager only, no formulae/casks"
     supported_os = ("darwin",)
+    groups = frozenset({"default"})  # installed by default on macOS
 
     def install(self, ctx):
         # User-level CLI tools come from nixpkgs; this installs Homebrew *itself*

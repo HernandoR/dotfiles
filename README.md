@@ -121,26 +121,33 @@ nix-collect-garbage -d                        # then reclaim disk
 ## Optional system components
 
 User-level tools are always installed declaratively (see
-[home/packages.nix](home/packages.nix)). *System-level* software is opt-in and
-Linux-only — select it with `--system` or `DOTFILE_SYSTEM_COMPONENTS` (the flag
-wins). `all` selects every component; if both Docker variants are selected,
-**rootless wins over rootful**.
+[home/packages.nix](home/packages.nix)). *System-level* software is selected with
+`--system` or `DOTFILE_SYSTEM_COMPONENTS` (the flag wins). Special specs: `all`
+(every component; if both Docker variants match, **rootless wins**), `default`,
+and `none`.
+
+**When you pass nothing, the `default` group installs** — `brew` on macOS,
+`software-properties` on Linux. Everything else is opt-in;
+`cuda`/`nvidia`/`llvm`/`docker` you request explicitly. Each component is gated by
+its OS, so a spec only installs what applies to the host.
 
 ```bash
-./bootstrap.sh --system docker,llvm
-./bootstrap.sh --system all
+./bootstrap.sh                       # default group only (brew / software-properties)
+./bootstrap.sh --system docker,llvm  # exactly these (overrides the default group)
+./bootstrap.sh --system all          # everything applicable to this OS
+./bootstrap.sh --system none         # no system components at all
 DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 ```
 
 | Name | Description | OS |
 | --- | --- | --- |
-| `software-properties` | `add-apt-repository` support | debian, ubuntu |
+| `software-properties` | `add-apt-repository` support **(default on Linux)** | debian, ubuntu |
 | `docker` | Docker Engine (rootful) | debian, ubuntu |
 | `docker-rootless` | Docker (rootless) | debian, ubuntu |
 | `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
 | `nvidia` | NVIDIA driver + container toolkit | debian, ubuntu |
 | `llvm` | LLVM 18 (+ `update-alternatives`) | debian, ubuntu |
-| `brew` | Homebrew — the package manager only (no formulae/casks) | darwin |
+| `brew` | Homebrew — the package manager only (no formulae/casks) **(default on macOS)** | darwin |
 
 On macOS the bootstrap does **not** install Homebrew by default (CLI tools come
 from nixpkgs). Add it with `--system brew` (or `--system all`); on CN it uses the
