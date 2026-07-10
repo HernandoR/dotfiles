@@ -144,6 +144,16 @@ NVIDIA drivers, LLVM + `update-alternatives`, apt/brew **system** packages and
 GUI casks, Claude deferred OAuth (ADR-0005), SSH-key copy (ADR-0006), codegraph
 (not in nixpkgs), and `chsh` to the Nix-provided zsh.
 
+These opt-in system components are selected with `--system <list>` or the
+`DOTFILE_SYSTEM_COMPONENTS` env var (flag wins); the `all` keyword installs every
+component (rootful docker wins over rootless). The Claude/Lark/MCP setup is
+**interactive** so it is not auto-run: `setup.py` writes
+`~/.local/share/dotfiles/post-login-setup.sh`, the HM zsh prints a reminder while
+it is pending, and the user runs it once via the `dotfiles-postsetup` function
+(self-removes on success). Platform-injected env files are never clobbered (HM
+only manages declared files, and collisions are backed up) but are not
+auto-sourced — use `~/.proxy` / `~/.extra`.
+
 **Dropped:** oh-my-zsh, antigen, `antigen.zsh`, `.p10k.zsh`, the bash framework,
 `.screenrc`, the rsync→stage→symlink pipeline (ADR-0001), and the `init/` plists
 and terminal themes (macOS defaults / GUI are out of scope).

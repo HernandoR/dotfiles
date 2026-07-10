@@ -425,3 +425,46 @@ Verified: a fresh clean-env login zsh in a bare debian container now resolves
 all 11 sampled tools + `nix` to `~/.nix-profile/bin/*`; the mac host still
 evaluates with the two new `sessionPath` entries. Remaining: the real-macOS
 switch (owner's daily driver).
+
+### 2026-07-10 — Config-management review (interactive setup, platform files, components, staging, nix cache)
+
+Owner raised six questions. Findings + resolutions:
+
+- **Interactive Claude/Lark/smithery/MCP setup — how does it run now?** Two bugs
+  found. (1) `setup_claude` writes a deferred `post-login-setup.sh` but **nothing
+  sourced it** (only `~/.proxy`/`~/.extra` are sourced, neither references it) —
+  so it never ran. (2) It was designed to be *sourced*; run-vs-source semantics
+  were fragile. **Decision: manual command, not auto-run** — the setup is
+  interactive (needs a TTY), so a `dotfiles-postsetup` zsh function runs it on
+  demand, the HM zsh prints a one-line reminder while it is pending, and the
+  script self-removes on success. (Rejected: auto-run on first login — would
+  block the first shell on OAuth.)
+- **Do platform-injected env files (e.g. `.jc_env.sh`) get overwritten?** No —
+  HM only manages files it declares; non-declared files are untouched, and even a
+  name collision is *backed up* (`HOME_MANAGER_BACKUP_EXT=backup`), not deleted.
+  Caveat: HM *does* take over the standard rc files (`.zshenv`/`.zshrc`), backing
+  up any platform-written versions. **Decision: keep as-is** (no auto-source of a
+  platform env dir); the platform should use `~/.proxy`/`~/.extra`. (Rejected: an
+  `env.d/*.sh` auto-source hook.)
+- **Optional vs necessary components now?** Necessary/user tools are declarative
+  (`home/packages.nix`, always installed). Optional = system-level
+  `OptionalComponent`, opt-in via `--system`. Found the `resolve()`/group
+  machinery was dead code (never called) and there was no `all`. **Decision: add
+  `--system all` + a `DOTFILE_SYSTEM_COMPONENTS` env var** (flag wins; `all`
+  selects every component; rootful docker wins over rootless).
+- **Is there still a `stage` level / can its env var go?** The rsync→staging→
+  symlink pipeline is gone (HM links from the store). The only surviving
+  staging-era var, `DOTFILE_EDIT_HOME_TARGET`, lived solely in an orphaned
+  `edit_home.sh`. **Decision: remove both.** Also: `AGENT.md` still described the
+  retired `main.py` pipeline — rewritten for the flake+HM+platform model.
+- **Point the nix cache at external persistable storage via an env var.** Only
+  `DOTFILE_FLAKE_CACHE` (flake-input seed) exists today; no store persistence.
+  Options weighed: symlink all of `/nix` to a persistent disk via a new
+  `DOTFILE_NIX_ROOT` (store+db+profiles survive restarts — the standard
+  ephemeral-container trick) vs. a `file://` binary cache substituter.
+  **Decision: defer** — not implemented now.
+
+Net changes this round: `dotfiles-postsetup` + login reminder; `--system all` +
+`DOTFILE_SYSTEM_COMPONENTS`; removed `edit_home.sh`/`DOTFILE_EDIT_HOME_TARGET`;
+rewrote `AGENT.md`. The active env-var set is now `DOTFILE_NETWORK_ENV`,
+`DOTFILE_SYSTEM_COMPONENTS`, `DOTFILE_FLAKE_CACHE`, `DOTFILE_SSH_SRC`.

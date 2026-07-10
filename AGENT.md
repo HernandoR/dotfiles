@@ -1,146 +1,205 @@
-# CLAUDE.md
+# AGENT.md
 
 ## Project
 
-Cross-platform **dotfiles installer** written in **Python ≥ 3.9** (`pyproject.toml:6`). A thin POSIX shell entrypoint (`bootstrap.sh`) installs [`uv`](https://docs.astral.sh/uv/) if missing, then hands off to `main.py` (`bootstrap.sh:23`). `main.py` runs four ordered phases: OS bootstrap (core packages), necessary shell tooling (Oh My Zsh → fzf → Starship → Node), dotfiles migration (rsync to a staging dir, then symlink into `$HOME`), and user-selected optional components. The actual shell config files being deployed live under `sources/root/`. Targets macOS and Debian/Ubuntu; several downloads default to Chinese mirrors (BFSU/Gitee) for CN-network speed.
+Cross-platform **dotfiles**, migrated from a Python installer to a **Nix flake +
+standalone Home Manager** setup on [**Lix**](https://lix.systems/), with a thin
+**imperative layer** for the few things Home Manager cannot do on a non-NixOS
+host. Targets macOS (aarch64) and Debian/Ubuntu (x86_64 + aarch64), symmetric,
+**no nix-darwin**. The governing design record is
+[`docs/plans/adr-0007-nix-home-manager-migration-2026-07-09.md`](docs/plans/adr-0007-nix-home-manager-migration-2026-07-09.md);
+its discussion trail is
+[`docs/rfc/rfc-0001-…`](docs/rfc/rfc-0001-nix-home-manager-migration-2026-07-09.md).
+Read those before reshaping the model.
 
-The installer architecture is recorded in ADRs under `docs/plans/`: staging/linking (ADR-0001), the `PackageManager` install abstraction (ADR-0003), necessary-components + phase separation (ADR-0004), the install-driven Claude post-setup that rebuilds `~/.claude` (ADR-0005), and SSH keys deployed by copy (ADR-0006). Read those before reshaping the installer model.
+Two layers, split around the Home Manager switch:
+
+- **Declarative (Home Manager)** owns the user environment: CLI tools, zsh +
+  starship + fzf-tab, git, tmux, mise. Files are symlinked from the nix store —
+  there is **no** rsync/staging/link pipeline anymore (the old ADR-0001..0006
+  machinery is retired).
+- **Imperative (`platform/`)** handles what HM can't: install Lix, configure nix
+  (+ optional CERNET mirror), run the HM switch, set the login shell, deploy SSH
+  keys, write the deferred Claude setup, and install opt-in Linux system
+  software (docker/cuda/nvidia/llvm).
 
 ## Layout
 
 ```
-bootstrap.sh      POSIX entrypoint: ensures uv, runs `uv run main.py "$@"`
-main.py           DotfilesManager — OS detection, bootstrap, phase orchestration, sub-commands
-pyproject.toml    Project metadata; dependencies = [] (no third-party deps)
-installers/
-  __init__.py     Empty — marks the package
-  managers.py     PackageManager install backends (apt/brew/scripts) + Script/Deb specs (ADR-0003)
-  components.py   Component catalog: NecessaryComponent (ordered) + OptionalComponent (registry)
-sources/
-  root/           The real dotfiles, staged into $HOME (.zshrc, .vimrc, .p10k.zsh, …)
-  .ex_list        rsync --exclude-from pattern list (cache/lock/swap noise)
-  zsh_plugins/    zsh plugin configs copied into ~/.oh-my-zsh/custom/plugins
-  install/        standalone helper shell scripts (app installers)
-  unusing/        retired/unused config
-docs/plans/       ADRs (decision records for the installer architecture)
-init/             Editor/terminal preferences (Sublime, iTerm colors, spectacle)
-agc/              Notes (e.g. bash-circular-reference-fix.md)
+bootstrap.sh          Thin entry → exec platform/bootstrap.sh "$@"
+flake.nix             Inputs (nixpkgs-unstable + home-manager); hosts; mkHome; homeConfigurations
+flake.lock            Pinned inputs
+home/                 Home Manager modules (the declarative user environment)
+  default.nix         imports + home.username / homeDirectory / stateVersion
+  packages.nix        home.packages — all user-level CLI tools (the "necessary" set)
+  shell.nix           programs.zsh (fzf-tab order), fzf, zoxide, sessionVariables/sessionPath, initContent
+  starship.nix        programs.starship.settings = fromTOML(readFile ./starship.toml)
+  starship.toml       catppuccin_mocha theme (verbatim)
+  git.nix             programs.git (settings/lfs/signing/attributes) + git-aliases.conf include
+  git-aliases.conf    verbatim git aliases (avoids nix-string escaping)
+  tmux.nix / tmux.conf, mise.nix
+  zsh/                functions.zsh, fzf-tab.zsh — sourced verbatim from initContent
+platform/             Imperative layer (see platform/README.md)
+  bootstrap.sh        Orchestrator: privilege → prereqs → Lix → nix-cn → HM switch → setup.py
+  lib.sh              Shared shell helpers (log/run, detect_priv, load_nix_path, install_lix, …)
+  nix-cn.sh           Persist network-env; wire CERNET into system nix.conf when CN
+  setup.py            PEP723 uv script: post-HM steps (login shell, SSH, Claude, system SW)
+  installers/
+    managers.py       PackageManager backends (apt/brew/scripts) + Script/Deb specs (ADR-0003)
+    components.py     System-level OptionalComponent registry (docker/cuda/nvidia/llvm/…)
+hosts/                (reserved for per-host modules)
+docs/plans/           ADRs (0007 governs; 0001–0006 legacy/superseded)
+docs/rfc/             RFCs (0001 = migration discussion log)
+sources/              Legacy asset scripts (install/*.sh) — NOT deployed by HM
 ```
-
-There are **no** `installers/debian.py` / `installers/macos.py` modules — ADR-0003 deleted the per-OS helpers; every component's install logic lives on the component itself in `components.py`.
 
 ## Commands
 
-There is **no Makefile, justfile, or npm scripts**, and **no test framework** (no tests directory, no pytest config). All entry is via `uv`:
+No Makefile/justfile and no test framework. Entry is the bootstrap or nix
+directly:
 
 ```bash
-./bootstrap.sh                              # full bootstrap (installs uv, runs main.py)
-./bootstrap.sh --dry-run --verbose          # args pass straight through to main.py
-uv run main.py                              # full bootstrap directly
-uv run main.py --interactive                # allow interactive prompts (OMZ, Starship)
-uv run main.py --optional-components docker,claude
-DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS=all uv run main.py   # env var (CLI flag wins, main.py:378-380)
+./bootstrap.sh                         # full bootstrap (Lix → nix → HM → post-setup)
+./bootstrap.sh --dry-run --verbose     # preview every step, run nothing
+./bootstrap.sh --network CN            # enable CERNET mirrors (nix + pypi/uv + rustup)
+./bootstrap.sh --system all            # + every opt-in Linux system component
+./bootstrap.sh --host dotfiles-debian  # force a named flake host
 
-uv run main.py set-proxy     # git proxy from $http_proxy / $https_proxy
-uv run main.py unset-proxy   # clear git proxy
+# Home Manager directly (owner on a named host):
+nix run . -- switch -b backup                       # if you add a `homeManager` app; else:
+nix build .#homeConfigurations.<host>.activationPackage && ./result/activate
 
-uv run -m installers.components             # list all optional components (components.py:668)
+# List / run system components:
+uv run platform/installers/components.py            # list opt-in system components
+python3 platform/installers/components.py           # same (stdlib only)
 ```
 
-Lint: no project-level lint config exists. `sources/root/ruff.toml` is a _deployed dotfile_, not this repo's config — do not treat it as the project linter.
+## Architecture
 
-## Architecture: install model (ADR-0003 / ADR-0004)
+### 1. Flake + hosts (`flake.nix`)
 
-- **`DotfilesManager` (`main.py`) is the orchestrator and the context object** passed into every install as `ctx`. Components call `ctx.run_command(...)`, `ctx.package_manager(id)` (`main.py:273`), and `ctx.select_manager(installs)` (`main.py:277`). They do **not** receive a bare `run_cmd` callable, and they never import a runner.
-- **`PackageManager` backends** (`managers.py:51`) self-register by `id` (`apt` `managers.py:83`, `brew` `managers.py:103`, `scripts` `managers.py:112`), declare `supported_os` and a `priority` (native managers outrank `scripts`, `managers.py:86,106,115`). The orchestrator — not the component — picks the highest-priority applicable backend via `select_manager` (`main.py:277`).
-- **A component is declarative-first.** It lists `installs = {manager_id: spec}` and the base `Component.install` (`components.py:73`) resolves it through the chosen backend. Specs: a bare string = package name; `Deb(url)` (`managers.py:37`) for an apt `.deb`; `Script(url, interpreter, args)` (`managers.py:24`) for the `scripts` backend.
-- **Multi-step installs override `install(self, ctx)`** and may reuse a backend via `ctx.package_manager("scripts").install(ctx, Script(...))` rather than re-rolling the download-run-cleanup dance.
-- **`supported_os` is derived** for declarative components (`effective_supported_os` `components.py:50`, from the managers listed in `installs`); imperative-override components set an explicit `supported_os`.
-- **Core OS bootstrap is not a component.** `bootstrap_debian` (`main.py:97`), `bootstrap_macos` (`main.py:144`), `install_homebrew` (`main.py:115`) are prerequisites and stay as `DotfilesManager` methods, outside the component system.
+- `hosts` is one attr per machine (`flake.nix:17`): `system` + `username`. Named
+  hosts are **pure/reproducible**.
+- `mkHome` (`flake.nix:34`) instantiates `nixpkgs` with `config.allowUnfree =
+  true` (the 1Password CLI is unfree) and builds a `homeManagerConfiguration`.
+- **`generic` host (`flake.nix:55`)** is an *impure* fallback: it reads
+  `$USER`/`$HOME` via `builtins.getEnv` at eval time, so it materializes only
+  under `--impure` and is invisible to a pure `nix flake check`. bootstrap falls
+  back to it for any non-`lz` user (including root) — this is how root/arbitrary
+  users and bare containers work.
+- `home/default.nix` derives `home.homeDirectory` from an explicit
+  `homeDirectory` (generic) or the platform default; `stateVersion = "25.05"`
+  (do not bump casually).
 
-### The two component kinds (`components.py`)
+### 2. Pre-HM imperative (`platform/bootstrap.sh` + `lib.sh` + `nix-cn.sh`)
 
-Both subclass a shared `Component` base (`components.py:34`) that carries the install machinery; they differ only in lifecycle:
+Ordered: detect privilege → select host → gate → prereqs → **install Lix** →
+configure nix (+CN) → seed flake inputs (optional) → **build + activate HM**.
 
-- **`NecessaryComponent` (`components.py:92`)** — always-run shell tooling. **Not** self-registering: install order is correctness-critical, so the catalog is the explicit ordered tuple `NECESSARY = (OhMyZsh, Fzf, Starship, Node)`, iterated by `run_necessary_components` (`main.py:298`). Per ADR-0004, these install binaries/frameworks only — shell rc files belong to the migration phase, so the repo's `.zshrc` stays canonical. `OhMyZsh` installs with `KEEP_ZSHRC=yes`; `Fzf` uses `--no-update-rc`; `Node` (nvm) runs with `PROFILE=/dev/null` so nvm never edits rc files (the repo `.zshrc` already wires `NVM_DIR`). `Node` is necessary because the Claude post-setup and several optional components assume it.
-- **`OptionalComponent` (`components.py:108`)** — user-selected via `--optional-components` / `DOTFILE_BOOTSTRAP_OPTIONAL_COMPONENTS`. Self-registers by `name` through `__init_subclass__` (`components.py:120`) into `_registry` (`components.py:116`); `resolve()` (`components.py:142`) maps a comma list (names + alias groups like `all`) to an ordered name list.
+- **Privilege model** (`lib.sh` `detect_priv`): `root` (run directly), `sudo`
+  (via sudo), `none` (skip everything needing sudo; do only user-level nix/HM;
+  if nix is absent and can't be installed → respectful exit).
+- **Lix install** (`lib.sh` `install_lix`): multi-user (service-managed daemon)
+  when an init system exists; otherwise a **single-user `--no-daemon`** install
+  (bare docker/CI) with `build-users-group =` so root needs no `nixbld` pool.
+- **HM activation**: builds `.#homeConfigurations.<host>.activationPackage` from
+  the *locked* home-manager (no `home-manager/master` fetch) and runs
+  `$out/activate` with `HOME_MANAGER_BACKUP_EXT=backup` (== `switch -b backup`).
+  It then puts the generation's `home-path/bin` on PATH so post-HM `uv` resolves.
+- **CN mirror** (`nix-cn.sh`): always persists `~/.config/dotfiles/network-env`;
+  when CN + privileged, wires CERNET substituter + `trusted-users` into the
+  *system* `nix.conf` (a user-level substituter is ignored for non-trusted users
+  under the multi-user daemon).
 
-### The four phases (`main.py:315` `run()`)
+### 3. Post-HM imperative (`platform/setup.py`, via `uv run`)
 
-1. `bootstrap_macos()` / `bootstrap_debian()` — OS prerequisites.
-2. `run_necessary_components()` (`main.py:298`) — the `NECESSARY` tuple, in order.
-3. `migrate_dotfiles()` (`main.py:303`) — `stage_dotfiles` then `link_dotfiles` (ADR-0001). Runs **after** the tools so the repo's rc files win. Both calls exclude `CLAUDE_MANAGED_PATHS` (`.claude`, `.claude.json`) — not deployed from staging; the `claude` component rebuilds `~/.claude` fresh via an install-driven post-setup (ADR-0005) — and `.ssh`, whose keys are *copied* (not symlinked) by `deploy_ssh_keys` (ADR-0006).
-4. `set_default_shell()` — make zsh the login shell (idempotent, non-fatal: `chsh` → `usermod` fallback, warns on failure).
-5. `run_optional_installers()` (`main.py:294`) — user-selected components.
+Runs after the switch, when `uv` exists on the HM profile. PEP723 script (stdlib
+plus the `installers` package only). Steps: `set_login_shell` (chsh to
+`~/.nix-profile/bin/zsh`) → `deploy_ssh_keys` (copy `id_*`, strict perms) →
+`setup_claude` (write the deferred setup) → `run_system` (opt-in components).
 
-`run()` ends with an advisory notice to open a new shell — purely informational; no later phase depends on an activated shell.
+## The component model
+
+- **User-level tools = declarative.** Everything the user runs lives in
+  `home/packages.nix` and is installed by HM on every switch. There is no
+  "necessary component" phase and no per-tool selection — add a package to the
+  list. Reachability is guaranteed because `home.sessionPath`
+  (`home/shell.nix`) explicitly names `~/.nix-profile/bin` +
+  `/nix/var/nix/profiles/default/bin` (standalone HM does **not** add the nix
+  profile to PATH itself).
+- **System-level = opt-in `OptionalComponent`** (`installers/components.py`):
+  `docker`, `docker-rootless`, `cuda`, `nvidia`, `llvm`, `software-properties`.
+  Selected via `--system <list>` **or** the `DOTFILE_SYSTEM_COMPONENTS` env var
+  (flag wins). `OptionalComponent.resolve()` accepts names, alias groups, and
+  the `all` keyword (every component; rootful docker wins over rootless). These
+  are Linux-only, need privilege, and run last. The ADR-0003 install machinery
+  (declarative `installs = {manager_id: spec}` resolved through a
+  `PackageManager` backend, with an imperative `install(ctx)` override for
+  multi-step installs) is unchanged.
+
+## Environment variables (the full set)
+
+| Var | Where | Effect |
+| --- | --- | --- |
+| `DOTFILE_NETWORK_ENV=CN` | bootstrap / `nix-cn.sh` / HM `envExtra` | Enable CERNET (nix system.conf) + pypi/uv + rustup mirrors. Unset = upstream. |
+| `DOTFILE_SYSTEM_COMPONENTS` | bootstrap / `setup.py` | Fallback for `--system` (e.g. `all`). |
+| `DOTFILE_FLAKE_CACHE` | bootstrap | Dir with `seed-paths.txt` to `nix copy` flake inputs from (CN/offline/CI). |
+| `DOTFILE_SSH_SRC` | `setup.py` | Override the SSH key source dir (default `sources/root/.ssh`). |
+
+The deferred, **interactive** Claude/Lark/MCP setup is written to
+`~/.local/share/dotfiles/post-login-setup.sh` and is **not** auto-run (it needs
+a TTY); the HM zsh prints a reminder and the user runs it once via the
+`dotfiles-postsetup` shell function (self-removes on success).
 
 ## Conventions
 
-- **Language:** Python ≥ 3.9 (`pyproject.toml:6`).
-- **No third-party dependencies** — `dependencies = []` (`pyproject.toml:7`); standard library only (`subprocess`, `pathlib`, `argparse`, `logging`, `shutil`, `tempfile`, `os`, `sys`).
-- **Command execution goes through `DotfilesManager.run_command`** (`main.py:57`): it strips a leading `sudo` when running as root (`main.py:59-65`), logs every command, overlays an optional `env` dict onto the inherited environment (`main.py:67`), honors `--dry-run` by returning a fake `CompletedProcess` (`main.py:68-72`), and `sys.exit(1)` on failure when `check=True` (`main.py:83-84`). Components reach it as `ctx.run_command`.
-- **Prefer argument-list commands over `shell=True`.** Lists are the norm; use `shell=True` only for genuine pipelines/redirects/globs (`components.py` `Cuda.install`). To set an env var, pass `env={...}` to `run_command` (`main.py:57`) rather than embedding `VAR=val` in a shell string.
-- **Download-then-execute, never `curl | bash`.** The `scripts` backend (`managers.py:117`) downloads a URL to a temp file then runs `<interpreter> <file> <args>`, so a download failure actually stops the install. Reuse it; do not reintroduce a piped `curl ... | bash`.
-- **Logging, not print, in installer code:** module logger `logging.getLogger("dotfiles")` (`main.py:21`, `components.py:31`, `managers.py:18`). (`components.py:668` `main()` prints the component catalog — that's a CLI listing, not install code.)
-- **Paths:** use `pathlib.Path`; `Path.home()` for `$HOME`.
-- **Naming:** modules/functions `snake_case`; component classes `PascalCase`. Optional components carry a lowercase `name` (the CLI id); necessary components leave `name` empty and rely on `description`.
-- **OS identifiers** are the strings `"darwin"`, `"debian"`, `"ubuntu"` (`main.py:_detect_os`), used in `supported_os` tuples and manager `supported_os`.
-- **Commit messages:** repo convention is Conventional-Commits `type(scope): subject` (see git log, e.g. `feat(installers): …`). `.copilot-commit-message-instructions.md` asks Copilot for _Chinese_ commit messages with ≤72-char lines — that instruction is for the Copilot integration; existing git history is English. Match recent history unless told otherwise.
+- **Nix:** modules take `{ pkgs, lib, config, ... }`; prefer upstream `programs.*`
+  options over hand-rolled config; embed verbatim files
+  (`builtins.readFile`/`source ${./file}`) to dodge nix-string escaping (see
+  `git-aliases.conf`, `zsh/*.zsh`, `starship.toml`).
+- **Shell (`platform/*.sh`):** `set -euo pipefail`; route side effects through
+  `run` (dry-run aware); internal flags are `DF_DRY_RUN`/`DF_VERBOSE` — **never**
+  bare `DRY_RUN` (home-manager's `activate` treats `-v DRY_RUN` as set-or-unset
+  and would silently dry-run the whole activation).
+- **Python (`setup.py`/`installers`):** stdlib only; commands via
+  `ctx.run_command` (strips leading `sudo` when root, honors `--dry-run`);
+  argument lists over `shell=True`; download-then-execute (the `scripts`
+  backend), never `curl | bash`; module logger `logging.getLogger("dotfiles")`.
+- **OS identifiers:** `"darwin"`, `"debian"`, `"ubuntu"`.
+- **Commits:** Conventional-Commits `type(scope): subject`; history is English.
 
-## Canonical examples per layer
+## Adding a new X
 
-| If you're adding…                       | Read first → mirror                                   | Why                                                                       |
-| --------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| A simple optional component             | `components.py:419` (`FdFind`) / `:404` (`Bottom`)    | Pure declarative `installs = {manager_id: spec}`; no per-component code.   |
-| A multi-step optional component         | `components.py:180` (`Docker`) / `:426` (`Node`)      | Imperative `install(ctx)` reusing `ctx.package_manager(...)` + extra steps. |
-| A necessary (always-run) component      | `components.py:645` (`Starship`)                      | `NecessaryComponent` reusing the `scripts` backend; add it to `NECESSARY`. |
-| A new install backend                   | `managers.py:83` (`AptManager`)                       | Self-registering `PackageManager`: `id`, `supported_os`, `priority`, `install`. |
-| A `main.py` manager method              | `main.py:166` (`stage_dotfiles`)                      | dry-run-safe via `run_command`; filesystem op, not a component.            |
-| A new CLI sub-command                   | `main.py:370-373` + `main.py:391` dispatch            | Subparser registration + `args.command` dispatch block.                    |
-| A new dotfile to deploy                 | add to `sources/root/` only                           | `stage_dotfiles` rsyncs everything in `sources/root/` (minus `.ex_list`).  |
+- **A user CLI tool** → add to `home/packages.nix`. Done (declarative, all hosts).
+- **Shell config** → the relevant `home/*.nix` `programs.*` option, or a verbatim
+  file sourced from `initContent`.
+- **A new machine** → add a `hosts` entry in `flake.nix` (name = hostname for
+  auto-detection), or rely on the `generic` impure fallback.
+- **A system component** → subclass `OptionalComponent` in `components.py`
+  (`name`, `description`, optional `groups`); declarative `installs = {...}` or an
+  imperative `install(self, ctx)` for multi-step. Auto-registers; verify with
+  `uv run platform/installers/components.py`.
+- **A new install backend** → subclass `PackageManager` in `managers.py`
+  (`id`, `supported_os`, `priority`, `install`).
 
 ## Don't touch / be careful with
 
-- **`/output`** — generated at runtime, git-ignored (`.gitignore:1`). Holds downloaded installer scripts.
-- **`.venv/`, `__pycache__/`, `*.egg-info/`** — git-ignored build/runtime artifacts (`.gitignore`).
-- **`uv.lock`** — listed under `.gitignore` (last line); don't hand-edit.
-- **`sources/root/**`** — these are *deployed verbatim* into the user's `$HOME` via symlink (`link_dotfiles` `main.py:201`). Editing them changes the user's live shell config. `sources/root/ruff.toml` is a deployed dotfile, **not** this repo's linter.
-- **rc-file ownership (ADR-0004)** — necessary components must not write `~/.zshrc` (or other rc files); the repo's linked `.zshrc` is canonical. Keep `KEEP_ZSHRC=yes` / `--no-update-rc` on omz/fzf.
-- **`sources/unusing/`** — retired config; don't wire it back in without intent.
-- **Mirror URLs** — Homebrew via BFSU (`install_homebrew` `main.py:115`) and Oh My Zsh / fzf Gitee fallbacks (`components.py` `OhMyZsh`/`Fzf`) are deliberate for CN networks; don't "fix" them to upstream blindly.
-- **`run_command` exits the process on failure** (`main.py:83-84`). Don't rely on a return value after a `check=True` call that may fail — control won't return.
-
-## Adding a new X — recipes
-
-### 1. New optional component
-
-1. In `installers/components.py`, add a subclass of `OptionalComponent`. Set `name` (CLI id), `description`, and `groups` (e.g. `frozenset({"all"})`). Defining the class auto-registers it via `__init_subclass__` (`components.py:120`).
-2. **Declarative (preferred):** set `installs = {"apt": "pkg", "brew": "pkg"}` (or `Deb(url)` / `Script(...)`). `supported_os` is derived; no `install()` needed.
-3. **Multi-step:** override `install(self, ctx)`, set an explicit `supported_os`, and reuse a backend via `ctx.package_manager("scripts").install(ctx, Script(...))`. Mirror `Docker` (`components.py:186`) or `Node` (`components.py:435`).
-4. CLI choices and `--optional-components` help update automatically from the registry (`main.py:357`). Verify with `uv run -m installers.components`.
-
-### 2. New necessary component
-
-1. Add an `NecessaryComponent` subclass with a `description` and an `install(self, ctx)` (or declarative `installs`).
-2. Append it to the `NECESSARY` tuple (`components.py:665`) at the correct position — order is correctness-critical and this tuple is the single source of truth.
-3. It must not write shell rc files (ADR-0004). Pass the installer's keep-rc flag (e.g. `KEEP_ZSHRC=yes` via `run_command(env=...)`, `--no-update-rc`).
-
-### 3. New install backend
-
-1. Add a `PackageManager` subclass to `installers/managers.py`: set `id`, `supported_os` (or `None`), `priority`, and implement `install(self, ctx, spec)`. Defining the class registers it.
-2. Define/validate its own spec type if a bare string isn't enough (cf. `Deb`, `Script`).
-
-### 4. New dotfile delivered to `$HOME`
-
-1. Put the file under `sources/root/` preserving its `$HOME`-relative path.
-2. Optionally add ignore patterns to `sources/.ex_list` if the file/dir produces runtime noise (cache, lock, swap).
-3. On the next bootstrap, `stage_dotfiles` rsyncs it into the staging dir and `link_dotfiles` symlinks it into `$HOME` (skipping pre-existing real files).
+- **`home.stateVersion`** — pinned to the first-built release; don't bump casually.
+- **`DRY_RUN`** — do not use this name in bootstrap; it collides with HM activate.
+- **fzf-tab ordering** (`home/shell.nix`) — completions → fzf-tab →
+  autosuggestions → syntax-highlighting-last is correctness-critical;
+  `autosuggestion.enable = false` is intentional (loaded as a plugin after
+  fzf-tab). Don't "simplify" it.
+- **CERNET / mirror wiring** — deliberate, gated on `DOTFILE_NETWORK_ENV=CN`;
+  don't hardcode mirrors unconditionally.
+- **`sources/`** — legacy assets; not deployed by HM. Don't wire back in blindly.
+- **Legacy ADRs 0001–0006** — describe the retired Python pipeline; ADR-0007
+  governs. Don't cite them as current design.
 
 ## Hard rules
 
-- Cite `file:line` for any claim about conventions or structure (done above).
-- **No test framework is configured** — there are no tests in this repo. Verify changes with `uv run main.py --dry-run --verbose`, which prints every command without executing.
-- Components are runner-agnostic: take `ctx`, route every command through `ctx.run_command`, honor dry-run.
-- Don't reintroduce `curl | bash`; reuse the `scripts` backend (download then execute).
-- The orchestrator picks the backend; a component never chooses its own (ADR-0003).
+- Cite `file:line` for claims about structure/conventions.
+- No test framework: verify with `./bootstrap.sh --dry-run --verbose`, `nix
+  flake check`, and container runs (Debian/Ubuntu/NixOS — see RFC-0001).
+- Keep the two layers separate: declarative intent in `home/`, imperative
+  remainder in `platform/`.

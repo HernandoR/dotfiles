@@ -122,6 +122,12 @@
         for f in "$HOME/.proxy" "$HOME/.extra"; do
           [ -r "$f" ] && . "$f"
         done
+
+        # One-line hint while the deferred (interactive) Claude/Lark/MCP setup is
+        # still pending — run it manually with `dotfiles-postsetup` (ADR-0007).
+        if [ -f "$HOME/.local/share/dotfiles/post-login-setup.sh" ]; then
+          print -P "%F{yellow}dotfiles:%f Claude/Lark/MCP setup pending — run %F{cyan}dotfiles-postsetup%f"
+        fi
       '')
     ];
   };
