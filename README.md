@@ -147,6 +147,18 @@ from nixpkgs). Add it with `--system brew` (or `--system all`); on CN it uses th
 BFSU mirror. It installs Homebrew *itself* only — add GUI apps yourself with
 `brew install --cask <app>`.
 
+For the GUI apps, there's a manual **interactive cask picker** (not auto-run):
+
+```bash
+./platform/brew-cask-interactive-install.sh
+```
+
+It runs a small `uv` script ([platform/brew_cask_install.py](platform/brew_cask_install.py),
+deps declared inline via uv script mode) that shows the recommended casks as a
+checklist (Edge + Alacritty pre-checked — edit the list in the file), lets you
+pick a Homebrew mirror for the run (default follows `DOTFILE_NETWORK_ENV`), then
+installs your selection.
+
 List them anytime: `uv run platform/installers/components.py`.
 
 ## Post-login interactive setup

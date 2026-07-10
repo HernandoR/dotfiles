@@ -493,3 +493,11 @@ skips darwin; it relies on each component's `supported_os`. Fixed a latent bug
 found in passing: `docker-rootless` had no explicit `supported_os` (derived
 all-OS from the scripts backend), so `--system all` on macOS would have tried to
 install it — now pinned to `("debian", "ubuntu")`.
+
+Follow-up (owner request): added a **manual, interactive cask picker** for the
+GUI apps — `platform/brew-cask-interactive-install.sh` runs a uv script
+(`brew_cask_install.py`; deps declared inline via uv script mode: `questionary`)
+that shows the recommended casks as a checklist (Edge + Alacritty pre-checked;
+owner edits the rest), lets the Homebrew mirror be changed for that run (default
+from `DOTFILE_NETWORK_ENV`), then `brew install --cask`s the selection. Not
+auto-run.
