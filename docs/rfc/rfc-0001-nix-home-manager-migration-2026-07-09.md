@@ -391,3 +391,37 @@ Bugs found and fixed along the way (all in the imperative layer, not the flake):
 
 Net: bare docker containers now run the full bootstrap. Remaining: the real-macOS
 switch (owner's daily driver).
+
+### 2026-07-10 — Real-machine finding: HM tools missing from PATH in a fresh login shell
+
+Running `./bootstrap.sh` on the owner's real Ubuntu host completed cleanly, but
+the follow-up `exec zsh` / `which zsh` failed. Two distinct issues surfaced:
+
+1. **Misleading final message.** bootstrap runs in a *child* shell, so its
+   `PATH` export dies with the process and the parent shell can't see `zsh`.
+   `chsh` had already made zsh the login shell, so a re-login works — but the
+   old advice "open a new shell (or `exec zsh`)" fails in the *current* session.
+   Fixed: the final message now prints a PATH-independent absolute command
+   (`exec ~/.nix-profile/bin/zsh -l`) and notes that re-login also works.
+
+2. **The real bug — the nix profile is not on PATH.** In a *fresh* login zsh
+   (clean env, like a real re-login) none of the HM-installed tools (`uv`,
+   `jj`, `rg`, `fd`, `gh`, `nix`, …) were reachable by name. Root cause:
+   **standalone Home Manager does not put the nix profile bin on `PATH`
+   itself** — it relies on Nix's own shell hook (`nix-daemon.sh` / `nix.sh`).
+   On a *multi-user* install the Nix installer patches `/etc/zshrc`, so the
+   owner's real machine likely recovers on re-login; but on a
+   *single-user/container* install nothing patches `/etc` and HM owns the zsh
+   files, so the profile bin is absent. The starship prompt still rendered —
+   masking the gap — only because HM's init hooks invoke tools by *absolute
+   store path* (`eval "$(/nix/store/…/starship init zsh)"`). Fixed
+   declaratively: `home.sessionPath` now includes `~/.nix-profile/bin` and
+   `/nix/var/nix/profiles/default/bin`, so tools (and `nix`) are reachable by
+   name in every interactive shell on every host, independent of `/etc`
+   patching. This corrects the ADR-0007 assumption that "standalone HM only
+   *adds* to PATH" — it does, but not the nix profile itself.
+
+Verified: a fresh clean-env login zsh in a bare debian container now resolves
+all 11 sampled tools + `nix` to `~/.nix-profile/bin/*`; the mac host still
+evaluates with the two new `sessionPath` entries. Remaining: the real-macOS
+switch (owner's daily driver).

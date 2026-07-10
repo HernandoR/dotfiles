@@ -127,9 +127,18 @@
   };
 
   # Static PATH additions (kept from the old .path; missing dirs are harmless).
+  # The two nix profile dirs are essential: standalone Home Manager does NOT put
+  # them on PATH itself — it assumes Nix's own shell integration
+  # (nix-daemon.sh / nix.sh) already did. That holds on a multi-user install
+  # where the installer patches /etc/zshrc, but NOT in a single-user/container
+  # install (HM owns the zsh files, nothing sources nix). Adding them here makes
+  # the HM-installed tools (uv, jj, rg, fd, …) and `nix` reachable by name in
+  # every interactive shell, on every host, independent of /etc patching.
   home.sessionPath = [
     "${config.home.homeDirectory}/bin"
     "${config.home.homeDirectory}/.local/bin"
+    "${config.home.homeDirectory}/.nix-profile/bin" # HM-installed CLI tools
+    "/nix/var/nix/profiles/default/bin" # `nix` on a multi-user install
     "${config.home.homeDirectory}/.pixi/bin"
     "${config.home.homeDirectory}/miniconda3/bin"
     "/usr/local/cuda/bin"

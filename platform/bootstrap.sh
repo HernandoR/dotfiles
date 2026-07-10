@@ -104,6 +104,10 @@ else
   # HM packages (uv, zsh, …) live in the generation's home-path, not
   # ~/.nix-profile. Put them on PATH so the post-HM Python steps can find uv.
   export PATH="$hm_out/home-path/bin:$PATH"
+  # A PATH-independent zsh to hand the user at the end (see the final message).
+  # Prefer the stable profile symlink; fall back to this build's home-path.
+  zsh_bin="$HOME/.nix-profile/bin/zsh"
+  [ -x "$zsh_bin" ] || zsh_bin="$hm_out/home-path/bin/zsh"
 fi
 
 # ---- post-HM (python via uv; uv now exists on the HM profile) ---------------
@@ -121,4 +125,14 @@ else
   run "UV_PYTHON_PREFERENCE=system uv run \"$PLATFORM_DIR/setup.py\" $post_args"
 fi
 
-log "Bootstrap complete. Open a new shell (or 'exec zsh') to activate the Nix env."
+# The parent shell that launched bootstrap keeps its old PATH — zsh is NOT on it
+# yet, so a bare `zsh` / `exec zsh` fails here. chsh has already made zsh the
+# login shell, so a fresh login (new terminal / SSH) starts it automatically; to
+# switch *this* session now, exec the absolute path (independent of PATH).
+log "Bootstrap complete."
+if [ "$DF_DRY_RUN" = 1 ]; then
+  log "(dry-run) afterwards, start the Nix shell with: exec zsh -l"
+else
+  log "Your login shell is now zsh — re-login (new terminal / SSH) to get it, or switch this session now:"
+  printf '\n    exec %s -l\n\n' "$zsh_bin"
+fi

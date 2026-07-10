@@ -199,7 +199,11 @@ superseded ADRs.
 - **Project shell scripts keep working**: standalone HM only *adds* to `PATH`;
   the system still provides `/bin/bash` and `/usr/bin/env`, so purity breakage
   does not reach the login shell (it would only bite under NixOS or a
-  `nix develop` pure shell, neither of which we adopt).
+  `nix develop` pure shell, neither of which we adopt). Note HM does **not** put
+  the nix profile bin on `PATH` on its own — it assumes Nix's shell hook does,
+  which is absent on single-user/container installs — so `home.sessionPath`
+  names `~/.nix-profile/bin` and `/nix/var/nix/profiles/default/bin` explicitly,
+  making the HM tools and `nix` reachable by name on every host.
 - **System-level work stays imperative.** docker/cuda/nvidia/llvm, GUI apps, and
   the login-shell change are not declarative on non-NixOS hosts; the `platform/`
   layer carries them, so the design is a hybrid, not "everything in Nix."
