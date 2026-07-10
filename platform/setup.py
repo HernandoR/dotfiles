@@ -156,8 +156,11 @@ def deploy_ssh_keys(ctx):
 
 
 def setup_claude(ctx):
-    """Install the Claude Code CLI + schedule the interactive post-login setup
-    (plugins/MCP/Lark), which runs via ~/.extra with node from mise. No privilege."""
+    """Install the Claude Code CLI + write the deferred interactive setup
+    (plugins/MCP/Lark). It needs a TTY, so it is NOT auto-run; the user invokes
+    it once via the `dotfiles-postsetup` shell function (node/npx from mise). The
+    HM zsh prints a one-line reminder while the script is still present. No
+    privilege."""
     deferred = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
     if shutil.which("claude"):
         logger.info("claude CLI already installed")
@@ -171,9 +174,10 @@ def setup_claude(ctx):
     mcp = ("@upstash/context7-mcp", "@modelcontextprotocol/server-memory")
     lines = [
         "#!/usr/bin/env bash",
-        "# Claude post-login setup (platform/setup.py). Sourced by ~/.extra once;",
-        "# node/npx come from mise in the interactive HM shell. Self-removes.",
-        'command -v npx >/dev/null 2>&1 || { echo "npx missing (mise node?); skip"; return 0 2>/dev/null || exit 0; }',
+        "# Claude/Lark/MCP setup (written by platform/setup.py). Run manually via the",
+        "# `dotfiles-postsetup` shell function; node/npx come from mise. Self-removes",
+        "# on success (a missing npx leaves it in place so you can re-run later).",
+        'command -v npx >/dev/null 2>&1 || { echo "npx missing (mise node?); skip"; exit 0; }',
         "claude plugin marketplace add hernandor/agent-skillset || true",
         *[f"claude plugin install {p}@agent-skillset --scope user || true" for p in plugins],
         *[f"npx -y @smithery/cli@latest install {p} --client claude || true" for p in mcp],
@@ -183,24 +187,24 @@ def setup_claude(ctx):
     deferred.parent.mkdir(parents=True, exist_ok=True)
     deferred.write_text("\n".join(lines) + "\n")
     deferred.chmod(0o755)
-    logger.info("Claude deferred setup written -> %s (runs on first login via ~/.extra)", deferred)
+    logger.info("Claude/Lark/MCP setup written -> %s (run it with: dotfiles-postsetup)", deferred)
 
 
-def run_system(ctx, names):
-    """Install opt-in Linux system components (docker/cuda/nvidia/llvm)."""
+def run_system(ctx, spec):
+    """Install opt-in Linux system components. `spec` is a comma-separated string
+    of names / alias groups / the `all` keyword (see OptionalComponent.resolve)."""
     if ctx.priv == "none":
-        logger.warning("no privilege: skipping system components: %s", ", ".join(names))
+        logger.warning("no privilege: skipping system components: %s", spec)
         return
     if ctx.os_type == "darwin":
         logger.info("system components are Linux-only; skipping on macOS")
         return
+    names = OptionalComponent.resolve(spec)
+    if not names:
+        logger.info("no valid system components in '%s' (have: %s, all)", spec, ", ".join(OptionalComponent.names()))
+        return
+    logger.info("system components: %s", ", ".join(names))
     for name in names:
-        name = name.strip()
-        if not name:
-            continue
-        if name not in OptionalComponent.names():
-            logger.warning("unknown system component '%s' (have: %s)", name, ", ".join(OptionalComponent.names()))
-            continue
         OptionalComponent.get(name).run(ctx)
 
 
@@ -208,19 +212,23 @@ def main():
     ap = argparse.ArgumentParser(description="Post-Home-Manager imperative setup")
     ap.add_argument("--priv", choices=["root", "sudo", "none"], default="sudo")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--system", default="", help="comma-separated: docker,cuda,nvidia,llvm,...")
+    ap.add_argument("--system", default="", help="comma-separated: docker,cuda,nvidia,llvm,... or 'all'")
     ap.add_argument("--no-claude", action="store_true", help="skip Claude post-setup")
     args = ap.parse_args()
 
     ctx = Ctx(priv=args.priv, dry_run=args.dry_run)
     logger.info("post-HM setup | os=%s priv=%s dry_run=%s", ctx.os_type, ctx.priv, ctx.dry_run)
 
+    # System components: --system wins; else the DOTFILE_SYSTEM_COMPONENTS env
+    # var (convenient for platform injection). 'all' selects every component.
+    system_spec = args.system or os.environ.get("DOTFILE_SYSTEM_COMPONENTS", "")
+
     set_login_shell(ctx)
     deploy_ssh_keys(ctx)
     if not args.no_claude:
         setup_claude(ctx)
-    if args.system:
-        run_system(ctx, args.system.split(","))
+    if system_spec:
+        run_system(ctx, system_spec)
     logger.info("post-HM setup complete.")
 
 

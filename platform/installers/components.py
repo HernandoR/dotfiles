@@ -84,18 +84,27 @@ class OptionalComponent(Component):
 
     @classmethod
     def resolve(cls, raw):
+        """Resolve a comma-separated spec to a de-duplicated, ordered component
+        list. Accepts individual names, alias groups, and the special ``all``
+        keyword (every registered component). Mutually exclusive components are
+        reconciled (rootful Docker wins over rootless)."""
         groups = cls.alias_groups()
         requested = set()
         for part in raw.split(","):
             part = part.strip().lower()
             if not part:
                 continue
-            if part in groups:
+            if part == "all":
+                requested.update(cls._registry.keys())
+            elif part in groups:
                 requested.update(groups[part])
             elif part in cls._registry:
                 requested.add(part)
             else:
                 logger.warning("Unknown component: %s", part)
+        if "docker" in requested and "docker-rootless" in requested:
+            requested.discard("docker-rootless")
+            logger.info("docker + docker-rootless both selected; keeping rootful docker")
         return [name for name in cls._registry if name in requested]
 
     @classmethod

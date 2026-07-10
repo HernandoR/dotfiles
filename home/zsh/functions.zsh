@@ -167,3 +167,16 @@ function o() {
 function tre() {
 	tree -aC -I '.git|node_modules|bower_components' --dirsfirst "$@" | less -FRNX;
 }
+
+# Run the deferred, interactive Claude/Lark/MCP setup written by
+# platform/setup.py (plugins, MCP servers, Lark CLI auth). It needs a TTY, so it
+# is NOT run automatically — invoke it once when you are ready to authorize.
+# The script self-removes on success and is safe to re-run.
+function dotfiles-postsetup() {
+	local s="$HOME/.local/share/dotfiles/post-login-setup.sh";
+	if [ -f "$s" ]; then
+		bash "$s";
+	else
+		echo "dotfiles: nothing to do (post-login setup already completed or skipped).";
+	fi;
+}

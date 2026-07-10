@@ -38,6 +38,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 export DF_DRY_RUN DF_VERBOSE
+# --system wins; otherwise fall back to DOTFILE_SYSTEM_COMPONENTS (platform can
+# inject it). 'all' selects every optional component (see setup.py / ADR-0007).
+SYSTEM_COMPONENTS="${SYSTEM_COMPONENTS:-${DOTFILE_SYSTEM_COMPONENTS:-}}"
 # shellcheck source=platform/lib.sh
 . "$PLATFORM_DIR/lib.sh"
 
