@@ -146,7 +146,12 @@ GUI casks, Claude deferred OAuth (ADR-0005), SSH-key copy (ADR-0006), codegraph
 
 These opt-in system components are selected with `--system <list>` or the
 `DOTFILE_SYSTEM_COMPONENTS` env var (flag wins); the `all` keyword installs every
-component (rootless docker wins over rootful). The Claude/Lark/MCP setup is
+component (rootless docker wins over rootful). macOS is **not** left without a
+package manager: an opt-in `brew` component installs **Homebrew itself only** (no
+formulae/casks — CLI tools come from nixpkgs; GUI apps are added later via `brew
+install --cask`). Each component declares `supported_os`, so `--system all`
+installs only what applies to the host (Linux components skip on macOS and vice
+versa). The Claude/Lark/MCP setup is
 **interactive** so it is not auto-run: `setup.py` writes
 `~/.local/share/dotfiles/post-login-setup.sh`, the HM zsh prints a reminder while
 it is pending, and the user runs it once via the `dotfiles-postsetup` function

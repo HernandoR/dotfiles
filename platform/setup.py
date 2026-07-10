@@ -196,9 +196,8 @@ def run_system(ctx, spec):
     if ctx.priv == "none":
         logger.warning("no privilege: skipping system components: %s", spec)
         return
-    if ctx.os_type == "darwin":
-        logger.info("system components are Linux-only; skipping on macOS")
-        return
+    # Each component declares its own supported_os; Component.run() skips the
+    # non-applicable ones (e.g. Linux docker/cuda on macOS, macOS brew on Linux).
     names = OptionalComponent.resolve(spec)
     if not names:
         logger.info("no valid system components in '%s' (have: %s, all)", spec, ", ".join(OptionalComponent.names()))
