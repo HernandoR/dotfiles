@@ -478,3 +478,18 @@ Verification plan change: rather than switching the owner's daily-driver mac
 recoverable bootstrap + rollback procedure (activation with `-b backup`,
 `home-manager switch --rollback` / `uninstall`, restoring `*.backup`, `chsh`
 back) is now documented in `README.md` for that run.
+
+### 2026-07-10 — macOS Homebrew gap
+
+Owner noticed Homebrew is not installed after bootstrap on macOS. This is
+by-design (the migration descoped macOS system provisioning: "GUI casks not
+forced", the old `MacBrew` component removed). CLI tools now come from nixpkgs,
+so the real gap is only GUI apps. **Decision: add an opt-in macOS `brew`
+component** that installs **Homebrew itself only** (no formulae/casks; CN → BFSU
+mirror), selected via `--system brew` / `all`; GUI apps are then a manual `brew
+install --cask`. (Rejected: auto-installing a curated cask list — keeps "not
+forced".) To support a macOS system component, `run_system` no longer blanket-
+skips darwin; it relies on each component's `supported_os`. Fixed a latent bug
+found in passing: `docker-rootless` had no explicit `supported_os` (derived
+all-OS from the scripts backend), so `--system all` on macOS would have tried to
+install it — now pinned to `("debian", "ubuntu")`.

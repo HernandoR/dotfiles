@@ -25,7 +25,7 @@ Two layers, split around the Home Manager switch:
 
 ## Layout
 
-```
+```text
 bootstrap.sh          Thin entry → exec platform/bootstrap.sh "$@"
 flake.nix             Inputs (nixpkgs-unstable + home-manager); hosts; mkHome; homeConfigurations
 flake.lock            Pinned inputs
@@ -128,11 +128,13 @@ plus the `installers` package only). Steps: `set_login_shell` (chsh to
   `/nix/var/nix/profiles/default/bin` (standalone HM does **not** add the nix
   profile to PATH itself).
 - **System-level = opt-in `OptionalComponent`** (`installers/components.py`):
-  `docker`, `docker-rootless`, `cuda`, `nvidia`, `llvm`, `software-properties`.
-  Selected via `--system <list>` **or** the `DOTFILE_SYSTEM_COMPONENTS` env var
-  (flag wins). `OptionalComponent.resolve()` accepts names, alias groups, and
-  the `all` keyword (every component; rootless docker wins over rootful). These
-  are Linux-only, need privilege, and run last. The ADR-0003 install machinery
+  Linux — `docker`, `docker-rootless`, `cuda`, `nvidia`, `llvm`,
+  `software-properties`; macOS — `brew` (installs Homebrew itself only, no
+  formulae/casks). Selected via `--system <list>` **or** the
+  `DOTFILE_SYSTEM_COMPONENTS` env var (flag wins). `OptionalComponent.resolve()`
+  accepts names, alias groups, and the `all` keyword (every component; rootless
+  docker wins over rootful). Each declares `supported_os`, so `--system all`
+  installs only what applies to the host; they need privilege and run last. The ADR-0003 install machinery
   (declarative `installs = {manager_id: spec}` resolved through a
   `PackageManager` backend, with an imperative `install(ctx)` override for
   multi-step installs) is unchanged.

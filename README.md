@@ -140,6 +140,12 @@ DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 | `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
 | `nvidia` | NVIDIA driver + container toolkit | debian, ubuntu |
 | `llvm` | LLVM 18 (+ `update-alternatives`) | debian, ubuntu |
+| `brew` | Homebrew — the package manager only (no formulae/casks) | darwin |
+
+On macOS the bootstrap does **not** install Homebrew by default (CLI tools come
+from nixpkgs). Add it with `--system brew` (or `--system all`); on CN it uses the
+BFSU mirror. It installs Homebrew *itself* only — add GUI apps yourself with
+`brew install --cask <app>`.
 
 List them anytime: `uv run platform/installers/components.py`.
 

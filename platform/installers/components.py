@@ -14,6 +14,7 @@ an imperative ``install(ctx)`` override for multi-step installs.
 import logging
 import os
 import pathlib
+import shutil
 
 from installers.managers import Deb, PackageManager, Script  # noqa: F401
 
@@ -142,7 +143,12 @@ class Docker(OptionalComponent):
 class DockerRootless(OptionalComponent):
     name = "docker-rootless"
     description = "Docker (rootless)"
-    installs = {"scripts": Script("https://get.docker.com/rootless", interpreter="sh")}
+    supported_os = ("debian", "ubuntu")  # explicit: the scripts backend is all-OS, but this is Linux-only
+
+    def install(self, ctx):
+        ctx.package_manager("scripts").install(
+            ctx, Script("https://get.docker.com/rootless", interpreter="sh")
+        )
 
 
 class Cuda(OptionalComponent):
@@ -236,6 +242,43 @@ class Llvm(OptionalComponent):
                         ["update-alternatives", "--install", f"/usr/bin/{base_name}",
                          base_name, str(file), "1"]
                     )
+
+
+class Homebrew(OptionalComponent):
+    name = "brew"
+    description = "Homebrew (macOS) — the package manager only, no formulae/casks"
+    supported_os = ("darwin",)
+
+    def install(self, ctx):
+        # User-level CLI tools come from nixpkgs; this installs Homebrew *itself*
+        # so GUI apps can be added later with `brew install --cask …`. Idempotent.
+        if shutil.which("brew") or pathlib.Path("/opt/homebrew/bin/brew").exists():
+            logger.info("Homebrew already installed; skipping.")
+            return
+        if os.environ.get("DOTFILE_NETWORK_ENV") == "CN":
+            # BFSU mirror, non-interactive (faithful to the old install_homebrew).
+            ctx.run_command(
+                ["git", "clone", "--depth=1",
+                 "https://mirrors.bfsu.edu.cn/git/homebrew/install.git", "/tmp/brew-install"]
+            )
+            ctx.run_command(
+                "export HOMEBREW_API_DOMAIN=https://mirrors.bfsu.edu.cn/homebrew-bottles/api && "
+                "export HOMEBREW_BOTTLE_DOMAIN=https://mirrors.bfsu.edu.cn/homebrew-bottles && "
+                "export HOMEBREW_BREW_GIT_REMOTE=https://mirrors.bfsu.edu.cn/git/homebrew/brew.git && "
+                "export NONINTERACTIVE=1 && /bin/bash /tmp/brew-install/install.sh",
+                shell=True,
+            )
+            ctx.run_command(["rm", "-rf", "/tmp/brew-install"])
+        else:
+            # Official installer via the scripts backend (download-then-run).
+            ctx.package_manager("scripts").install(
+                ctx,
+                Script(
+                    "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh",
+                    interpreter="bash",
+                    env={"NONINTERACTIVE": "1"},
+                ),
+            )
 
 
 def main():
