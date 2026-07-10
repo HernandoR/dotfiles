@@ -211,16 +211,21 @@ def main():
     ap = argparse.ArgumentParser(description="Post-Home-Manager imperative setup")
     ap.add_argument("--priv", choices=["root", "sudo", "none"], default="sudo")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--system", default="", help="comma-separated: docker,cuda,nvidia,llvm,... or 'all'")
+    ap.add_argument("--system", default="",
+                    help="comma-separated components, or 'all' / 'default' / 'none' "
+                         "(unset = the 'default' group)")
     ap.add_argument("--no-claude", action="store_true", help="skip Claude post-setup")
     args = ap.parse_args()
 
     ctx = Ctx(priv=args.priv, dry_run=args.dry_run)
     logger.info("post-HM setup | os=%s priv=%s dry_run=%s", ctx.os_type, ctx.priv, ctx.dry_run)
 
-    # System components: --system wins; else the DOTFILE_SYSTEM_COMPONENTS env
-    # var (convenient for platform injection). 'all' selects every component.
-    system_spec = args.system or os.environ.get("DOTFILE_SYSTEM_COMPONENTS", "")
+    # System components: --system wins; else DOTFILE_SYSTEM_COMPONENTS; else the
+    # `default` group (brew on macOS + software-properties on Linux, each gated
+    # by its own supported_os). `all` = every component; `none` = skip entirely.
+    system_spec = args.system or os.environ.get("DOTFILE_SYSTEM_COMPONENTS") or "default"
+    if system_spec.strip().lower() == "none":
+        system_spec = ""
 
     set_login_shell(ctx)
     deploy_ssh_keys(ctx)

@@ -134,8 +134,11 @@ plus the `installers` package only). Steps: `set_login_shell` (chsh to
   formulae/casks). Selected via `--system <list>` **or** the
   `DOTFILE_SYSTEM_COMPONENTS` env var (flag wins). `OptionalComponent.resolve()`
   accepts names, alias groups, and the `all` keyword (every component; rootless
-  docker wins over rootful). Each declares `supported_os`, so `--system all`
-  installs only what applies to the host; they need privilege and run last. The ADR-0003 install machinery
+  docker wins over rootful). **With nothing specified, `setup.py` installs the
+  `default` group** (`groups = {"default"}` → `brew` on macOS +
+  `software-properties` on Linux); `--system none` skips. Each declares
+  `supported_os`, so a spec installs only what applies to the host; they need
+  privilege and run last. The ADR-0003 install machinery
   (declarative `installs = {manager_id: spec}` resolved through a
   `PackageManager` backend, with an imperative `install(ctx)` override for
   multi-step installs) is unchanged.

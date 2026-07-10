@@ -501,3 +501,18 @@ that shows the recommended casks as a checklist (Edge + Alacritty pre-checked;
 owner edits the rest), lets the Homebrew mirror be changed for that run (default
 from `DOTFILE_NETWORK_ENV`), then `brew install --cask`s the selection. Not
 auto-run.
+
+### 2026-07-10 — Default system components
+
+Owner wanted some system components installed by default (previously all were
+opt-in, "zero by default"). **Decision:** introduce a `default` group
+(`groups = {"default"}`); when no `--system`/env spec is given, `setup.py`
+installs it. Chosen defaults: **`brew` (macOS)** + **`software-properties`
+(Linux)** — each still gated by `supported_os`, so only the OS-appropriate one
+runs. `docker`/`docker-rootless`/`llvm` remain opt-in; `cuda`/`nvidia` are
+deliberately excluded from defaults (hardware-specific — installing them on a
+GPU-less box is wrong). Specs `all` / `default` / `none` are recognized; `none`
+skips system components entirely. This revises ADR-0007's earlier "zero system
+components by default" stance (ADR updated). Verified per-OS: macOS default →
+brew (software-properties skips), Linux default → software-properties (brew
+skips), `--system none` → nothing.

@@ -144,14 +144,17 @@ NVIDIA drivers, LLVM + `update-alternatives`, apt/brew **system** packages and
 GUI casks, Claude deferred OAuth (ADR-0005), SSH-key copy (ADR-0006), codegraph
 (not in nixpkgs), and `chsh` to the Nix-provided zsh.
 
-These opt-in system components are selected with `--system <list>` or the
-`DOTFILE_SYSTEM_COMPONENTS` env var (flag wins); the `all` keyword installs every
-component (rootless docker wins over rootful). macOS is **not** left without a
-package manager: an opt-in `brew` component installs **Homebrew itself only** (no
-formulae/casks — CLI tools come from nixpkgs; GUI apps are added later via `brew
-install --cask`). Each component declares `supported_os`, so `--system all`
-installs only what applies to the host (Linux components skip on macOS and vice
-versa). The Claude/Lark/MCP setup is
+System components are selected with `--system <list>` or the
+`DOTFILE_SYSTEM_COMPONENTS` env var (flag wins). Special specs: `all` (every
+component; rootless docker wins over rootful), `default` (the default group),
+`none` (skip). **When nothing is specified, the `default` group installs** —
+currently `brew` on macOS + `software-properties` on Linux. Everything else
+(docker/docker-rootless/cuda/nvidia/llvm) stays opt-in; `cuda`/`nvidia` are
+deliberately not defaulted (hardware-specific). The macOS `brew` component
+installs **Homebrew itself only** (no formulae/casks — CLI tools come from
+nixpkgs; GUI apps are added later via `brew install --cask`, or the interactive
+picker). Each component declares `supported_os`, so a spec installs only what
+applies to the host (Linux components skip on macOS and vice versa). The Claude/Lark/MCP setup is
 **interactive** so it is not auto-run: `setup.py` writes
 `~/.local/share/dotfiles/post-login-setup.sh`, the HM zsh prints a reminder while
 it is pending, and the user runs it once via the `dotfiles-postsetup` function
