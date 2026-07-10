@@ -101,12 +101,30 @@ home/
   misc.nix             # xdg.configFile.source: helix/lvim/zellij/alacritty/condarc/ruff verbatim
 hosts/
   <host>/home.nix      # per-machine: username, system, extras
-platform/              # thin imperative layer (slimmed reuse of today's main.py/installers)
-  bootstrap.sh         # install Lix + write CN-mirror nix.conf → home-manager switch --flake .#<host>
-  system.py            # docker / cuda / nvidia / llvm / apt·brew system packages (Linux/mac system-level)
-  claude.py            # Claude Code deferred OAuth post-setup (ADR-0005)
-  ssh.py               # SSH-key copy (secrets, out of Nix — ADR-0006)
+platform/              # imperative layer, split around the Home Manager switch
+  bootstrap.sh         # PRE-HM (shell): privilege → prereqs → install Lix → nix config (+CN mirror) → home-manager switch
+  lib.sh               # shared shell helpers (privilege, OS/host detect, Lix install)
+  nix-cn.sh            # flakes + CN mirror gating (system nix.conf) + persist network-env
+  setup.py             # POST-HM (python via `uv run`): login shell, SSH keys, Claude, system components
+  installers/          # PackageManager backends + system components (docker/cuda/nvidia/llvm), reused by setup.py
 ```
+
+The imperative layer is split around the switch: **pre-HM is shell** (nix/uv do
+not exist yet), **post-HM is Python run via `uv run`** (uv + a Python are on the
+HM profile by then, and Python is more maintainable for the multi-step system
+installs — it reuses the ADR-0003 `PackageManager`/`Component` machinery). `uv`
+owns the Python interpreter; no nix-provided `python3`.
+
+**Privilege model.** `bootstrap.sh` detects `root` / `sudo` / `none`: `root`
+runs privileged steps directly (sudo stripped), `sudo` uses sudo, `none` skips
+every privileged step and — if nix is not installed (and cannot be, without
+privilege) — exits cleanly. The user-level steps (HM switch, SSH keys, Claude)
+always run.
+
+**Any user / root.** Named hosts assume the owner (`lz`). An impure `generic`
+host reads `$USER`/`$HOME` via `builtins.getEnv` (so it works for root or any
+other user under `--impure`); it is gated behind `optionalAttrs`, so it stays
+invisible to a pure `nix flake check`.
 
 ### 7. Disposition of current assets
 

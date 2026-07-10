@@ -28,6 +28,11 @@
       zellij
       _1password-cli # `op`
 
+      # Python: uv manages Python distributions and runs the platform/ post-HM
+      # setup scripts via `uv run`. No nix-provided python3 — uv owns the
+      # interpreter (ADR-0007).
+      uv
+
       # Fonts
       nerd-fonts.fira-code
     ]

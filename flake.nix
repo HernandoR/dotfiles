@@ -33,7 +33,7 @@
 
       mkHome =
         hostName:
-        { system, username, extraModules ? [ ] }:
+        { system, username, homeDirectory ? null, extraModules ? [ ] }:
         home-manager.lib.homeManagerConfiguration {
           # Instantiate here (not legacyPackages) so allowUnfree applies — the
           # 1Password CLI is unfree. HM's own nixpkgs.config is ignored when a
@@ -42,11 +42,30 @@
             inherit system;
             config.allowUnfree = true;
           };
-          extraSpecialArgs = { inherit inputs hostName username system; };
+          extraSpecialArgs = { inherit inputs hostName username system homeDirectory; };
           modules = [ ./home ] ++ extraModules;
         };
     in
     {
-      homeConfigurations = builtins.mapAttrs mkHome hosts;
+      # Named hosts are pure and reproducible. `generic` is an impure fallback
+      # for arbitrary users (including root): it reads $USER/$HOME at eval time,
+      # so it only materializes under `--impure` and stays invisible to a pure
+      # `nix flake check`. platform/bootstrap.sh falls back to it when no named
+      # host matches the current machine/user.
+      homeConfigurations =
+        (builtins.mapAttrs mkHome hosts)
+        // (
+          let
+            u = builtins.getEnv "USER";
+            h = builtins.getEnv "HOME";
+          in
+          nixpkgs.lib.optionalAttrs (u != "" && h != "") {
+            generic = mkHome "generic" {
+              system = builtins.currentSystem;
+              username = u;
+              homeDirectory = h;
+            };
+          }
+        );
     };
 }
