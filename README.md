@@ -200,8 +200,9 @@ already installed, so the script calls `smithery` directly (no `npx`). It:
    endpoint (`https://mcp.smithery.run/<namespace>`) to Claude via
    `smithery mcp add … --client claude`, falling back to
    `claude mcp add --transport http <namespace> https://mcp.smithery.run/<namespace>`.
-3. Adds a couple of individual registry servers (e.g. `upstash/context7-mcp`) on
-   top.
+3. Leaves a **commented-out** `smithery mcp add <server> --client claude` line
+   (e.g. `upstash/context7-mcp`, which the namespace already covers) as a
+   template for adding a separate server later.
 
 ## China mirrors
 

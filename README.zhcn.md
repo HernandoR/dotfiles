@@ -188,7 +188,8 @@ dotfiles-postsetup    # 需要 TTY；成功后自删除
    （`https://mcp.smithery.run/<namespace>`）通过 `smithery mcp add … --client claude`
    添加到 Claude，失败则回退到
    `claude mcp add --transport http <namespace> https://mcp.smithery.run/<namespace>`。
-3. 在此之上再添加若干独立的注册表服务器（如 `upstash/context7-mcp`）。
+3. 留下一行**已注释**的 `smithery mcp add <server> --client claude`
+   （如 `upstash/context7-mcp`，它已包含在命名空间内），作为日后添加独立服务器的模板。
 
 ## 中国镜像
 

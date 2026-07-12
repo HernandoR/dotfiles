@@ -110,9 +110,9 @@ def setup_claude(ctx):
         logger.info("[DRY-RUN] would write %s", deferred)
         return
     plugins = ("discuss", "implement", "dev_loop", "fetch_external_knowledge")
-    # Individual Smithery-registry MCP servers to connect via the pre-installed
-    # CLI (qualified registry names, not npm specifiers). The namespace endpoint
-    # below usually covers more; these are useful defaults added on top.
+    # Individual Smithery-registry MCP servers (qualified registry names, not npm
+    # specifiers). context7 already lives in the namespace, so these are emitted
+    # COMMENTED OUT — kept as a template for adding a separate server later.
     smithery_servers = ("upstash/context7-mcp",)
     lines = [
         "#!/usr/bin/env bash",
@@ -155,8 +155,8 @@ def setup_claude(ctx):
         '      *) smithery mcp add "https://mcp.smithery.run/$_ns" --name "$_ns" --client claude || claude mcp add --transport http "$_ns" "https://mcp.smithery.run/$_ns" || true ;;',
         "    esac",
         "  fi",
-        "  # Extra individual registry servers (added via the pre-installed CLI).",
-        *[f'  smithery mcp add "{s}" --client claude || true' for s in smithery_servers],
+        "  # Add a separate registry server here (uncomment / copy this line):",
+        *[f'  # smithery mcp add "{s}" --client claude || true' for s in smithery_servers],
         "else",
         r'  echo "smithery CLI not on PATH; skipping Smithery MCP (expected pre-installed)"',
         "fi",
