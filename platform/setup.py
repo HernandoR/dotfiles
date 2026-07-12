@@ -95,10 +95,11 @@ def deploy_ssh_keys(ctx):
 
 def setup_claude(ctx):
     """Install the Claude Code CLI + write the deferred interactive setup
-    (plugins/MCP/Lark). It needs a TTY, so it is NOT auto-run; the user invokes
-    it once via the `dotfiles-postsetup` shell function (node/npx from mise). The
-    HM zsh prints a one-line reminder while the script is still present. No
-    privilege."""
+    (plugins/Smithery-MCP/Lark). It needs a TTY, so it is NOT auto-run; the user
+    invokes it once via the `dotfiles-postsetup` shell function. The Smithery CLI
+    is expected to be pre-installed, so it is called directly (no `npx`); only the
+    Lark CLI still needs npx (node from mise). The HM zsh prints a one-line
+    reminder while the script is still present. No privilege."""
     deferred = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
     if shutil.which("claude"):
         logger.info("claude CLI already installed")
@@ -109,23 +110,70 @@ def setup_claude(ctx):
         logger.info("[DRY-RUN] would write %s", deferred)
         return
     plugins = ("discuss", "implement", "dev_loop", "fetch_external_knowledge")
-    mcp = ("@upstash/context7-mcp", "@modelcontextprotocol/server-memory")
+    # Individual Smithery-registry MCP servers to connect via the pre-installed
+    # CLI (qualified registry names, not npm specifiers). The namespace endpoint
+    # below usually covers more; these are useful defaults added on top.
+    smithery_servers = ("upstash/context7-mcp",)
     lines = [
         "#!/usr/bin/env bash",
-        "# Claude/Lark/MCP setup (written by platform/setup.py). Run manually via the",
-        "# `dotfiles-postsetup` shell function; node/npx come from mise. Self-removes",
-        "# on success (a missing npx leaves it in place so you can re-run later).",
-        'command -v npx >/dev/null 2>&1 || { echo "npx missing (mise node?); skip"; exit 0; }',
+        "# Claude/Smithery/Lark setup (written by platform/setup.py). Run manually via",
+        "# the `dotfiles-postsetup` shell function (needs a TTY); self-removes on",
+        "# success. The Smithery CLI is expected pre-installed, so it is called directly",
+        "# (no npx); only the Lark CLI still needs npx (node from mise).",
+        "",
+        "# --- Claude plugins --------------------------------------------------------",
         "claude plugin marketplace add hernandor/agent-skillset || true",
         *[f"claude plugin install {p}@agent-skillset --scope user || true" for p in plugins],
-        *[f"npx -y @smithery/cli@latest install {p} --client claude || true" for p in mcp],
-        "npx -y @larksuite/cli@latest install || true",
+        "",
+        "# --- Smithery MCP ----------------------------------------------------------",
+        "if command -v smithery >/dev/null 2>&1; then",
+        '  if [ -n "${SMITHERY_API_KEY:-}" ]; then',
+        "    # (a/b) API key present -> offer API-key (Smithery auth) startup. The CLI",
+        "    # reads SMITHERY_API_KEY from the environment automatically.",
+        r'    printf "Detected SMITHERY_API_KEY. Authenticate Smithery with this API key? [Y/n] "',
+        "    read -r _ans",
+        '    case "$_ans" in',
+        '      [Nn]*) echo "smithery: skipping API-key auth" ;;',
+        '      *) smithery auth whoami || echo "smithery: API key did not resolve" ;;',
+        "    esac",
+        "  else",
+        r'    printf "No SMITHERY_API_KEY set. Log in to Smithery interactively now? [y/N] "',
+        "    read -r _ans",
+        '    case "$_ans" in',
+        "      [Yy]*) smithery auth login || true ;;",
+        '      *) echo "smithery: skipping login" ;;',
+        "    esac",
+        "  fi",
+        "  # (c) Namespace form: add the namespace's aggregated MCP endpoint to Claude.",
+        '  _ns="$(smithery namespace show 2>/dev/null | tr -d "[:space:]")"',
+        '  if [ -n "$_ns" ]; then',
+        r'    printf "Add Smithery namespace \"%s\" (https://mcp.smithery.run/%s) to Claude? [Y/n] " "$_ns" "$_ns"',
+        "    read -r _ans",
+        '    case "$_ans" in',
+        '      [Nn]*) echo "smithery: skipping namespace add" ;;',
+        "      # Prefer the Smithery CLI (injects auth); fall back to Claude's own add.",
+        '      *) smithery mcp add "https://mcp.smithery.run/$_ns" --name "$_ns" --client claude || claude mcp add --transport http "$_ns" "https://mcp.smithery.run/$_ns" || true ;;',
+        "    esac",
+        "  fi",
+        "  # Extra individual registry servers (added via the pre-installed CLI).",
+        *[f'  smithery mcp add "{s}" --client claude || true' for s in smithery_servers],
+        "else",
+        r'  echo "smithery CLI not on PATH; skipping Smithery MCP (expected pre-installed)"',
+        "fi",
+        "",
+        "# --- Lark CLI (needs npx / node from mise) ---------------------------------",
+        "if command -v npx >/dev/null 2>&1; then",
+        "  npx -y @larksuite/cli@latest install || true",
+        "else",
+        r'  echo "npx missing (mise node?); skipping Lark CLI install"',
+        "fi",
+        "",
         'rm -f "${BASH_SOURCE[0]}"',
     ]
     deferred.parent.mkdir(parents=True, exist_ok=True)
     deferred.write_text("\n".join(lines) + "\n")
     deferred.chmod(0o755)
-    logger.info("Claude/Lark/MCP setup written -> %s (run it with: dotfiles-postsetup)", deferred)
+    logger.info("Claude/Smithery/Lark setup written -> %s (run it with: dotfiles-postsetup)", deferred)
 
 
 def run_system(ctx, spec):

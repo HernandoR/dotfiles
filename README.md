@@ -180,14 +180,28 @@ List them anytime: `uv run platform/installers/components.py`.
 
 ## Post-login interactive setup
 
-The Claude/Lark/MCP setup (plugins, MCP servers, Lark CLI auth) is *interactive*,
-so it is **not** auto-run. `setup.py` writes it to
+The Claude/Smithery/Lark setup (plugins, MCP servers, Lark CLI auth) is
+*interactive*, so it is **not** auto-run. `setup.py` writes it to
 `~/.local/share/dotfiles/post-login-setup.sh`; the zsh prints a reminder while
 it's pending. Run it once when you're ready to authorize:
 
 ```bash
 dotfiles-postsetup    # needs a TTY; self-removes on success
 ```
+
+**Smithery MCP.** The [Smithery](https://smithery.ai/) CLI is expected to be
+already installed, so the script calls `smithery` directly (no `npx`). It:
+
+1. **API-key auth** — if `SMITHERY_API_KEY` is set in the environment, it asks
+   whether to authenticate with that key. The CLI reads the variable itself, so
+   choosing yes just verifies it via `smithery auth whoami`; with no key set it
+   offers an interactive `smithery auth login` instead.
+2. **Namespace form** — it then offers to add your namespace's aggregated MCP
+   endpoint (`https://mcp.smithery.run/<namespace>`) to Claude via
+   `smithery mcp add … --client claude`, falling back to
+   `claude mcp add --transport http <namespace> https://mcp.smithery.run/<namespace>`.
+3. Adds a couple of individual registry servers (e.g. `upstash/context7-mcp`) on
+   top.
 
 ## China mirrors
 
