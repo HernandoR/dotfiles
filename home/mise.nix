@@ -3,10 +3,9 @@
   # Runtimes: mise manages node + rust (uv still handles Python, out of band).
   # Tools are declared globally; with the zsh `mise activate` integration, a
   # tool's bin only lands on PATH once it is actually installed, and the lazy
-  # "auto-install on first use" only fires for interactive commands. So node +
-  # the npm-backed smithery CLI (both needed by the non-interactive post-login
-  # setup) are materialized eagerly by platform/setup.py (`mise install`); rust
-  # stays lazy, as it is only ever reached interactively.
+  # "auto-install on first use" only fires for interactive commands. So the whole
+  # global config (node, rust, the npm-backed smithery CLI) is materialized
+  # eagerly by platform/setup.py (`mise install`).
   programs.mise = {
     enable = true;
     enableZshIntegration = true;
