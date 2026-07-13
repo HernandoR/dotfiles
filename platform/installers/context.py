@@ -14,20 +14,10 @@ from installers.managers import PackageManager
 logger = logging.getLogger("dotfiles")
 
 
-def detect_priv():
-    """Return 'root' | 'sudo' | 'none' (mirrors platform/lib.sh detect_priv)."""
-    if os.geteuid() == 0:
-        return "root"
-    if shutil.which("sudo"):
-        return "sudo"
-    return "none"
-
-
 class Ctx:
     """Execution context passed to components (the ADR-0003 ``ctx``)."""
 
-    def __init__(self, priv="sudo", dry_run=False, options=None):
-        self.priv = priv  # root | sudo | none — used for gating/logging
+    def __init__(self, dry_run=False, options=None):
         self.dry_run = dry_run
         self.options = options or {}
         self.os_type = self._detect_os()
@@ -36,14 +26,22 @@ class Ctx:
     def is_root(self):
         return os.geteuid() == 0
 
+    @property
+    def priv(self):
+        """Live privilege level — 'root' | 'sudo' | 'none' — for gating and
+        logging. Derived from the running process, so there is no flag to pass
+        or keep in sync; 'none' (non-root, no sudo) marks a session that must
+        skip privileged steps. The sudo-or-not decision itself is _needs_sudo()."""
+        if self.is_root:
+            return "root"
+        return "sudo" if self._needs_sudo() else "none"
+
     @staticmethod
     def _needs_sudo():
         """Whether a privileged command must be prefixed with sudo, decided
-        live from the running process rather than the passed --priv (which may
-        be defaulted or stale, e.g. a root-without-sudo container or a GitHub
-        workspace where the flag never says 'sudo'): true iff we are NOT root
-        but a sudo binary exists. Root needs no sudo; an unprivileged session
-        with no sudo cannot escalate (that command is expected to be gated off)."""
+        live from the running process: true iff we are NOT root but a sudo
+        binary exists. Root needs no sudo; an unprivileged session with no sudo
+        cannot escalate (that command is expected to be gated off via priv)."""
         return os.geteuid() != 0 and shutil.which("sudo") is not None
 
     @staticmethod
