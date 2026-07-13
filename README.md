@@ -189,8 +189,9 @@ it's pending. Run it once when you're ready to authorize:
 dotfiles-postsetup    # needs a TTY; self-removes on success
 ```
 
-**Smithery MCP.** The [Smithery](https://smithery.ai/) CLI is expected to be
-already installed, so the script calls `smithery` directly (no `npx`). It:
+**Smithery MCP.** The [Smithery](https://smithery.ai/) CLI is declared as an
+mise npm tool (`npm:@smithery/cli`) and materialized eagerly by `setup.py`
+alongside node, so the script calls `smithery` directly (no `npx`). It:
 
 1. **API-key auth** — if `SMITHERY_API_KEY` is set in the environment, it asks
    whether to authenticate with that key. The CLI reads the variable itself, so
