@@ -23,7 +23,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # platform/
 import questionary  # noqa: E402
 from installers.components import OptionalComponent  # noqa: E402
-from installers.context import Ctx, detect_priv  # noqa: E402
+from installers.context import Ctx  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,8 +37,8 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="preview; install nothing")
     args = ap.parse_args()
 
-    priv = detect_priv()
-    ctx = Ctx(priv=priv, dry_run=args.dry_run)
+    ctx = Ctx(dry_run=args.dry_run)
+    priv = ctx.priv
 
     applicable = [n for n in OptionalComponent.names() if OptionalComponent.get(n).applicable(ctx)]
     if not applicable:

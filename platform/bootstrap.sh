@@ -119,7 +119,8 @@ if ! command -v uv >/dev/null 2>&1 && [ "$DF_DRY_RUN" != 1 ]; then
   warn "uv not found after switch; skipping the Python post-setup"
 else
   log "post-setup (uv run platform/setup.py): login shell, SSH keys, Claude, system SW"
-  post_args="--priv $PRIV"
+  # setup.py self-detects privilege (Ctx.priv, live) — no --priv to pass.
+  post_args=""
   [ "$DF_DRY_RUN" = 1 ] && post_args="$post_args --dry-run"
   [ -n "$SYSTEM_COMPONENTS" ] && post_args="$post_args --system $SYSTEM_COMPONENTS"
   [ "$NO_CLAUDE" = 1 ] && post_args="$post_args --no-claude"

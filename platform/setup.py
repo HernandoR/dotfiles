@@ -10,9 +10,10 @@ environment; this handles the imperative remainder:
 
     login shell (chsh) · SSH keys (copy) · Claude post-setup · Linux system SW
 
-Privilege: `--priv root|sudo|none`. Privileged calls pass `with_sudo=True`
-(or interpolate `ctx.sudo` in a shell pipeline), so sudo is prepended only
-under `sudo`; root runs bare (no sudo binary) and steps are skipped under `none`.
+Privilege is self-detected (Ctx.priv, live): privileged calls pass
+`with_sudo=True` (or interpolate `ctx.sudo` in a shell pipeline), so sudo is
+prepended only when non-root with a sudo binary; root runs bare and privileged
+steps are skipped entirely when there is no way to escalate (`priv == none`).
 """
 import argparse
 import logging
@@ -196,7 +197,6 @@ def run_system(ctx, spec):
 
 def main():
     ap = argparse.ArgumentParser(description="Post-Home-Manager imperative setup")
-    ap.add_argument("--priv", choices=["root", "sudo", "none"], default="sudo")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--system", default="",
                     help="comma-separated components, or 'all' / 'default' / 'none' "
@@ -204,7 +204,7 @@ def main():
     ap.add_argument("--no-claude", action="store_true", help="skip Claude post-setup")
     args = ap.parse_args()
 
-    ctx = Ctx(priv=args.priv, dry_run=args.dry_run)
+    ctx = Ctx(dry_run=args.dry_run)
     logger.info("post-HM setup | os=%s priv=%s dry_run=%s", ctx.os_type, ctx.priv, ctx.dry_run)
 
     # System components: --system wins; else DOTFILE_SYSTEM_COMPONENTS; else the
