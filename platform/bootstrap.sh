@@ -48,6 +48,14 @@ detect_priv
 OS_TYPE="$(detect_os)"
 log "OS: $OS_TYPE | arch: $(uname -m) | privilege: $PRIV | network: ${DOTFILE_NETWORK_ENV:-default}"
 
+# The `generic` host reads $USER/$HOME via getEnv at flake-eval time; a bare
+# `bash -c` exec context (containers, CI, jcc jobs) often leaves $USER unset, in
+# which case the attribute never materializes and the build dies with a cryptic
+# "flake does not provide attribute … generic". Populate them from the running
+# process so the fallback host always resolves.
+export USER="${USER:-$(id -un)}"
+export HOME="${HOME:-$(getent passwd "$(id -u)" | cut -d: -f6)}"
+
 # ---- host selection ---------------------------------------------------------
 # Named hosts assume the owner (user lz). For any other user (incl. root) fall
 # back to the impure `generic` host, which reads $USER/$HOME at eval time.
