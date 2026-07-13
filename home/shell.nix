@@ -83,6 +83,9 @@
     # user selects the CN network; you can also export the var yourself. When
     # unset, upstream defaults are used (ADR-0007).
     envExtra = ''
+      # Job-controller (jcc devpod) environment, injected by the platform — source
+      # it in every shell so its vars are present in non-interactive ones too.
+      [ -r "$HOME/.jc_env.sh" ] && . "$HOME/.jc_env.sh"
       [ -r "$HOME/.config/dotfiles/network-env" ] && . "$HOME/.config/dotfiles/network-env"
       if [ "$DOTFILE_NETWORK_ENV" = "CN" ]; then
         export UV_INDEX_URL="https://mirrors.cernet.edu.cn/pypi/web/simple"
