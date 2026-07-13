@@ -96,23 +96,21 @@ def deploy_ssh_keys(ctx):
 
 
 def setup_runtimes(ctx):
-    """Materialize the mise-managed runtimes the post-login setup depends on.
+    """Materialize every mise-managed runtime (node, rust, the npm-backed smithery
+    CLI, …) declared in home/mise.nix.
 
-    home/mise.nix declares node + the npm-backed smithery CLI globally, but with
-    the zsh `mise activate` integration a tool's bin only reaches PATH once it is
-    actually installed — the "auto-install on first use" fires only for
+    With the zsh `mise activate` integration a tool's bin only reaches PATH once it
+    is actually installed — the "auto-install on first use" fires only for
     interactive commands, never for the non-interactive bash post-login script
-    (which probes with `command -v`). So drive node + smithery to completion here
-    (as ADR-0002 did for nvm), the way `mise install` would on the first switch.
-    node is installed first so the npm backend has a toolchain. rust stays lazy —
-    it is only ever reached interactively. No privilege."""
+    (which probes with `command -v`). So drive the global config to completion here
+    (as ADR-0002 did for nvm), the way the first `mise install` would. No
+    privilege."""
     mise = shutil.which("mise")
     if not mise:
-        logger.warning("mise not on PATH; skipping runtime install (node + smithery)")
+        logger.warning("mise not on PATH; skipping runtime install")
         return
-    logger.info("installing mise runtimes: node, then the smithery CLI")
-    ctx.run_command([mise, "install", "node"], check=False)
-    ctx.run_command([mise, "install", "npm:@smithery/cli"], check=False)
+    logger.info("installing mise runtimes (node, rust, smithery, …)")
+    ctx.run_command([mise, "install"], check=False)
 
 
 def setup_claude(ctx):
