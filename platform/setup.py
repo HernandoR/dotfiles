@@ -95,13 +95,33 @@ def deploy_ssh_keys(ctx):
     logger.info("SSH keys deployed: %d", n)
 
 
+def setup_runtimes(ctx):
+    """Materialize the mise-managed runtimes the post-login setup depends on.
+
+    home/mise.nix declares node + the npm-backed smithery CLI globally, but with
+    the zsh `mise activate` integration a tool's bin only reaches PATH once it is
+    actually installed — the "auto-install on first use" fires only for
+    interactive commands, never for the non-interactive bash post-login script
+    (which probes with `command -v`). So drive node + smithery to completion here
+    (as ADR-0002 did for nvm), the way `mise install` would on the first switch.
+    node is installed first so the npm backend has a toolchain. rust stays lazy —
+    it is only ever reached interactively. No privilege."""
+    mise = shutil.which("mise")
+    if not mise:
+        logger.warning("mise not on PATH; skipping runtime install (node + smithery)")
+        return
+    logger.info("installing mise runtimes: node, then the smithery CLI")
+    ctx.run_command([mise, "install", "node"], check=False)
+    ctx.run_command([mise, "install", "npm:@smithery/cli"], check=False)
+
+
 def setup_claude(ctx):
     """Install the Claude Code CLI + write the deferred interactive setup
     (plugins/Smithery-MCP/Lark). It needs a TTY, so it is NOT auto-run; the user
     invokes it once via the `dotfiles-postsetup` shell function. The Smithery CLI
-    is expected to be pre-installed, so it is called directly (no `npx`); only the
-    Lark CLI still needs npx (node from mise). The HM zsh prints a one-line
-    reminder while the script is still present. No privilege."""
+    is installed by setup_runtimes (mise npm tool), so it is called directly (no
+    `npx`); only the Lark CLI still needs npx (node from mise). The HM zsh prints
+    a one-line reminder while the script is still present. No privilege."""
     deferred = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
     if shutil.which("claude"):
         logger.info("claude CLI already installed")
@@ -120,8 +140,12 @@ def setup_claude(ctx):
         "#!/usr/bin/env bash",
         "# Claude/Smithery/Lark setup (written by platform/setup.py). Run manually via",
         "# the `dotfiles-postsetup` shell function (needs a TTY); self-removes on",
-        "# success. The Smithery CLI is expected pre-installed, so it is called directly",
-        "# (no npx); only the Lark CLI still needs npx (node from mise).",
+        "# success. The Smithery CLI is a mise npm tool (installed by setup.py), so it",
+        "# is called directly (no npx); only the Lark CLI still needs npx (node from mise).",
+        "",
+        "# Put mise-managed tools (node/npx, smithery) on PATH even when this script",
+        "# is run from a shell without mise activated (e.g. a bare bash subshell).",
+        'command -v mise >/dev/null 2>&1 && eval "$(mise activate bash --shims)" || true',
         "",
         "# --- Claude plugins --------------------------------------------------------",
         "claude plugin marketplace add hernandor/agent-skillset || true",
@@ -217,6 +241,7 @@ def main():
     set_login_shell(ctx)
     deploy_ssh_keys(ctx)
     if not args.no_claude:
+        setup_runtimes(ctx)
         setup_claude(ctx)
     if system_spec:
         run_system(ctx, system_spec)
