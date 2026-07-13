@@ -10,8 +10,9 @@ environment; this handles the imperative remainder:
 
     login shell (chsh) · SSH keys (copy) · Claude post-setup · Linux system SW
 
-Privilege: `--priv root|sudo|none`. run_command strips sudo when already root;
-steps needing privilege are skipped under `none`.
+Privilege: `--priv root|sudo|none`. Privileged calls pass `with_sudo=True`
+(or interpolate `ctx.sudo` in a shell pipeline), so sudo is prepended only
+under `sudo`; root runs bare (no sudo binary) and steps are skipped under `none`.
 """
 import argparse
 import logging
@@ -57,9 +58,9 @@ def set_login_shell(ctx):
     logger.info("setting login shell to %s", zsh_path)
     shells = pathlib.Path("/etc/shells")
     if not ctx.dry_run and shells.exists() and zsh_path not in shells.read_text().split():
-        ctx.run_command(f'echo "{zsh_path}" | sudo tee -a /etc/shells >/dev/null', shell=True)
-    if ctx.run_command(["sudo", "chsh", "-s", zsh_path, user], check=False).returncode != 0:
-        ctx.run_command(["sudo", "usermod", "-s", zsh_path, user], check=False)
+        ctx.run_command(f'echo "{zsh_path}" | {ctx.sudo}tee -a /etc/shells >/dev/null', shell=True)
+    if ctx.run_command(["chsh", "-s", zsh_path, user], with_sudo=True, check=False).returncode != 0:
+        ctx.run_command(["usermod", "-s", zsh_path, user], with_sudo=True, check=False)
 
 
 def deploy_ssh_keys(ctx):

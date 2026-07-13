@@ -132,13 +132,13 @@ class Docker(OptionalComponent):
             ctx, Script("https://get.docker.com/", interpreter="sh")
         )
         user = os.environ.get("USER", os.environ.get("LOGNAME"))
-        ctx.run_command(["sudo", "groupadd", "-f", "docker"])
+        ctx.run_command(["groupadd", "-f", "docker"], with_sudo=True)
         if user:
-            ctx.run_command(["sudo", "usermod", "-aG", "docker", user])
+            ctx.run_command(["usermod", "-aG", "docker", user], with_sudo=True)
         # NVIDIA driver PPA + DKMS toolchain for GPU containers.
-        ctx.run_command(["sudo", "add-apt-repository", "-y", "ppa:graphics-drivers/ppa"])
-        ctx.run_command(["sudo", "apt-get", "update"])
-        ctx.run_command(["sudo", "apt-get", "install", "-y", "dkms", "build-essential"])
+        ctx.run_command(["add-apt-repository", "-y", "ppa:graphics-drivers/ppa"], with_sudo=True)
+        ctx.run_command(["apt-get", "update"], with_sudo=True)
+        ctx.run_command(["apt-get", "install", "-y", "dkms", "build-essential"], with_sudo=True)
 
 
 class DockerRootless(OptionalComponent):
@@ -165,20 +165,20 @@ class Cuda(OptionalComponent):
             shell=True,
         )
         ctx.run_command(
-            "sudo mv cuda-ubuntu2404.pin /etc/apt/preferences.d/cuda-repository-pin-600",
+            f"{ctx.sudo}mv cuda-ubuntu2404.pin /etc/apt/preferences.d/cuda-repository-pin-600",
             shell=True,
         )
         deb_name = "cuda-repo-ubuntu2404-12-6-local_12.6.2-560.35.03-1_amd64.deb"
         url = f"https://developer.download.nvidia.com/compute/cuda/12.6.2/local_installers/{deb_name}"
         deb_path = pathlib.Path(f"/tmp/{deb_name}")
         ctx.run_command(f"wget {url} -O {deb_path}", shell=True)
-        ctx.run_command(["sudo", "dpkg", "-i", str(deb_path)])
+        ctx.run_command(["dpkg", "-i", str(deb_path)], with_sudo=True)
         ctx.run_command(
-            "sudo cp /var/cuda-repo-ubuntu2404-12-6-local/cuda-*-keyring.gpg /usr/share/keyrings/",
+            f"{ctx.sudo}cp /var/cuda-repo-ubuntu2404-12-6-local/cuda-*-keyring.gpg /usr/share/keyrings/",
             shell=True,
         )
-        ctx.run_command(["sudo", "apt-get", "update"])
-        ctx.run_command(["sudo", "apt-get", "-y", "install", "cuda-toolkit-12-6"])
+        ctx.run_command(["apt-get", "update"], with_sudo=True)
+        ctx.run_command(["apt-get", "-y", "install", "cuda-toolkit-12-6"], with_sudo=True)
         if deb_path.exists():
             deb_path.unlink()
 
@@ -189,25 +189,25 @@ class Nvidia(OptionalComponent):
     supported_os = ("debian", "ubuntu")
 
     def install(self, ctx):
-        ctx.run_command(["sudo", "add-apt-repository", "-y", "ppa:graphics-drivers/ppa"])
-        ctx.run_command(["sudo", "apt-get", "update"])
-        ctx.run_command(["sudo", "apt-get", "install", "-y", "dkms", "build-essential", "ubuntu-drivers-common"])
-        ctx.run_command("sudo ubuntu-drivers autoinstall || sudo apt-get install -y nvidia-driver-560", shell=True)
+        ctx.run_command(["add-apt-repository", "-y", "ppa:graphics-drivers/ppa"], with_sudo=True)
+        ctx.run_command(["apt-get", "update"], with_sudo=True)
+        ctx.run_command(["apt-get", "install", "-y", "dkms", "build-essential", "ubuntu-drivers-common"], with_sudo=True)
+        ctx.run_command(f"{ctx.sudo}ubuntu-drivers autoinstall || {ctx.sudo}apt-get install -y nvidia-driver-560", shell=True)
         # container toolkit so docker can use the GPU
         ctx.run_command(
             "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | "
-            "sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg",
+            f"{ctx.sudo}gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg",
             shell=True,
         )
         ctx.run_command(
             "curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | "
             "sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | "
-            "sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null",
+            f"{ctx.sudo}tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null",
             shell=True,
         )
-        ctx.run_command(["sudo", "apt-get", "update"])
-        ctx.run_command(["sudo", "apt-get", "install", "-y", "nvidia-container-toolkit"])
-        ctx.run_command("sudo nvidia-ctk runtime configure --runtime=docker || true", shell=True)
+        ctx.run_command(["apt-get", "update"], with_sudo=True)
+        ctx.run_command(["apt-get", "install", "-y", "nvidia-container-toolkit"], with_sudo=True)
+        ctx.run_command(f"{ctx.sudo}nvidia-ctk runtime configure --runtime=docker || true", shell=True)
 
 
 class Llvm(OptionalComponent):

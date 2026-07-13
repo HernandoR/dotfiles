@@ -96,11 +96,11 @@ class AptManager(PackageManager):
                 deb_path = pathlib.Path(tmp.name)
             try:
                 ctx.run_command(["wget", spec.url, "-O", str(deb_path)])
-                ctx.run_command(["sudo", "apt", "install", "-f", "-y", str(deb_path)])
+                ctx.run_command(["apt", "install", "-f", "-y", str(deb_path)], with_sudo=True)
             finally:
                 deb_path.unlink(missing_ok=True)
         else:
-            ctx.run_command(["sudo", "apt", "install", "-y", spec])
+            ctx.run_command(["apt", "install", "-y", spec], with_sudo=True)
 
 
 class BrewManager(PackageManager):
