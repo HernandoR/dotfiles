@@ -171,6 +171,19 @@ install_lix() {
     # calls AND persist it for later use.
     fetch_retry https://nixos.org/nix/install /tmp/nix-install.sh \
       || die "could not download the nix installer (network); retry later"
+    # Nix wants a ~60 MiB thread stack; a 10 MiB hard limit makes it warn
+    # "Stack size hard limit … less than the desired …" on every child. Raise
+    # this shell's limit before the installer runs so the nix children inherit
+    # it. Raising a *hard* limit needs privilege, and `ulimit` is a builtin
+    # (so $SUDO can't wrap it — it must run in *this* shell): as root use the
+    # builtin directly; under a sudo account have a privileged `prlimit` raise
+    # this shell's limit by PID instead. Best-effort — a failure just leaves
+    # the (benign) warning in place.
+    if [ "$PRIV" = root ]; then
+      ulimit -Hs 61440 2>/dev/null || true
+    elif [ "$PRIV" = sudo ] && command -v prlimit >/dev/null 2>&1; then
+      $SUDO prlimit --pid "$$" --stack=62914560:62914560 2>/dev/null || true
+    fi
     NIX_CONFIG="build-users-group =" sh /tmp/nix-install.sh --no-daemon --yes
     # multi-user Lix enables flakes system-wide; single-user needs it in the
     # user config (alongside the empty build-users-group).
