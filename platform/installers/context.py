@@ -27,11 +27,24 @@ class Ctx:
     """Execution context passed to components (the ADR-0003 ``ctx``)."""
 
     def __init__(self, priv="sudo", dry_run=False, options=None):
-        self.priv = priv  # root | sudo | none
-        self.is_root = priv == "root"
+        self.priv = priv  # root | sudo | none — used for gating/logging
         self.dry_run = dry_run
         self.options = options or {}
         self.os_type = self._detect_os()
+
+    @property
+    def is_root(self):
+        return os.geteuid() == 0
+
+    @staticmethod
+    def _needs_sudo():
+        """Whether a privileged command must be prefixed with sudo, decided
+        live from the running process rather than the passed --priv (which may
+        be defaulted or stale, e.g. a root-without-sudo container or a GitHub
+        workspace where the flag never says 'sudo'): true iff we are NOT root
+        but a sudo binary exists. Root needs no sudo; an unprivileged session
+        with no sudo cannot escalate (that command is expected to be gated off)."""
+        return os.geteuid() != 0 and shutil.which("sudo") is not None
 
     @staticmethod
     def _detect_os():
@@ -51,20 +64,19 @@ class Ctx:
 
     @property
     def sudo(self):
-        """Shell prefix for a privileged command: 'sudo ' only under --priv sudo,
-        else '' (root needs none; a bare root container has no sudo binary, and
-        --priv none can't escalate). Interpolate it into shell strings where the
-        privilege lands mid-pipeline, e.g. f'... | {ctx.sudo}tee file'. For a
-        whole command prefer run_command(cmd, with_sudo=True)."""
-        return "sudo " if self.priv == "sudo" else ""
+        """Shell prefix for a privileged command ('sudo ' or ''), decided live
+        via _needs_sudo(). Interpolate it into shell strings where the privilege
+        lands mid-pipeline, e.g. f'... | {ctx.sudo}tee file'. For a whole command
+        prefer run_command(cmd, with_sudo=True)."""
+        return "sudo " if self._needs_sudo() else ""
 
     def run_command(self, cmd, check=True, shell=False, capture_output=False,
                     env=None, with_sudo=False):
-        # with_sudo prepends sudo ONLY under --priv sudo (see the `sudo`
-        # property). Callers pass the bare command + with_sudo=True instead of a
-        # literal "sudo", so root (no sudo binary) and none (can't escalate) both
-        # run it unprefixed.
-        if with_sudo and self.priv == "sudo":
+        # with_sudo prepends sudo when the live environment needs it (non-root
+        # with a sudo binary) — see _needs_sudo(). Callers pass the bare command
+        # + with_sudo=True instead of a literal "sudo", so a root session (incl.
+        # a container with no sudo) runs it unprefixed automatically.
+        if with_sudo and self._needs_sudo():
             cmd = ["sudo", *cmd] if isinstance(cmd, list) else "sudo " + cmd
         run_env = {**os.environ, **env} if env else None
         cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
