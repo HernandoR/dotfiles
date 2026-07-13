@@ -88,7 +88,21 @@ class AptManager(PackageManager):
     supported_os = ("debian", "ubuntu")
     priority = 100
 
+    # Refresh the package index once per process. A fresh container/CI image
+    # often ships an empty /var/lib/apt/lists, so a bare `apt install` fails with
+    # "Unable to locate package". Guard is class-level because get() hands out a
+    # new instance per call. Non-fatal: a flaky update shouldn't mask the (more
+    # informative) install error that follows.
+    _updated = False
+
+    def _ensure_updated(self, ctx):
+        if AptManager._updated:
+            return
+        ctx.run_command(["apt-get", "update"], with_sudo=True, check=False)
+        AptManager._updated = True
+
     def install(self, ctx, spec):
+        self._ensure_updated(ctx)
         if isinstance(spec, Deb):
             # Download then `apt install -f` the local file so dependencies
             # resolve (dpkg -i alone would leave them unmet).
