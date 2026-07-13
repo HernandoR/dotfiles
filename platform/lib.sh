@@ -158,6 +158,14 @@ install_lix() {
     fi
   else
     log "no init system (container/CI): single-user nix install (--no-daemon)"
+    # The single-user installer creates /nix via `sudo` even when we already
+    # run as root; a bare container may have no sudo (the installer then dies
+    # with "please manually run 'mkdir -m 0755 /nix …'"). Pre-create /nix owned
+    # by the calling user so the installer skips that sudo call entirely.
+    if [ ! -e /nix ]; then
+      log "pre-creating /nix (installer would otherwise shell out to sudo)"
+      run "$SUDO mkdir -m 0755 /nix && $SUDO chown \"$(id -un)\" /nix"
+    fi
     # Single-user (especially as root) has no `nixbld` build-user pool; disable
     # it so builds run as the calling user. Set it for the installer's own nix
     # calls AND persist it for later use.
@@ -167,10 +175,18 @@ install_lix() {
     # multi-user Lix enables flakes system-wide; single-user needs it in the
     # user config (alongside the empty build-users-group).
     mkdir -p "$HOME/.config/nix"
-    grep -q 'experimental-features' "$HOME/.config/nix/nix.conf" 2>/dev/null \
-      || echo 'experimental-features = nix-command flakes' >> "$HOME/.config/nix/nix.conf"
-    grep -q 'build-users-group' "$HOME/.config/nix/nix.conf" 2>/dev/null \
-      || echo 'build-users-group =' >> "$HOME/.config/nix/nix.conf"
+    # append_conf FILE LINE — add LINE if absent, always on its own line. A file
+    # whose last line lacks a trailing newline would otherwise get the new
+    # setting glued onto it (e.g. `substituters = …cache.nixos.org/` +
+    # `experimental-features = …` -> an unparseable value). Normalise first.
+    append_conf() {
+      local file="$1" line="$2"
+      grep -qF "$line" "$file" 2>/dev/null && return 0
+      [ -s "$file" ] && [ -n "$(tail -c1 "$file" 2>/dev/null)" ] && echo >> "$file"
+      echo "$line" >> "$file"
+    }
+    append_conf "$HOME/.config/nix/nix.conf" 'experimental-features = nix-command flakes'
+    append_conf "$HOME/.config/nix/nix.conf" 'build-users-group ='
   fi
   load_nix_path
 }

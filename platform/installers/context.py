@@ -5,6 +5,7 @@ passed into every component."""
 import logging
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -50,12 +51,16 @@ class Ctx:
         return "unknown" if sys.platform != "linux" else "debian"
 
     def run_command(self, cmd, check=True, shell=False, capture_output=False, env=None):
-        # Strip sudo when already root (mirrors the old DotfilesManager).
+        # Strip sudo when already root (there is no sudo in a bare root
+        # container). For strings, drop `sudo` wherever it starts a command word
+        # — the leading command, or after a pipe/&&/||/; — since shell strings
+        # embed it mid-pipeline (e.g. `... | sudo tee ...`). For lists, drop a
+        # leading or standalone `sudo` token.
         if self.is_root:
-            if isinstance(cmd, str) and cmd.startswith("sudo "):
-                cmd = cmd[5:]
-            elif isinstance(cmd, list) and cmd and cmd[0] == "sudo":
-                cmd = cmd[1:]
+            if isinstance(cmd, str):
+                cmd = re.sub(r"(^|[|&;]\s*)sudo\s+", r"\1", cmd)
+            elif isinstance(cmd, list):
+                cmd = [a for a in cmd if a != "sudo"]
         run_env = {**os.environ, **env} if env else None
         cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
         logger.info("Running: %s", cmd_str)
