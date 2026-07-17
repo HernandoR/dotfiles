@@ -5,11 +5,13 @@
 # ///
 """Interactive system-component picker + installer — run AFTER the bootstrap.
 
-A MANUAL convenience tool (NOT called by the bootstrap). It lists the system
-OptionalComponents that apply to this OS as a checklist (the `default` group
-pre-checked), lets you set the network (CN mirrors) for this run, then installs
-the selection via the SAME machinery the bootstrap uses (installers.components +
-the shared Ctx). Use `--dry-run` to preview.
+A MANUAL convenience tool (NOT called by the bootstrap). It lists the *optional*
+system components that apply to this OS as a checklist (the `default` group
+pre-checked); any `required` components (e.g. software-properties on Linux) are
+always installed and are not part of the checklist. It then lets you set the
+network (CN mirrors) for this run and installs the selection via the SAME
+machinery the bootstrap uses (installers.components + the shared Ctx). Use
+`--dry-run` to preview.
 
 Run it via `./nix-system-interactive-install.sh`.
 """
@@ -48,23 +50,32 @@ def main() -> int:
         print("No root/sudo — system components need privilege. Re-run with sudo / as root.", file=sys.stderr)
         return 1
 
+    # Required components are always installed (a base prerequisite) — they are
+    # not part of the selectable checklist, only the optional ones are.
+    required = [n for n in OptionalComponent.required_names() if n in applicable]
+    optional = [n for n in applicable if n not in required]
+    if required:
+        print(f"Always installed on {ctx.os_type} (required): {', '.join(required)}")
+
     default_names = set(OptionalComponent.resolve("default"))
-    choices = [
-        questionary.Choice(
-            f"{n}  —  {OptionalComponent.get(n).description}",
-            value=n,
-            checked=(n in default_names),
-        )
-        for n in applicable
-    ]
-    selected = questionary.checkbox(
-        f"System components to install on {ctx.os_type} (space toggles, enter confirms):",
-        choices=choices,
-    ).ask()
-    if selected is None:
-        print("Cancelled.")
-        return 1
-    if not selected:
+    selected = []
+    if optional:
+        choices = [
+            questionary.Choice(
+                f"{n}  —  {OptionalComponent.get(n).description}",
+                value=n,
+                checked=(n in default_names),
+            )
+            for n in optional
+        ]
+        selected = questionary.checkbox(
+            f"System components to install on {ctx.os_type} (space toggles, enter confirms):",
+            choices=choices,
+        ).ask()
+        if selected is None:
+            print("Cancelled.")
+            return 1
+    if not selected and not required:
         print("Nothing selected — nothing to do.")
         return 0
 
@@ -87,15 +98,17 @@ def main() -> int:
     else:
         os.environ.pop("DOTFILE_NETWORK_ENV", None)
 
+    # Required first (they set up e.g. add-apt-repository for the rest).
+    install = required + [n for n in selected if n not in required]
     verb = "Preview" if args.dry_run else "Install"
     if not questionary.confirm(
-        f"{verb} {len(selected)} component(s) [{', '.join(selected)}] as {priv}, network={net}?",
+        f"{verb} {len(install)} component(s) [{', '.join(install)}] as {priv}, network={net}?",
         default=True,
     ).ask():
         print("Aborted.")
         return 1
 
-    for name in selected:
+    for name in install:
         OptionalComponent.get(name).run(ctx)
 
     print("\nDone." + (" (dry-run — nothing installed)" if args.dry_run else ""))
