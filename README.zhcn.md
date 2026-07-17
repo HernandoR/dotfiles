@@ -119,15 +119,20 @@ nix-collect-garbage -d                        # 然后回收磁盘
 `--system` 或 `DOTFILE_SYSTEM_COMPONENTS` 选择（参数优先）。特殊取值：`all`
 （全部组件；若两个 Docker 变体同时匹配，则 **rootless 胜出**）、`default` 和 `none`。
 
-**当你什么都不传时，安装 `default` 组** —— macOS 上是 `brew`，Linux 上是
-`software-properties`。其余都是按需 opt-in；`cuda`/`nvidia`/`llvm`/`docker`
+在 debian/ubuntu 上，`software-properties` 是**必需组件**：它提供
+`add-apt-repository`（docker/nvidia/llvm 配置软件源的前置依赖），因此无论你选了
+什么，它都会一并安装 —— `--system docker` 也会顺带装上 `software-properties`。
+只有 `--system none` 会跳过它。
+
+**当你什么都不传时，安装 `default` 组** —— macOS 上是 `brew`（Linux 上则是必需的
+`software-properties`）。其余都是按需 opt-in；`cuda`/`nvidia`/`llvm`/`docker`
 需要你显式请求。每个组件都受其 OS 约束，因此一个 spec 只会安装适用于本主机的部分。
 
 ```bash
-./bootstrap.sh                       # 仅 default 组（brew / software-properties）
-./bootstrap.sh --system docker,llvm  # 恰好这些（覆盖 default 组）
+./bootstrap.sh                       # 必需 + default（Linux 上 software-properties / macOS 上 brew）
+./bootstrap.sh --system docker,llvm  # 这些 + 必需的 software-properties
 ./bootstrap.sh --system all          # 适用于本 OS 的全部组件
-./bootstrap.sh --system none         # 完全不装系统组件
+./bootstrap.sh --system none         # 完全不装系统组件（连必需组件也跳过）
 DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 ```
 
@@ -142,7 +147,7 @@ DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 
 | 名称 | 描述 | OS |
 | --- | --- | --- |
-| `software-properties` | `add-apt-repository` 支持 **（Linux 默认）** | debian, ubuntu |
+| `software-properties` | `add-apt-repository` 支持 **（Linux 必需 —— 始终安装）** | debian, ubuntu |
 | `docker` | Docker Engine（rootful） | debian, ubuntu |
 | `docker-rootless` | Docker（rootless） | debian, ubuntu |
 | `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |

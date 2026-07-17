@@ -126,16 +126,21 @@ User-level tools are always installed declaratively (see
 (every component; if both Docker variants match, **rootless wins**), `default`,
 and `none`.
 
-**When you pass nothing, the `default` group installs** — `brew` on macOS,
-`software-properties` on Linux. Everything else is opt-in;
+On debian/ubuntu, `software-properties` is **required**: it provides
+`add-apt-repository` (a prerequisite for the docker/nvidia/llvm repo setup), so
+it is always installed alongside whatever you select — `--system docker` installs
+`software-properties` too. Only `--system none` skips it.
+
+**When you pass nothing, the `default` group installs** — `brew` on macOS (plus
+the required `software-properties` on Linux). Everything else is opt-in;
 `cuda`/`nvidia`/`llvm`/`docker` you request explicitly. Each component is gated by
 its OS, so a spec only installs what applies to the host.
 
 ```bash
-./bootstrap.sh                       # default group only (brew / software-properties)
-./bootstrap.sh --system docker,llvm  # exactly these (overrides the default group)
+./bootstrap.sh                       # required + default (software-properties on Linux / brew on macOS)
+./bootstrap.sh --system docker,llvm  # these + the required software-properties
 ./bootstrap.sh --system all          # everything applicable to this OS
-./bootstrap.sh --system none         # no system components at all
+./bootstrap.sh --system none         # no system components at all (skips required too)
 DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 ```
 
@@ -151,7 +156,7 @@ installs via the same machinery:
 
 | Name | Description | OS |
 | --- | --- | --- |
-| `software-properties` | `add-apt-repository` support **(default on Linux)** | debian, ubuntu |
+| `software-properties` | `add-apt-repository` support **(required on Linux — always installed)** | debian, ubuntu |
 | `docker` | Docker Engine (rootful) | debian, ubuntu |
 | `docker-rootless` | Docker (rootless) | debian, ubuntu |
 | `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |

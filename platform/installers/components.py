@@ -65,6 +65,8 @@ class OptionalComponent(Component):
 
     _registry = {}
     groups = frozenset()
+    required = False  # always installed on its applicable OS, regardless of the
+                      # requested spec (a base prerequisite; see setup.run_system)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -74,6 +76,13 @@ class OptionalComponent(Component):
     @classmethod
     def names(cls):
         return list(cls._registry.keys())
+
+    @classmethod
+    def required_names(cls):
+        """Components flagged ``required`` — always installed on their applicable
+        OS as a base prerequisite, independent of the requested spec (their
+        ``run()`` still no-ops on a non-applicable OS)."""
+        return [name for name, comp in cls._registry.items() if comp.required]
 
     @classmethod
     def alias_groups(cls):
@@ -116,7 +125,11 @@ class OptionalComponent(Component):
 class SoftwareProperties(OptionalComponent):
     name = "software-properties"
     description = "software-properties-common (provides add-apt-repository)"
-    groups = frozenset({"default"})  # installed by default on Linux
+    # Required on debian/ubuntu: `add-apt-repository` is a prerequisite for the
+    # repo setup in the docker/nvidia/llvm components, so it must be present even
+    # when the spec names only those (e.g. `--system docker`). `--system none`
+    # still skips it (it skips run_system entirely).
+    required = True
     installs = {"apt": "software-properties-common"}
 
 

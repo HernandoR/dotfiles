@@ -208,7 +208,14 @@ def run_system(ctx, spec):
         return
     # Each component declares its own supported_os; Component.run() skips the
     # non-applicable ones (e.g. Linux docker/cuda on macOS, macOS brew on Linux).
-    names = OptionalComponent.resolve(spec)
+    selected = OptionalComponent.resolve(spec)
+    # Required components (e.g. software-properties -> add-apt-repository, a
+    # prerequisite for the apt-based components) are always installed first on
+    # their applicable OS, whatever the spec selected. `--system none` never
+    # reaches here (main() blanks the spec), so it remains a full opt-out.
+    required = [n for n in OptionalComponent.required_names()
+                if OptionalComponent.get(n).applicable(ctx) and n not in selected]
+    names = required + selected
     if not names:
         logger.info("no valid system components in '%s' (have: %s, all)", spec, ", ".join(OptionalComponent.names()))
         return
@@ -230,8 +237,9 @@ def main():
     logger.info("post-HM setup | os=%s priv=%s dry_run=%s", ctx.os_type, ctx.priv, ctx.dry_run)
 
     # System components: --system wins; else DOTFILE_SYSTEM_COMPONENTS; else the
-    # `default` group (brew on macOS + software-properties on Linux, each gated
-    # by its own supported_os). `all` = every component; `none` = skip entirely.
+    # `default` group (brew on macOS). software-properties is `required` on
+    # debian/ubuntu, so run_system always adds it (any non-none spec). `all` =
+    # every component; `none` = skip entirely (required ones included).
     system_spec = args.system or os.environ.get("DOTFILE_SYSTEM_COMPONENTS") or "default"
     if system_spec.strip().lower() == "none":
         system_spec = ""
