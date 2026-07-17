@@ -55,6 +55,7 @@
       push = {
         default = "simple";
         followTags = true;
+        autoSetupRemote = true;
       };
 
       color = {
