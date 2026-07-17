@@ -24,14 +24,22 @@ PLATFORM_DIR="$REPO_DIR/platform"
 export REPO_DIR
 
 DF_DRY_RUN=0 DF_VERBOSE=0 HOST="" SYSTEM_COMPONENTS="" NO_CLAUDE=0
+# a value-taking flag must not swallow the next option as its value: `--system
+# -h` should error, not silently treat `-h` as the component list (which skips
+# --help and kicks off a real install).
+need_val() {
+  case "${2-}" in
+    ""|-*) echo "error: $1 requires a value (got '${2-}')" >&2; exit 2 ;;
+  esac
+}
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DF_DRY_RUN=1 ;;
     --verbose) DF_VERBOSE=1 ;;
-    --host) HOST="$2"; shift ;;
-    --system) SYSTEM_COMPONENTS="$2"; shift ;;
+    --host) need_val "$1" "${2-}"; HOST="$2"; shift ;;
+    --system) need_val "$1" "${2-}"; SYSTEM_COMPONENTS="$2"; shift ;;
     --no-claude) NO_CLAUDE=1 ;;
-    --network) export DOTFILE_NETWORK_ENV="$2"; shift ;;
+    --network) need_val "$1" "${2-}"; export DOTFILE_NETWORK_ENV="$2"; shift ;;
     -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -89,6 +97,14 @@ else
   warn "no privilege: skipping prereq + Lix install (using the existing nix)"
 fi
 load_nix_path
+
+# Single-user (no init system: bare docker/CI) has no `nixbld` build-user pool,
+# so Nix's default build-users-group=nixbld fails every build. Ensure the user
+# nix.conf neutralizes it — unconditional (not only on a fresh install), so an
+# interrupted or partial install repairs itself on re-run. Needs no privilege.
+if ! has_init_system; then
+  configure_single_user_nix
+fi
 
 # nix flakes + CN mirror (privileged; the script itself no-ops the sudo parts
 # when PRIV=none, but still persists the network-env marker for the HM shell)
