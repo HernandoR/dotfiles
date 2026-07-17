@@ -114,6 +114,33 @@ ensure_prereqs() {
   esac
 }
 
+# append_conf FILE LINE — add LINE if absent, always on its own line. A file
+# whose last line lacks a trailing newline would otherwise get the new setting
+# glued onto it (e.g. `substituters = …cache.nixos.org/` + `experimental-features
+# = …` -> an unparseable value). Normalise the trailing newline first.
+append_conf() {
+  local file="$1" line="$2"
+  grep -qF "$line" "$file" 2>/dev/null && return 0
+  [ -s "$file" ] && [ -n "$(tail -c1 "$file" 2>/dev/null)" ] && echo >> "$file"
+  echo "$line" >> "$file"
+}
+
+# configure_single_user_nix — ensure the user-level nix.conf enables flakes and
+# sets an EMPTY build-users-group. A single-user (--no-daemon) install has no
+# `nixbld` build-user pool, so Nix's compiled-in default (build-users-group =
+# nixbld) makes every build fail with "the group 'nixbld' … does not exist".
+# Idempotent and independent of whether Nix was just installed, so an install
+# interrupted before the config was written self-heals on the next run.
+configure_single_user_nix() {
+  if [ "${DF_DRY_RUN:-0}" = 1 ]; then
+    printf '\033[2m[dry-run]\033[0m ensure ~/.config/nix/nix.conf: flakes + empty build-users-group\n'
+    return
+  fi
+  mkdir -p "$HOME/.config/nix"
+  append_conf "$HOME/.config/nix/nix.conf" 'experimental-features = nix-command flakes'
+  append_conf "$HOME/.config/nix/nix.conf" 'build-users-group ='
+}
+
 # install_lix — install nix if absent (needs root/sudo; caller guards).
 # With an init system: the Lix multi-user (service-managed daemon) installer.
 # Without one (container/CI): a single-user install (--no-daemon), which needs
@@ -185,21 +212,10 @@ install_lix() {
       $SUDO prlimit --pid "$$" --stack=62914560:62914560 2>/dev/null || true
     fi
     NIX_CONFIG="build-users-group =" sh /tmp/nix-install.sh --no-daemon --yes
-    # multi-user Lix enables flakes system-wide; single-user needs it in the
-    # user config (alongside the empty build-users-group).
-    mkdir -p "$HOME/.config/nix"
-    # append_conf FILE LINE — add LINE if absent, always on its own line. A file
-    # whose last line lacks a trailing newline would otherwise get the new
-    # setting glued onto it (e.g. `substituters = …cache.nixos.org/` +
-    # `experimental-features = …` -> an unparseable value). Normalise first.
-    append_conf() {
-      local file="$1" line="$2"
-      grep -qF "$line" "$file" 2>/dev/null && return 0
-      [ -s "$file" ] && [ -n "$(tail -c1 "$file" 2>/dev/null)" ] && echo >> "$file"
-      echo "$line" >> "$file"
-    }
-    append_conf "$HOME/.config/nix/nix.conf" 'experimental-features = nix-command flakes'
-    append_conf "$HOME/.config/nix/nix.conf" 'build-users-group ='
+    # The user nix.conf (flakes + empty build-users-group) is written by
+    # configure_single_user_nix, which bootstrap.sh calls unconditionally on the
+    # no-init-system path — so an install interrupted before this point still
+    # gets a correct config on the next run (have_nix then skips reinstalling).
   fi
   load_nix_path
 }
