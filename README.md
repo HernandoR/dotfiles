@@ -66,6 +66,7 @@ exec ~/.nix-profile/bin/zsh -l
 | `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins. |
 | `DOTFILE_FLAKE_CACHE` | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI). |
 | `DOTFILE_SSH_SRC` | Override the SSH key source dir (default `sources/root/.ssh`). |
+| `DOTFILE_HOME_LINK_SRC` | Opt-in: symlink each direct sub-folder of this dir into `$HOME`. A pre-existing real `~/<name>` is backed up to `~/<name>.pre-dotfiles.bak` (`.bak.1`, `.2`, … if taken) first. Unset = skip. |
 
 ## Trying it on a new machine (and how to recover)
 

@@ -95,6 +95,61 @@ def deploy_ssh_keys(ctx):
     logger.info("SSH keys deployed: %d", n)
 
 
+def link_home_dirs(ctx):
+    """Symlink each direct sub-directory of $DOTFILE_HOME_LINK_SRC into $HOME
+    (ADR-0008). Opt-in: unset/empty -> no-op; set-but-missing -> warn + skip.
+    Only direct child directories are linked (loose files are ignored). The step
+    is non-destructive and idempotent, acting per the current state of ~/<name>:
+
+        does not exist          -> symlink ~/<name> -> <src>/<name>
+        already correct symlink -> skip
+        wrong / broken symlink  -> replace with the correct symlink (no backup)
+        real file or real dir   -> rename to a free .pre-dotfiles.bak, then symlink
+
+    A real conflict is renamed to ~/<name>.pre-dotfiles.bak (or .bak.1, .2, … —
+    the first free name), so an earlier backup is never clobbered. The suffix is
+    shared with deploy_ssh_keys, keeping one imperative-step backup convention
+    distinct from Home Manager's own `.backup`. No privilege."""
+    raw = os.environ.get("DOTFILE_HOME_LINK_SRC", "").strip()
+    if not raw:
+        return
+    src = pathlib.Path(os.path.abspath(os.path.expanduser(raw)))
+    if not src.is_dir():
+        logger.warning("DOTFILE_HOME_LINK_SRC=%s is not a directory; skipping", src)
+        return
+    home = pathlib.Path.home()
+    n = 0
+    for child in sorted(src.iterdir()):
+        if not child.is_dir():
+            continue  # direct sub-folders only
+        dest = home / child.name
+        if dest.is_symlink():
+            if os.path.realpath(dest) == os.path.realpath(child):
+                continue  # already the correct symlink -> idempotent skip
+            if ctx.dry_run:
+                logger.info("[DRY-RUN] would relink %s -> %s", dest, child)
+                continue
+            dest.unlink()  # wrong-target / broken symlink: no real data to back up
+        elif dest.exists():
+            bak = dest.with_name(dest.name + ".pre-dotfiles.bak")
+            i = 1
+            while os.path.lexists(bak):
+                bak = dest.with_name(f"{dest.name}.pre-dotfiles.bak.{i}")
+                i += 1
+            if ctx.dry_run:
+                logger.info("[DRY-RUN] would back up %s -> %s, then link -> %s", dest, bak, child)
+                continue
+            shutil.move(str(dest), str(bak))
+            logger.info("backed up %s -> %s", dest, bak)
+        elif ctx.dry_run:
+            logger.info("[DRY-RUN] would link %s -> %s", dest, child)
+            continue
+        dest.symlink_to(child)
+        logger.info("linked %s -> %s", dest, child)
+        n += 1
+    logger.info("home dirs linked from %s: %d", src, n)
+
+
 def setup_runtimes(ctx):
     """Materialize every mise-managed runtime (node, rust, the npm-backed smithery
     CLI, …) declared in home/mise.nix.
@@ -246,6 +301,7 @@ def main():
 
     set_login_shell(ctx)
     deploy_ssh_keys(ctx)
+    link_home_dirs(ctx)
     if not args.no_claude:
         setup_runtimes(ctx)
         setup_claude(ctx)
