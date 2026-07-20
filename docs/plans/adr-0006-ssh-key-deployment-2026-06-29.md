@@ -2,8 +2,18 @@
 
 | Field | Value |
 |---|---|
-| Status | accepted |
+| Status | superseded |
 | Date | 2026-06-29 |
+| Superseded by | [ADR-0008](adr-0008-external-home-dir-symlinking-2026-07-20.md) |
+
+> **Superseded (2026-07-20).** The copy-based SSH-key deployment
+> (`deploy_ssh_keys` + `DOTFILE_SSH_SRC`) has been removed. SSH material is now
+> symlinked into `$HOME` by the JSON(C) link map (ADR-0008), like any other
+> external dir. This reverses the original decision below to *avoid* symlinking
+> `~/.ssh`; that reasoning (SSH's strict-permission checks) still applies — the
+> link map is safe only while the external `.ssh` is `700` and its keys `600`,
+> because SSH enforces perms on the symlink target. The defensive
+> `.gitignore` for `sources/root/.ssh/id_*` is retained.
 
 ## Context
 

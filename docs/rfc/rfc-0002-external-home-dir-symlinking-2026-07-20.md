@@ -132,3 +132,15 @@ row, and ADR-0008. No migration; the feature is inert until the var is set.
   - **First version:** `platform/link-map.jsonc`, capturing this host's live
     `/root` ↔ `/fsx/hernando/dotfile_home_link_src` links.
   ADR-0008 rewritten atomically (incl. title) to state this design.
+
+- **2026-07-20 — removed copy-based SSH deployment; superseded ADR-0006.** The
+  link map's `.ssh` entry overlapped with `deploy_ssh_keys` (which copied keys
+  into `~/.ssh`). Rather than special-case the overlap, the whole copy path was
+  removed: `deploy_ssh_keys`, its `main()` call, the `DOTFILE_SSH_SRC` env var,
+  and the doc rows are gone; SSH material is now symlinked like any other
+  external dir. This reverses ADR-0006's choice to *avoid* symlinking `~/.ssh`
+  (made over SSH's strict-permission checks). The concern is not moot — SSH
+  enforces perms on the symlink *target* — so it is safe only while the external
+  `.ssh` stays `700`/keys `600`; the reference host satisfies this. ADR-0006 is
+  marked superseded (→ ADR-0008); the defensive `.gitignore` for private keys is
+  kept.

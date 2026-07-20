@@ -30,8 +30,8 @@ this step can run is the very start of `setup.py`.
 
 Add an opt-in env var **`DOTFILE_LINK_MAP_JSON`** pointing at a JSON/JSONC file,
 and an `apply_link_map(ctx)` step in `platform/setup.py` run **first** in
-`main()` — before `set_login_shell`/`deploy_ssh_keys`/everything else, but
-necessarily after uv (hence the whole script) is available.
+`main()` — before `set_login_shell`/everything else, but necessarily after uv
+(hence the whole script) is available.
 
 > In the context of folding out-of-repo files and directories into `$HOME`,
 > facing the absence of a safe, declarative, repeatable mechanism,
@@ -82,9 +82,8 @@ Target handling is non-destructive and idempotent:
 | Real file or real directory | Back up to a free `.pre-dotfiles.bak`, then link (also warned) |
 
 Backup naming never clobbers: `~/x.pre-dotfiles.bak`, then `.bak.1`, `.bak.2`,
-… — first free name. The suffix is the same one `deploy_ssh_keys` uses, so all
-imperative post-HM steps share one backup convention, distinct from Home
-Manager's own `.backup`.
+… — first free name. `.pre-dotfiles.bak` is the imperative layer's backup
+convention, distinct from Home Manager's own `.backup`.
 
 Every warning is logged when hit **and** re-emitted in a summary once the whole
 map has been processed. All mutations respect `ctx.dry_run`.
@@ -107,9 +106,12 @@ map has been processed. All mutations respect `ctx.dry_run`.
   and stale `.pre-dotfiles.bak.N` backups can accumulate (each logged, cleanup
   manual).
 - Backup suffixes stay at **two**, split by ownership: Home Manager's `.backup`
-  vs. the imperative steps' shared `.pre-dotfiles.bak`.
-- `.ssh` appears in both the link map and `deploy_ssh_keys` (which copies keys
-  into `~/.ssh`). Because the map runs first and makes `~/.ssh` a symlink to the
-  external dir, `deploy_ssh_keys` then operates on that dir; it is a no-op when
-  its own source (`DOTFILE_SSH_SRC`, default `sources/root/.ssh`) has no keys.
+  vs. the imperative layer's `.pre-dotfiles.bak`.
+- SSH keys are now handled **solely** by the link map (`.ssh` → the external
+  dir), which supersedes the copy-based `deploy_ssh_keys`/`DOTFILE_SSH_SRC`
+  mechanism of ADR-0006. Trade-off: ADR-0006 deliberately avoided symlinking
+  `~/.ssh` out to the persistent store over strict-permission concerns; SSH
+  enforces perms on the symlink *target*, so this is safe only while that
+  external `.ssh` is `700`/keys `600` (it is on the reference host). See
+  ADR-0006 (superseded) for the original reasoning.
 - The feature is inert until `DOTFILE_LINK_MAP_JSON` is set.

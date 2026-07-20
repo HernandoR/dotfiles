@@ -37,9 +37,10 @@ Split around the Home Manager switch:
 1. **Pre-HM (shell):** detect privilege (root / sudo / none) → install
    prerequisites → **install Lix** → configure Nix (+ optional CERNET mirror) →
    **build & activate Home Manager** with `-b backup`.
-2. **Post-HM (Python via `uv`):** set the login shell to the Nix zsh (`chsh`) →
-   deploy SSH keys → write the deferred Claude setup → install any opt-in Linux
-   system components.
+2. **Post-HM (Python via `uv`):** apply the JSON(C) link map
+   (`DOTFILE_LINK_MAP_JSON`, if set) → set the login shell to the Nix zsh
+   (`chsh`) → write the deferred Claude setup → install any opt-in Linux system
+   components.
 
 When it finishes, the shell that launched it keeps its **old** PATH, so a bare
 `zsh` won't be found yet. Start the new environment with the absolute path it
@@ -65,7 +66,6 @@ exec ~/.nix-profile/bin/zsh -l
 | `DOTFILE_NETWORK_ENV=CN` | Same as `--network CN` (also read by the zsh env for pypi/rustup). |
 | `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins. |
 | `DOTFILE_FLAKE_CACHE` | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI). |
-| `DOTFILE_SSH_SRC` | Override the SSH key source dir (default `sources/root/.ssh`). |
 | `DOTFILE_LINK_MAP_JSON` | Opt-in: path to a JSON/JSONC link map (`{"links":{"<label>":{"source","target","type":"dir"\|"file"}}}`), applied as the **first** post-HM step. Unset = skip; set-but-missing file = error. Real targets are backed up to `.pre-dotfiles.bak` before linking; source type/existence mismatches warn (re-summarized at the end). Example: `platform/link-map.jsonc`. |
 
 ## Trying it on a new machine (and how to recover)

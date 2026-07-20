@@ -8,7 +8,7 @@ Run by platform/bootstrap.sh via `uv run` *after* `home-manager switch`, when
 uv/python are available on the HM profile. Home Manager already owns the user
 environment; this handles the imperative remainder:
 
-    login shell (chsh) · SSH keys (copy) · Claude post-setup · Linux system SW
+    JSON(C) link map · login shell (chsh) · Claude post-setup · Linux system SW
 
 Privilege is self-detected (Ctx.priv, live): privileged calls pass
 `with_sudo=True` (or interpolate `ctx.sudo` in a shell pipeline), so sudo is
@@ -33,8 +33,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("dotfiles")
-
-REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
 
 
 # --- post-HM steps -----------------------------------------------------------
@@ -63,37 +61,6 @@ def set_login_shell(ctx):
         ctx.run_command(f'echo "{zsh_path}" | {ctx.sudo}tee -a /etc/shells >/dev/null', shell=True)
     if ctx.run_command(["chsh", "-s", zsh_path, user], with_sudo=True, check=False).returncode != 0:
         ctx.run_command(["usermod", "-s", zsh_path, user], with_sudo=True, check=False)
-
-
-def deploy_ssh_keys(ctx):
-    """Copy id_* keys to ~/.ssh with strict perms (ADR-0006). No privilege needed."""
-    src = pathlib.Path(os.environ.get("DOTFILE_SSH_SRC", REPO_DIR / "sources/root/.ssh"))
-    dest = pathlib.Path.home() / ".ssh"
-    if not src.is_dir():
-        logger.info("no SSH key source at %s; skipping", src)
-        return
-    if ctx.dry_run:
-        logger.info("[DRY-RUN] would deploy SSH keys from %s to %s", src, dest)
-        return
-    dest.mkdir(parents=True, exist_ok=True)
-    dest.chmod(0o700)
-    n = 0
-    for s in sorted(src.glob("id_*")):
-        mode = 0o644 if s.name.endswith(".pub") else 0o600
-        d = dest / s.name
-        if d.is_symlink():
-            d.unlink()
-        elif d.exists():
-            if d.read_bytes() == s.read_bytes():
-                d.chmod(mode)
-                continue
-            bak = d.with_name(d.name + ".pre-dotfiles.bak")
-            shutil.move(str(d), str(bak))
-            logger.info("backed up %s -> %s", d, bak)
-        shutil.copy2(str(s), str(d))
-        d.chmod(mode)
-        n += 1
-    logger.info("SSH keys deployed: %d", n)
 
 
 LINK_MAP_ENV = "DOTFILE_LINK_MAP_JSON"
@@ -180,10 +147,9 @@ def apply_link_map(ctx):
         wrong / broken symlink  -> replace with the correct symlink
         real file or real dir   -> back up to a free .pre-dotfiles.bak, then link
 
-    The `.pre-dotfiles.bak` suffix is shared with deploy_ssh_keys (one imperative
-    backup convention, distinct from Home Manager's `.backup`). Every warning is
-    logged when hit AND re-emitted in a summary after the whole map is processed.
-    No privilege."""
+    The `.pre-dotfiles.bak` suffix is the imperative-layer backup convention,
+    distinct from Home Manager's `.backup`. Every warning is logged when hit AND
+    re-emitted in a summary after the whole map is processed. No privilege."""
     raw = os.environ.get(LINK_MAP_ENV, "").strip()
     if not raw:
         return
@@ -403,7 +369,6 @@ def main():
     # $DOTFILE_LINK_MAP_JSON file raises here and aborts the run by design.
     apply_link_map(ctx)
     set_login_shell(ctx)
-    deploy_ssh_keys(ctx)
     if not args.no_claude:
         setup_runtimes(ctx)
         setup_claude(ctx)
