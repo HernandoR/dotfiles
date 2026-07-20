@@ -27,6 +27,7 @@
       mergiraf # syntax-aware git merge driver (see git.nix)
       zellij
       _1password-cli # `op`
+      skopeo # inspect/copy container images without a daemon
 
       # pnpm: mise installs npm-backed tools (home/mise.nix) with pnpm rather
       # than npm, and mise requires the chosen package manager to already be on
