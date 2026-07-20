@@ -102,3 +102,33 @@ row, and ADR-0008. No migration; the feature is inert until the var is set.
   `.pre-dotfiles.bak.1`, …). Backup conventions therefore stay at two, split by
   ownership: Home Manager's `.backup` vs. the imperative steps'
   `.pre-dotfiles.bak`. ADR-0008 updated to match.
+
+- **2026-07-20 — reworked from a source-dir env var to a JSON(C) link map.**
+  The original proposal (a single `DOTFILE_HOME_LINK_SRC` directory whose direct
+  sub-folders were swept into `$HOME`) was replaced. It could not rename between
+  source and target, could not link individual files, and buried per-entry
+  intent in a directory listing. New design:
+  - **Env var:** `DOTFILE_LINK_MAP_JSON` (name carries `JSON`) → a config file,
+    not a directory.
+  - **Schema:** a **dict** (not a list) — `{"links": {"<label>": {"source",
+    "target", "type": "dir"|"file"}}}`. The label is a log-only handle; each
+    entry is fully explicit. `type` is declared so a source/type mismatch is
+    detectable.
+  - **Format:** JSONC by default, plain JSON compatible. Parsed with a
+    string-literal-aware stdlib stripper (comments + trailing commas) rather
+    than a dependency, to keep the platform scripts dependency-free
+    (`bootstrap.sh` prefers system Python for CN/offline reliability).
+  - **Conditions:** unset → ignore; set-but-file-missing → **raise/abort**;
+    both present → link.
+  - **Timing:** the **first** step in `setup.py`'s `main()` (before every other
+    imperative step), but necessarily after uv — hence the script itself — is
+    available, which is only *after* the Home Manager switch.
+  - **Mismatch handling:** a source-side mismatch (wrong/unknown `type`, missing
+    `source`) warns and skips; every warning is logged when hit **and**
+    re-emitted in an end-of-run summary.
+  - **Target handling:** unchanged from the prior revision — correct symlink →
+    skip; wrong/broken symlink → replace; real content → back up to
+    `.pre-dotfiles.bak` then link (also warned).
+  - **First version:** `platform/link-map.jsonc`, capturing this host's live
+    `/root` ↔ `/fsx/hernando/dotfile_home_link_src` links.
+  ADR-0008 rewritten atomically (incl. title) to state this design.
