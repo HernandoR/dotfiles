@@ -5,7 +5,7 @@
 #
 #   pre-HM  (shell; no nix/uv yet):  privilege → prereqs → install Lix →
 #                                    configure nix (+CN mirror) → home-manager switch
-#   post-HM (python via `uv run`):   login shell → SSH keys → Claude → system SW
+#   post-HM (python via `uv run`):   link map → login shell → Claude → system SW
 #
 # Privilege model:
 #   root  — run privileged steps directly (no sudo)
@@ -142,7 +142,7 @@ load_nix_path
 if ! command -v uv >/dev/null 2>&1 && [ "$DF_DRY_RUN" != 1 ]; then
   warn "uv not found after switch; skipping the Python post-setup"
 else
-  log "post-setup (uv run platform/setup.py): login shell, SSH keys, Claude, system SW"
+  log "post-setup (uv run platform/setup.py): link map, login shell, Claude, system SW"
   # setup.py self-detects privilege (Ctx.priv, live) — no --priv to pass.
   post_args=""
   [ "$DF_DRY_RUN" = 1 ] && post_args="$post_args --dry-run"

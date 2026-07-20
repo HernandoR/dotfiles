@@ -36,8 +36,9 @@ cd dotfiles
 1. **HM 之前（shell）：** 检测权限（root / sudo / 无）→ 安装前置依赖 →
    **安装 Lix** → 配置 Nix（+ 可选的 CERNET 镜像）→
    **构建并激活 Home Manager**（使用 `-b backup`）。
-2. **HM 之后（通过 `uv` 运行 Python）：** 把登录 shell 设为 Nix 的 zsh（`chsh`）→
-   部署 SSH 密钥 → 写入延迟执行的 Claude 配置 → 安装任意可选的 Linux 系统组件。
+2. **HM 之后（通过 `uv` 运行 Python）：** 应用 JSON(C) 链接映射（若设置了
+   `DOTFILE_LINK_MAP_JSON`）→ 把登录 shell 设为 Nix 的 zsh（`chsh`）→
+   写入延迟执行的 Claude 配置 → 安装任意可选的 Linux 系统组件。
 
 执行完成后，启动它的那个 shell 仍保留**旧的** PATH，因此直接输入 `zsh` 还找不到。
 用它打印出来的绝对路径启动新环境，或者直接重新登录（你的登录 shell 已经是 zsh）：
@@ -62,7 +63,6 @@ exec ~/.nix-profile/bin/zsh -l
 | `DOTFILE_NETWORK_ENV=CN` | 等同于 `--network CN`（zsh 环境也会读取它用于 pypi/rustup）。 |
 | `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。 |
 | `DOTFILE_FLAKE_CACHE` | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。 |
-| `DOTFILE_SSH_SRC` | 覆盖 SSH 密钥源目录（默认 `sources/root/.ssh`）。 |
 | `DOTFILE_LINK_MAP_JSON` | 可选：指向一个 JSON/JSONC 链接映射文件（`{"links":{"<标签>":{"source","target","type":"dir"\|"file"}}}`），作为 post-HM **第一步**执行。未设置则跳过；设置了但文件不存在则报错。目标若已是真实文件/目录，先备份为 `.pre-dotfiles.bak` 再链接；源的类型/存在性不匹配会告警（并在结束时汇总）。示例见 `platform/link-map.jsonc`。 |
 
 ## 在新机器上试用（以及如何恢复）

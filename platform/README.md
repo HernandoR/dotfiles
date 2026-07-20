@@ -3,8 +3,8 @@
 Home Manager (the `flake.nix` + `home/`) owns the **user** environment
 declaratively. This directory is the thin **imperative** layer for what Home
 Manager cannot do on a non-NixOS host (ADR-0007): install nix, configure
-mirrors, invoke Home Manager, set the login shell, deploy secrets, and install
-Linux system-level software.
+mirrors, invoke Home Manager, apply an external symlink map, set the login
+shell, and install Linux system-level software.
 
 ## Entry point
 
@@ -18,8 +18,8 @@ Linux system-level software.
 
 `bootstrap.sh` runs, in order: prerequisites → install Lix → configure nix
 (flakes; CERNET mirror only when `DOTFILE_NETWORK_ENV=CN`) → `home-manager
-switch -b backup` → login shell → SSH keys → Claude post-setup → optional
-system components.
+switch -b backup` → JSON(C) link map → login shell → Claude post-setup →
+optional system components.
 
 ## Files
 
@@ -28,7 +28,6 @@ system components.
 | `bootstrap.sh` | orchestrator / entry point |
 | `lib.sh` | shared helpers (OS/host detection, Lix install, chsh) |
 | `nix-cn.sh` | flakes + CN mirror gating (system nix.conf, sudo) + persist `~/.config/dotfiles/network-env` |
-| `ssh-keys.sh` | deploy SSH keys by copy, strict perms (ADR-0006) |
 | `claude-setup.sh` | Claude Code CLI + deferred OAuth post-login setup (ADR-0005) |
 | `system/cuda.sh` | CUDA Toolkit (Debian/Ubuntu, x86_64) |
 | `system/docker.sh` | Docker Engine + GPU toolchain |
