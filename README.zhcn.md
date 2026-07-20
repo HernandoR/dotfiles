@@ -63,7 +63,7 @@ exec ~/.nix-profile/bin/zsh -l
 | `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。 |
 | `DOTFILE_FLAKE_CACHE` | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。 |
 | `DOTFILE_SSH_SRC` | 覆盖 SSH 密钥源目录（默认 `sources/root/.ssh`）。 |
-| `DOTFILE_HOME_LINK_SRC` | 可选：将该目录下的每个直接子文件夹软链接到 `$HOME`。若 `~/<名称>` 已是真实文件/目录，先备份为 `~/<名称>.pre-dotfiles.bak`（若已存在则依次 `.bak.1`、`.2`…）。未设置则跳过。 |
+| `DOTFILE_LINK_MAP_JSON` | 可选：指向一个 JSON/JSONC 链接映射文件（`{"links":{"<标签>":{"source","target","type":"dir"\|"file"}}}`），作为 post-HM **第一步**执行。未设置则跳过；设置了但文件不存在则报错。目标若已是真实文件/目录，先备份为 `.pre-dotfiles.bak` 再链接；源的类型/存在性不匹配会告警（并在结束时汇总）。示例见 `platform/link-map.jsonc`。 |
 
 ## 在新机器上试用（以及如何恢复）
 

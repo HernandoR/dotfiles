@@ -1,0 +1,15 @@
+{
+  // First-version link map (ADR-0008), consumed when DOTFILE_LINK_MAP_JSON
+  // points at this file. Machine-specific: `source` paths live on the
+  // persistent /fsx volume; `target` paths are this host's $HOME (/root).
+  // Edit both per host. Format is JSONC — // and /* */ comments and trailing
+  // commas are allowed. Each entry: source, target, type ("dir" | "file").
+  "links": {
+    ".agents":      { "source": "/fsx/hernando/dotfile_home_link_src/.agents",      "target": "/root/.agents",      "type": "dir"  },
+    ".claude":      { "source": "/fsx/hernando/dotfile_home_link_src/.claude",      "target": "/root/.claude",      "type": "dir"  },
+    ".ssh":         { "source": "/fsx/hernando/dotfile_home_link_src/.ssh",         "target": "/root/.ssh",         "type": "dir"  },
+    ".claude.json": { "source": "/fsx/hernando/dotfile_home_link_src/.claude.json", "target": "/root/.claude.json", "type": "file" },
+    ".zsh_history": { "source": "/fsx/hernando/dotfile_home_link_src/.zsh_history", "target": "/root/.zsh_history", "type": "file" },
+    ".zcompdump":   { "source": "/fsx/hernando/dotfile_home_link_src/.zcompdump",   "target": "/root/.zcompdump",   "type": "file" },
+  }
+}
