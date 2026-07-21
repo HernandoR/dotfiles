@@ -296,6 +296,31 @@ class Homebrew(OptionalComponent):
             )
 
 
+def install_codegraph(ctx):
+    """Install/self-update CodeGraph (colbymchenry/codegraph) — a *necessary*
+    component: always run by ``setup_claude`` (platform/setup.py), gated only by
+    ``--no-claude``, the same way the Claude CLI itself is. Deliberately NOT an
+    ``OptionalComponent`` — it must not appear in the ``--system``/``all``
+    listing or the interactive system-component picker, which would wrongly
+    imply it is opt-in.
+
+    Idempotent: if codegraph is already on PATH, defer to its own in-place
+    updater rather than re-running the installer — matches upstream guidance
+    ("Already installed? Run `codegraph upgrade`.").
+    """
+    if shutil.which("codegraph"):
+        logger.info("codegraph already installed; running self-update.")
+        ctx.run_command(["codegraph", "upgrade"], check=False)
+        return
+    ctx.package_manager("scripts").install(
+        ctx,
+        Script(
+            "https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh",
+            interpreter="sh",
+        ),
+    )
+
+
 def main():
     """Print all available system components."""
     print("Available system components (run via: platform/setup.py --system <list>)")

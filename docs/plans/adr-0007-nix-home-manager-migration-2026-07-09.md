@@ -144,6 +144,18 @@ NVIDIA drivers, LLVM + `update-alternatives`, apt/brew **system** packages and
 GUI casks, Claude deferred OAuth (ADR-0005), SSH-key copy (ADR-0006), codegraph
 (not in nixpkgs), and `chsh` to the Nix-provided zsh.
 
+**codegraph is necessary, not opt-in.** It is not an `OptionalComponent` and is
+never selected via `--system` — `install_codegraph(ctx)` is a plain function in
+`platform/installers/components.py`, called unconditionally from
+`setup_claude()` (`platform/setup.py`) right after the Claude CLI install,
+gated only by `--no-claude`, exactly like the Claude CLI itself. It installs
+(or idempotently self-updates via `codegraph upgrade`) the CLI, then runs
+`codegraph install --target=claude --yes` to wire its MCP server into Claude —
+both steps non-interactive. `codegraph init` stays per-project and is
+intentionally never run by the bootstrap. (This restores a step that existed
+pre-migration and was silently dropped when `platform/` was rewritten; see
+RFC-0001, 2026-07-21.)
+
 System components are selected with `--system <list>` or the
 `DOTFILE_SYSTEM_COMPONENTS` env var (flag wins). Special specs: `all` (every
 component; rootless docker wins over rootful), `default` (the default group),
