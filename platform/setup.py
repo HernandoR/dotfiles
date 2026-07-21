@@ -24,7 +24,7 @@ import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from installers.components import OptionalComponent  # noqa: E402
+from installers.components import OptionalComponent, install_codegraph  # noqa: E402
 from installers.context import Ctx  # noqa: E402
 
 logging.basicConfig(
@@ -234,18 +234,28 @@ def setup_runtimes(ctx):
 
 
 def setup_claude(ctx):
-    """Install the Claude Code CLI + write the deferred interactive setup
-    (plugins/Smithery-MCP/Lark). It needs a TTY, so it is NOT auto-run; the user
-    invokes it once via the `dotfiles-postsetup` shell function. The Smithery CLI
-    is installed by setup_runtimes (mise npm tool), so it is called directly (no
-    `npx`); only the Lark CLI still needs npx (node from mise). The HM zsh prints
-    a one-line reminder while the script is still present. No privilege."""
+    """Install the Claude Code CLI + CodeGraph, then write the deferred interactive
+    setup (plugins/Smithery-MCP/Lark). The CLI binary and CodeGraph installs are
+    fully non-interactive and run every time; the rest needs a TTY, so it is NOT
+    auto-run — the user invokes it once via the `dotfiles-postsetup` shell
+    function. The Smithery CLI is installed by setup_runtimes (mise npm tool), so
+    it is called directly (no `npx`); only the Lark CLI still needs npx (node from
+    mise). The HM zsh prints a one-line reminder while the script is still
+    present. No privilege."""
     deferred = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
     if shutil.which("claude"):
         logger.info("claude CLI already installed")
     else:
         logger.info("installing Claude Code CLI")
         ctx.run_command("curl -fsSL https://claude.ai/install.sh | bash", shell=True, check=False)
+
+    logger.info("installing codegraph")
+    install_codegraph(ctx)
+    # `codegraph install` wires the MCP server into Claude Code; `--yes` skips the
+    # interactive agent picker. `codegraph init` is per-project and intentionally
+    # not run here (a bootstrap has no project context).
+    ctx.run_command(["codegraph", "install", "--target=claude", "--yes"], check=False)
+
     if ctx.dry_run:
         logger.info("[DRY-RUN] would write %s", deferred)
         return

@@ -529,3 +529,60 @@ the **same machinery** the bootstrap uses. To share that machinery, `Ctx` +
 `detect_priv` were factored out of `setup.py` into `installers/context.py`
 (imported by `setup.py` and both pickers). Verified: uv resolves the inline
 `questionary` dep and both scripts run to their prompt.
+
+### 2026-07-21 — codegraph install was silently dropped in the migration
+
+Owner asked whether `codegraph` is in the necessary (declarative) install set.
+It is not, and per this RFC's own disposition (§"Kept in the thin imperative
+layer", above) it can't be — `codegraph` is a self-managed versioned binary
+(`~/.codegraph/versions/<ver>/bin/codegraph`, symlinked from `~/.local/bin`),
+not a public package, so it stays imperative regardless of nixpkgs.
+
+But it turned out `codegraph` was not installed by *anything* in the current
+`platform/` tree either. Before the migration (pre-`feat/lix-based`), `codegraph`
+was an `OptionalComponent` (installer:
+`https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh`)
+invoked directly — bypassing `--system` selection — from the automated half of
+the Claude post-setup step, immediately after the Claude CLI install and before
+`codegraph install --target=claude --yes` wired its MCP server into Claude.
+Commit `f365d3d` (retiring the old pipeline for the imperative layer) carried
+that comment forward verbatim ("Automated (now): CLI binary + codegraph — fully
+non-interactive") but the actual install call was dropped from the rewritten
+`setup_claude()` — an oversight, not a decision; nothing in the discussion log
+above records intentionally removing it.
+
+**Fix, v1:** restored `codegraph` as an `OptionalComponent` (`groups =
+frozenset()`, invoked directly rather than via `--system`). **Revised same day**
+— the owner wanted it explicitly *necessary, not optional*, and the
+`OptionalComponent` framing had a real bug: it self-registers in
+`OptionalComponent._registry`, so it showed up in
+`platform/installers/components.py`'s listing and — because
+`nix_system_install.py`'s interactive picker builds its checklist from
+`OptionalComponent.names()` — in the manual system-component picker too,
+selectable a second time alongside its unconditional install in `setup_claude`.
+That contradicts "necessary": nothing else that is unconditionally installed
+(the Claude CLI itself, mise runtimes) is an `OptionalComponent` either — they
+are plain functions/calls in `setup.py`, gated only by `--no-claude`, not by
+`--system`. **Final form:** `install_codegraph(ctx)` is a plain function in
+`platform/installers/components.py` (not a `Component` subclass, not
+registered); `setup_claude()` calls it directly, matching the Claude CLI's own
+pattern exactly. Verified: it no longer appears in `components.py`'s listing,
+and `python3 platform/setup.py --dry-run --system none` on the owner's machine
+(already has codegraph 0.9.7) still runs `codegraph upgrade` then `codegraph
+install --target=claude --yes`.
+
+**Audit for other silent drops:** diffed every `Component` subclass in the
+pre-migration `platform/installers/components.py` (as of `f365d3d^`) against the
+current tree. `OnePassword` → `home/packages.nix` (`_1password-cli`); `MacBrew` →
+`Homebrew` (current `components.py`); `Node`/`Rustup` → `home/mise.nix`
+(`node`/`rust` tools); `OhMyZsh`/`Fzf`/`Starship`/`Mergiraf`/`Bottom`/`FdFind`/
+`GitHubCLI`/`Jujutsu` → their `home/*.nix` declarative equivalents (per the
+Disposition table, above); `Docker`/`DockerRootless`/`Cuda`/`Nvidia`/`Llvm`/
+`SoftwareProperties` are unchanged in the current `components.py`; `ClaudeCode`'s
+plugin/Smithery/Lark steps all carried into `setup_claude()`'s deferred script.
+**`codegraph` was the only one with no successor anywhere** — everything else
+checks out. Also spot-checked the `DOTFILE_NETWORK_ENV` /
+`DOTFILE_SYSTEM_COMPONENTS` / `DOTFILE_FLAKE_CACHE` / `DOTFILE_SSH_SRC` env-var
+table and the `dotfiles-postsetup` function against the actual code
+(`platform/*.py`, `platform/*.sh`, `home/zsh/functions.zsh`, `home/shell.nix`) —
+all present and consistent with AGENT.md/RFC/ADR-0007.
