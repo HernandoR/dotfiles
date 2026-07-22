@@ -260,6 +260,8 @@ def setup_claude(ctx):
         logger.info("[DRY-RUN] would write %s", deferred)
         return
     plugins = ("discuss", "implement", "dev_loop", "fetch_external_knowledge")
+    # Astral's marketplace (astral-sh/claude-code-plugins) — Python tooling skills.
+    astral_plugins = ("astral",)
     # Individual Smithery-registry MCP servers (qualified registry names, not npm
     # specifiers). context7 already lives in the namespace, so these are emitted
     # COMMENTED OUT — kept as a template for adding a separate server later.
@@ -278,6 +280,8 @@ def setup_claude(ctx):
         "# --- Claude plugins --------------------------------------------------------",
         "claude plugin marketplace add hernandor/agent-skillset || true",
         *[f"claude plugin install {p}@agent-skillset --scope user || true" for p in plugins],
+        "claude plugin marketplace add astral-sh/claude-code-plugins || true",
+        *[f"claude plugin install {p}@astral-sh --scope user || true" for p in astral_plugins],
         "",
         "# --- Smithery MCP ----------------------------------------------------------",
         "if command -v smithery >/dev/null 2>&1; then",
