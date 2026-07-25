@@ -12,6 +12,7 @@
 
       # CLI toolset (replaces the old optional components + brew formulae).
       ripgrep
+      jq
       fd
       tree
       wget

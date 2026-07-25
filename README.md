@@ -52,21 +52,21 @@ exec ~/.nix-profile/bin/zsh -l
 
 ## Flags & environment variables
 
-| Flag | Effect |
-| --- | --- |
-| `--dry-run` | Print every command without executing it. |
-| `--verbose` | Echo each command as it runs. |
-| `--network CN` | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
+| Flag              | Effect                                                      |
+| ----------------- | ----------------------------------------------------------- |
+| `--dry-run`       | Print every command without executing it.                   |
+| `--verbose`       | Echo each command as it runs.                               |
+| `--network CN`    | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
 | `--system <list>` | Install opt-in Linux system components (`all` = every one). |
-| `--host NAME` | Force a named flake host instead of auto-detecting. |
-| `--no-claude` | Skip writing the Claude/Lark/MCP post-setup. |
+| `--host NAME`     | Force a named flake host instead of auto-detecting.         |
+| `--no-claude`     | Skip writing the Claude/Lark/MCP post-setup.                |
 
-| Env var | Effect |
-| --- | --- |
-| `DOTFILE_NETWORK_ENV=CN` | Same as `--network CN` (also read by the zsh env for pypi/rustup). |
-| `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins. |
-| `DOTFILE_FLAKE_CACHE` | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI). |
-| `DOTFILE_LINK_MAP_JSON` | Opt-in: path to a JSON/JSONC link map (`{"links":{"<label>":{"source","target","type":"dir"\|"file"}}}`), applied as the **first** post-HM step. Unset = skip; set-but-missing file = error. Real targets are backed up to `.pre-dotfiles.bak` before linking; source type/existence mismatches warn (re-summarized at the end). Example: `platform/link-map.jsonc`. |
+| Env var                     | Effect                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DOTFILE_NETWORK_ENV=CN`    | Same as `--network CN` (also read by the zsh env for pypi/rustup).                                                                                                                                                                                                                                                                                                   |
+| `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins.                                                                                                                                                                                                                                                                                                                 |
+| `DOTFILE_FLAKE_CACHE`       | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI).                                                                                                                                                                                                                                                                                                 |
+| `DOTFILE_LINK_MAP_JSON`     | Opt-in: path to a JSON/JSONC link map (`{"links":{"<label>":{"source","target","type":"dir"\|"file"}}}`), applied as the **first** post-HM step. Unset = skip; set-but-missing file = error. Real targets are backed up to `.pre-dotfiles.bak` before linking; source type/existence mismatches warn (re-summarized at the end). Example: `platform/link-map.jsonc`. |
 
 ## Trying it on a new machine (and how to recover)
 
@@ -119,56 +119,83 @@ home-manager remove-generations <id> [<id>…] # remove specific ones
 nix-collect-garbage -d                        # then reclaim disk
 ```
 
-## Optional system components
+## Component classification
 
-User-level tools are always installed declaratively (see
-[home/packages.nix](home/packages.nix)). *System-level* software is selected with
-`--system` or `DOTFILE_SYSTEM_COMPONENTS` (the flag wins). Special specs: `all`
-(every component; if both Docker variants match, **rootless wins**), `default`,
-and `none`.
+Components in this repo are split into two broad categories:
 
-On debian/ubuntu, `software-properties` is **required**: it provides
-`add-apt-repository` (a prerequisite for the docker/nvidia/llvm repo setup), so
-it is always installed alongside whatever you select — `--system docker` installs
-`software-properties` too. Only `--system none` skips it.
+- **User components** — declarative, managed by Home Manager in
+  `home/packages.nix`.
+- **System components** — imperative, installed by `platform/setup.py` via the
+  `OptionalComponent` registry in `platform/installers/components.py`.
 
-**When you pass nothing, the `default` group installs** — `brew` on macOS (plus
-the required `software-properties` on Linux). Everything else is opt-in;
-`cuda`/`nvidia`/`llvm`/`docker` you request explicitly. Each component is gated by
-its OS, so a spec only installs what applies to the host.
+### User components
+
+User components are the packages that Home Manager installs on every switch.
+They are the default user environment and include the core CLI toolset, runtime
+support, and the tools you use interactively.
+
+- **Default user components** are the main `home/packages.nix` list that applies
+  on all supported hosts. This includes tools such as `ripgrep`, `jq`, `fd`,
+  `tree`, `wget`, `uv`, and the rest of the core CLI toolset.
+- **Conditional user components** are still declarative, but gated by OS or
+  other build-time conditions in `home/packages.nix` (for example, `xclip` is
+  included only on Linux).
+
+These user components are not selected with `--system`; they are always applied
+by Home Manager as part of the bootstrap.
+
+### System components
+
+System components are the things Home Manager cannot own on a non-NixOS host.
+They are selected with `--system <list>` or `DOTFILE_SYSTEM_COMPONENTS` and
+installed after the Home Manager switch.
+
+- **Required system components**
+  - `software-properties` on Debian/Ubuntu. It provides `add-apt-repository`
+    and is installed whenever `run_system` runs. Only `--system none` skips it.
+- **Optional system components**
+  - `docker` — Docker Engine (rootful)
+  - `docker-rootless` — Docker (rootless)
+  - `cuda` — CUDA Toolkit 12.6
+  - `nvidia` — NVIDIA driver + container toolkit
+  - `llvm` — LLVM 18 (+ `update-alternatives`)
+  - `brew` — Homebrew itself on macOS only (no formulae/casks)
+
+The `--system` selector accepts comma-separated component names, alias groups,
+and `all`; if both `docker` and `docker-rootless` are selected, rootless wins.
+When unset, the default system spec is used: on macOS that means `brew`, while on
+Linux it means no optional system component, but required Linux prerequisites
+like `software-properties` still run unless `--system none` is specified.
 
 ```bash
-./bootstrap.sh                       # required + default (software-properties on Linux / brew on macOS)
-./bootstrap.sh --system docker,llvm  # these + the required software-properties
-./bootstrap.sh --system all          # everything applicable to this OS
+./bootstrap.sh                       # user components + default system components
+./bootstrap.sh --system docker,llvm  # system components + required Linux prerequisites
+./bootstrap.sh --system all          # every applicable system component
 ./bootstrap.sh --system none         # no system components at all (skips required too)
 DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 ```
 
-To add components **after** the bootstrap, there's a manual interactive picker
-(not auto-run) — it lists the components that apply to this OS as a checklist
-(the default group pre-checked), lets you toggle the network for the run, then
-installs via the same machinery:
+To add components after bootstrap, run the manual interactive picker:
 
 ```bash
 ./nix-system-interactive-install.sh            # pick + install
 ./nix-system-interactive-install.sh --dry-run  # preview only
 ```
 
-| Name | Description | OS |
-| --- | --- | --- |
-| `software-properties` | `add-apt-repository` support **(required on Linux — always installed)** | debian, ubuntu |
-| `docker` | Docker Engine (rootful) | debian, ubuntu |
-| `docker-rootless` | Docker (rootless) | debian, ubuntu |
-| `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
-| `nvidia` | NVIDIA driver + container toolkit | debian, ubuntu |
-| `llvm` | LLVM 18 (+ `update-alternatives`) | debian, ubuntu |
-| `brew` | Homebrew — the package manager only (no formulae/casks) **(default on macOS)** | darwin |
+| Name                  | Description                                                                    | OS             |
+| --------------------- | ------------------------------------------------------------------------------ | -------------- |
+| `software-properties` | `add-apt-repository` support **(required on Linux — always installed)**        | debian, ubuntu |
+| `docker`              | Docker Engine (rootful)                                                        | debian, ubuntu |
+| `docker-rootless`     | Docker (rootless)                                                              | debian, ubuntu |
+| `cuda`                | CUDA Toolkit 12.6                                                              | debian, ubuntu |
+| `nvidia`              | NVIDIA driver + container toolkit                                              | debian, ubuntu |
+| `llvm`                | LLVM 18 (+ `update-alternatives`)                                              | debian, ubuntu |
+| `brew`                | Homebrew — the package manager only (no formulae/casks) **(default on macOS)** | darwin         |
 
-On macOS the bootstrap does **not** install Homebrew by default (CLI tools come
-from nixpkgs). Add it with `--system brew` (or `--system all`); on CN it uses the
-BFSU mirror. It installs Homebrew *itself* only — add GUI apps yourself with
-`brew install --cask <app>`.
+On macOS the bootstrap does **not** install Homebrew by default (CLI tools
+come from nixpkgs). Add it with `--system brew` (or `--system all`); on CN it
+uses the BFSU mirror. It installs Homebrew _itself_ only — add GUI apps
+yourself with `brew install --cask <app>`.
 
 For the GUI apps, there's a manual **interactive cask picker** (not auto-run):
 
@@ -187,7 +214,7 @@ List them anytime: `uv run platform/installers/components.py`.
 ## Post-login interactive setup
 
 The Claude/Smithery/Lark setup (plugins, MCP servers, Lark CLI auth) is
-*interactive*, so it is **not** auto-run. `setup.py` writes it to
+_interactive_, so it is **not** auto-run. `setup.py` writes it to
 `~/.local/share/dotfiles/post-login-setup.sh`; the zsh prints a reminder while
 it's pending. Run it once when you're ready to authorize:
 

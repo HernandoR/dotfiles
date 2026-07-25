@@ -49,21 +49,21 @@ exec ~/.nix-profile/bin/zsh -l
 
 ## 参数与环境变量
 
-| 参数 | 效果 |
-| --- | --- |
-| `--dry-run` | 打印每条命令但不执行。 |
-| `--verbose` | 执行时回显每条命令。 |
-| `--network CN` | 为 Nix、pypi/uv 和 rustup 启用中国（CERNET）镜像。 |
-| `--system <list>` | 安装可选的 Linux 系统组件（`all` = 全部）。 |
-| `--host NAME` | 强制使用指定的 flake host，而非自动检测。 |
-| `--no-claude` | 跳过写入 Claude/Lark/MCP 的后置配置。 |
+| 参数              | 效果                                               |
+| ----------------- | -------------------------------------------------- |
+| `--dry-run`       | 打印每条命令但不执行。                             |
+| `--verbose`       | 执行时回显每条命令。                               |
+| `--network CN`    | 为 Nix、pypi/uv 和 rustup 启用中国（CERNET）镜像。 |
+| `--system <list>` | 安装可选的 Linux 系统组件（`all` = 全部）。        |
+| `--host NAME`     | 强制使用指定的 flake host，而非自动检测。          |
+| `--no-claude`     | 跳过写入 Claude/Lark/MCP 的后置配置。              |
 
-| 环境变量 | 效果 |
-| --- | --- |
-| `DOTFILE_NETWORK_ENV=CN` | 等同于 `--network CN`（zsh 环境也会读取它用于 pypi/rustup）。 |
-| `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。 |
-| `DOTFILE_FLAKE_CACHE` | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。 |
-| `DOTFILE_LINK_MAP_JSON` | 可选：指向一个 JSON/JSONC 链接映射文件（`{"links":{"<标签>":{"source","target","type":"dir"\|"file"}}}`），作为 post-HM **第一步**执行。未设置则跳过；设置了但文件不存在则报错。目标若已是真实文件/目录，先备份为 `.pre-dotfiles.bak` 再链接；源的类型/存在性不匹配会告警（并在结束时汇总）。示例见 `platform/link-map.jsonc`。 |
+| 环境变量                    | 效果                                                                                                                                                                                                                                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DOTFILE_NETWORK_ENV=CN`    | 等同于 `--network CN`（zsh 环境也会读取它用于 pypi/rustup）。                                                                                                                                                                                                                                                                   |
+| `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。                                                                                                                                                                                                                                                                                     |
+| `DOTFILE_FLAKE_CACHE`       | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。                                                                                                                                                                                                                                                               |
+| `DOTFILE_LINK_MAP_JSON`     | 可选：指向一个 JSON/JSONC 链接映射文件（`{"links":{"<标签>":{"source","target","type":"dir"\|"file"}}}`），作为 post-HM **第一步**执行。未设置则跳过；设置了但文件不存在则报错。目标若已是真实文件/目录，先备份为 `.pre-dotfiles.bak` 再链接；源的类型/存在性不匹配会告警（并在结束时汇总）。示例见 `platform/link-map.jsonc`。 |
 
 ## 在新机器上试用（以及如何恢复）
 
@@ -113,52 +113,78 @@ home-manager remove-generations <id> [<id>…] # 移除指定的若干个
 nix-collect-garbage -d                        # 然后回收磁盘
 ```
 
-## 可选系统组件
+## 组件分类
 
-用户级工具始终以声明式方式安装（见
-[home/packages.nix](home/packages.nix)）。*系统级*软件通过
-`--system` 或 `DOTFILE_SYSTEM_COMPONENTS` 选择（参数优先）。特殊取值：`all`
-（全部组件；若两个 Docker 变体同时匹配，则 **rootless 胜出**）、`default` 和 `none`。
+组件分为两大类：
 
-在 debian/ubuntu 上，`software-properties` 是**必需组件**：它提供
-`add-apt-repository`（docker/nvidia/llvm 配置软件源的前置依赖），因此无论你选了
-什么，它都会一并安装 —— `--system docker` 也会顺带装上 `software-properties`。
-只有 `--system none` 会跳过它。
+- **用户组件** —— 声明式，由 Home Manager 在 `home/packages.nix` 中管理。
+- **系统组件** —— 命令式，由 `platform/setup.py` 通过
+  `platform/installers/components.py` 的 `OptionalComponent` 注册表安装。
 
-**当你什么都不传时，安装 `default` 组** —— macOS 上是 `brew`（Linux 上则是必需的
-`software-properties`）。其余都是按需 opt-in；`cuda`/`nvidia`/`llvm`/`docker`
-需要你显式请求。每个组件都受其 OS 约束，因此一个 spec 只会安装适用于本主机的部分。
+### 用户组件
+
+用户组件是 Home Manager 每次切换时安装的包。它们构成默认的用户环境，
+包括核心 CLI 工具集、运行时支持，以及你直接使用的工具。
+
+- **默认用户组件** 是 `home/packages.nix` 中适用于所有主机的主列表。
+  例如 `ripgrep`、`jq`、`fd`、`tree`、`wget`、`uv` 等核心工具。
+- **条件用户组件** 仍然是声明式的，但受 OS 或构建时条件控制，例如 Linux
+  上的 `xclip`。
+
+这些用户组件不是由 `--system` 选择；它们由 Home Manager 在 bootstrap
+过程中始终应用。
+
+### 系统组件
+
+系统组件是 Home Manager 在非 NixOS 主机上无法拥有的内容。它们通过
+`--system <list>` 或 `DOTFILE_SYSTEM_COMPONENTS` 选择，
+在 Home Manager 切换之后安装。
+
+- **必要的系统组件**
+  - Debian/Ubuntu 上的 `software-properties`。它提供 `add-apt-repository`，
+    是 docker/nvidia/llvm 仓库配置的前置条件。只要 `run_system` 运行，
+    就会安装它；只有 `--system none` 会跳过。
+- **可选的系统组件**
+  - `docker` — Docker Engine（rootful）
+  - `docker-rootless` — Docker（rootless）
+  - `cuda` — CUDA Toolkit 12.6
+  - `nvidia` — NVIDIA 驱动 + container toolkit
+  - `llvm` — LLVM 18（+ `update-alternatives`）
+  - `brew` — 仅 macOS 上的 Homebrew 本体（不含 formulae/casks）
+
+`--system` 支持逗号分隔的组件名、别名组和 `all`；如果同时选择了
+`docker` 和 `docker-rootless`，则保留 rootless。未指定时会使用默认组：
+macOS 为 `brew`，Linux 则没有额外的可选系统组件，但如果适用的话仍会
+安装 `software-properties`，除非指定 `--system none`。
 
 ```bash
-./bootstrap.sh                       # 必需 + default（Linux 上 software-properties / macOS 上 brew）
-./bootstrap.sh --system docker,llvm  # 这些 + 必需的 software-properties
-./bootstrap.sh --system all          # 适用于本 OS 的全部组件
-./bootstrap.sh --system none         # 完全不装系统组件（连必需组件也跳过）
+./bootstrap.sh                       # 用户组件 + 默认系统组件
+./bootstrap.sh --system docker,llvm  # 系统组件 + 必要的 Linux 前置条件
+./bootstrap.sh --system all          # 安装适用于本 OS 的所有系统组件
+./bootstrap.sh --system none         # 完全不装系统组件（连必要组件也跳过）
 DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 ```
 
-要在 bootstrap **之后**添加组件，有一个手动交互式选择器（不会自动运行）——
-它以清单形式列出适用于本 OS 的组件（default 组预先勾选），允许你切换本次运行的网络，
-然后通过同一套机制安装：
+要在 bootstrap 之后添加组件，有一个手动交互式选择器：
 
 ```bash
 ./nix-system-interactive-install.sh            # 选择 + 安装
 ./nix-system-interactive-install.sh --dry-run  # 仅预览
 ```
 
-| 名称 | 描述 | OS |
-| --- | --- | --- |
-| `software-properties` | `add-apt-repository` 支持 **（Linux 必需 —— 始终安装）** | debian, ubuntu |
-| `docker` | Docker Engine（rootful） | debian, ubuntu |
-| `docker-rootless` | Docker（rootless） | debian, ubuntu |
-| `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
-| `nvidia` | NVIDIA 驱动 + container toolkit | debian, ubuntu |
-| `llvm` | LLVM 18（+ `update-alternatives`） | debian, ubuntu |
-| `brew` | Homebrew —— 仅包管理器本身（不含 formulae/casks）**（macOS 默认）** | darwin |
+| 名称                  | 描述                                                                | OS             |
+| --------------------- | ------------------------------------------------------------------- | -------------- |
+| `software-properties` | `add-apt-repository` 支持 **（Linux 必需 —— 始终安装）**            | debian, ubuntu |
+| `docker`              | Docker Engine（rootful）                                            | debian, ubuntu |
+| `docker-rootless`     | Docker（rootless）                                                  | debian, ubuntu |
+| `cuda`                | CUDA Toolkit 12.6                                                   | debian, ubuntu |
+| `nvidia`              | NVIDIA 驱动 + container toolkit                                     | debian, ubuntu |
+| `llvm`                | LLVM 18（+ `update-alternatives`）                                  | debian, ubuntu |
+| `brew`                | Homebrew —— 仅包管理器本身（不含 formulae/casks）**（macOS 默认）** | darwin         |
 
 在 macOS 上，bootstrap **默认不**安装 Homebrew（CLI 工具来自 nixpkgs）。
 用 `--system brew`（或 `--system all`）添加它；在 CN 环境会使用 BFSU 镜像。
-它只安装 Homebrew *本身*——GUI 应用请自行用 `brew install --cask <app>` 添加。
+它只安装 Homebrew _本身_——GUI 应用请自行用 `brew install --cask <app>` 添加。
 
 对于 GUI 应用，有一个手动的**交互式 cask 选择器**（不会自动运行）：
 
