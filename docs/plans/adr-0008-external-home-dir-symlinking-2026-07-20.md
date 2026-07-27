@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | accepted |
+| Status | superseded (→ [ADR-0009](adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md)) |
 | Date | 2026-07-20 |
 
 ## Context

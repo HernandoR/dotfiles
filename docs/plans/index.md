@@ -9,4 +9,5 @@
 | [ADR-0005](adr-0005-claude-post-setup-ownership-2026-06-29.md) | Claude config owned by a post-setup, excluded from linking | accepted | 2026-06-29 |
 | [ADR-0006](adr-0006-ssh-key-deployment-2026-06-29.md) | SSH keys deployed by copy, git-ignored in staging | superseded (→ ADR-0008) | 2026-06-29 |
 | [ADR-0007](adr-0007-nix-home-manager-migration-2026-07-09.md) | Migrate to Nix flake + standalone Home Manager | accepted | 2026-07-09 |
-| [ADR-0008](adr-0008-external-home-dir-symlinking-2026-07-20.md) | JSON(C)-driven symlink map for external files/dirs into `$HOME` | accepted | 2026-07-20 |
+| [ADR-0008](adr-0008-external-home-dir-symlinking-2026-07-20.md) | JSON(C)-driven symlink map for external files/dirs into `$HOME` | superseded (→ ADR-0009) | 2026-07-20 |
+| [ADR-0009](adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md) | Config ownership tiers — env-specific HM module owns mutable links; declarative nixification deferred | accepted | 2026-07-26 |
