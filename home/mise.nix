@@ -32,6 +32,8 @@
           version = "latest";
           allow_builds = [ "@smithery/cli" ];
         };
+        pre-commit = "latest";
+        worktrunk = "latest";
       };
     };
   };
