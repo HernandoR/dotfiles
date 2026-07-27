@@ -7,6 +7,9 @@
     ./git.nix
     ./tmux.nix
     ./mise.nix
+    # Env-specific mutable links (ADR-0009 Tier B). No-op on shared branches;
+    # env branches (e.g. prod/mewtant) override this file with real entries.
+    ./env-links.nix
   ];
 
   home.username = username;
