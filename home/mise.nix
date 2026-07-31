@@ -26,6 +26,10 @@
         go = "latest";
         just = "latest";
         node = "lts";
+        # Lark CLI — installed via `npx @larksuite/cli@latest install` in the
+        # post-login Claude setup, but kept available as a global npm tool here
+        # so the runtime is present once mise has materialized node.
+        "npm:@larksuite/cli" = "latest";
         # Smithery MCP CLI — called directly by the post-login setup (no npx).
         # pnpm blocks dependency lifecycle scripts by default; smithery ships a
         # `postinstall`, so approve exactly that package. mise passes each entry
