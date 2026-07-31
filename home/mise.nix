@@ -21,8 +21,11 @@
         npm.package_manager = "pnpm";
       };
       tools = {
+        aws-cli = "latest";
+        docker-cli = "latest";
+        go = "latest";
+        just = "latest";
         node = "lts";
-        rust = "stable";
         # Smithery MCP CLI — called directly by the post-login setup (no npx).
         # pnpm blocks dependency lifecycle scripts by default; smithery ships a
         # `postinstall`, so approve exactly that package. mise passes each entry
@@ -33,6 +36,7 @@
           allow_builds = [ "@smithery/cli" ];
         };
         pre-commit = "latest";
+        rust = "stable";
         worktrunk = "latest";
       };
     };
