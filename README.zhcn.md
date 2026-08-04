@@ -39,18 +39,8 @@ cd dotfiles
   privilege   sudo — privileged steps run via sudo (may ask for your password)
   network     upstream defaults (pass --network CN for the China mirrors)
 
-  will install
-    - prerequisites via apt-get: curl git xz-utils ca-certificates   [privileged]
-    - Lix (multi-user) — fetch install.lix.systems/lix, create /nix, …   [privileged]
-    - Home Manager generation for 'dotfiles-debian' — the whole user environment …
-    - mise runtimes: aws-cli, docker-cli, go, just, node, …
-
-  will write / link
-    - /etc/nix/nix.conf <- experimental-features = nix-command flakes   [privileged]
-    - Home Manager symlinks into /home/lz from the nix store (~/.zshrc, ~/.config/git, …)
-    - link map ~/link-map.jsonc: 7 entries, 1 of them displacing a real file/dir
-    - login shell /bin/bash -> ~/.nix-profile/bin/zsh (chsh; adds it to /etc/shells)   [privileged]
-
+  will install                 # 前置依赖、Lix、HM generation、mise 运行时 …
+  will write / link            # 系统 nix.conf、每一条 HM 软链接、link map、登录 shell
   will move your existing files aside (renamed, never deleted)
     - any $HOME file Home Manager wants to own -> the same name with a .backup suffix
     - /home/lz/.zsh_history (file) -> .zsh_history.pre-dotfiles.bak, then linked to …
@@ -58,6 +48,7 @@ cd dotfiles
 ? Proceed with this plan? [Y/n]
 ```
 
+（实际输出里每一节都会逐条列出全部条目，用到 root/sudo 的步骤带 `[privileged]` 标记。）
 最后一节是刻意单列的：挪动你已有的文件是 bootstrap 唯一会碰到你数据的地方，
 因此逐个文件列出、放在最后、就在你作答的位置旁边。
 
@@ -153,6 +144,68 @@ home-manager remove-generations <id> [<id>…] # 移除指定的若干个
 nix-collect-garbage -d                        # 然后回收磁盘
 ```
 
+## 保持同步
+
+单独 `git pull` 不会改变 `$HOME` 里的任何东西：每个 dotfile 都是指向
+`/nix/store` 的软链接，仓库只是构建输入。一次 switch 就能把新内容（无论来自上游
+还是你自己的改动）应用上去：
+
+```bash
+git pull                     # 在 env 分支（prod/mewtant）上：rebase 到共享分支，不要 merge
+home-manager switch --flake .#<host> -b backup
+exec zsh -l                  # 加载新的 PATH / 环境变量 / 补全
+mise install                 # 仅当 home/mise.nix 新增了工具时需要
+```
+
+**用哪个 host？** 如果 `flake.nix` 里定义了你的 hostname 就用它，否则用 OS/架构
+的默认值（`platform/lib.sh:211`）。其他用户——包括 root——走非纯（impure）的
+`generic` 回退 host：`home-manager switch --flake .#generic -b backup --impure`。
+
+`-b backup` 与 bootstrap 的做法一致（`HOME_MANAGER_BACKUP_EXT=backup`）；
+不加它的话，一旦发现该放软链接的位置上是真实文件，switch 就会中止。激活前想先看
+差异：
+
+```bash
+nix build --no-link --print-out-paths .#homeConfigurations."<host>".activationPackage
+nix store diff-closures /nix/var/nix/profiles/per-user/"$USER"/home-manager <上面打印的路径>
+```
+
+如果结果不对：`home-manager switch --rollback`——见
+[在新机器上试用（以及如何恢复）](#在新机器上试用以及如何恢复)。
+
+**升级版本**（区别于应用配置）：
+
+```bash
+nix flake update                     # 全部 input；或 `nix flake update nixpkgs`
+home-manager switch --flake .#<host> -b backup
+mise up                              # mise 工具，在声明的范围内升级
+```
+
+把改动后的 `flake.lock` 与需要它的那次改动一起提交。
+
+### 重跑 bootstrap
+
+只有当改动落在**命令式那一半**时才需要：`platform/` 自身、新增的
+`home/env-links.nix` / link map 条目、登录 shell 没设置成功，或要装新的
+`--system` 组件。重跑是幂等的——nix 已存在时跳过 Lix（`platform/lib.sh:312`），
+`nix.conf` 的每一行都先去重再追加（`platform/nix-cn.sh:59`），generation 没变化时
+复用而不新建（"No change so reusing latest profile generation"），link map、
+`chsh`、`mise install`、brew 也都在已完成时 no-op。有四点要知道：
+
+- **要带上第一次运行时的同一套参数。** 不传 `--network CN` 时，这次运行会
+  **删除** `~/.config/dotfiles/network-env`（`platform/nix-cn.sh:94`），你 shell 里的
+  pypi/uv + rustup 镜像会静默消失。
+- **残留的 `.backup` 会让激活中止。** 如果 Home Manager 新接管的某个文件已存在为
+  真实文件，而上次留下的 `<name>.backup` 还在，激活会以
+  _"would be clobbered by backing up"_ 失败。删掉旧的 `.backup`，或加
+  `HOME_MANAGER_BACKUP_OVERWRITE=1` 重跑。
+- **登录后脚本会被写回来。** `setup.py` 无条件重写 `post-login-setup.sh`，所以即使
+  你已经跑过，`dotfiles-postsetup` 还是会再次出现；`codegraph upgrade` 也每次都跑。
+  `--no-claude` 可跳过这两者。
+- **累积的是磁盘占用，而不是重复安装。** 每次 `flake.lock` 变动都会留下一代
+  generation，`*.backup` / `*.pre-dotfiles.bak` 也从不自动删除——用上面的
+  `expire-generations` + `nix-collect-garbage` 清理。
+
 ## 组件分类
 
 组件分为两大类：
@@ -163,54 +216,14 @@ nix-collect-garbage -d                        # 然后回收磁盘
 
 ### 用户组件
 
-用户组件是 Home Manager 每次切换时安装的包。它们构成默认的用户环境，
-包括核心 CLI 工具集、运行时支持，以及你直接使用的工具。
-
-- **默认用户组件** 是 `home/packages.nix` 中适用于所有主机的主列表。
-  例如 `ripgrep`、`jq`、`fd`、`tree`、`wget`、`uv` 等核心工具。
-- **条件用户组件** 仍然是声明式的，但受 OS 或构建时条件控制，例如 Linux
-  上的 `xclip`。
-
-这些用户组件不是由 `--system` 选择；它们由 Home Manager 在 bootstrap
-过程中始终应用。
+`home/packages.nix` 里那份 Home Manager 每次切换都会安装的列表——核心 CLI 工具集
+（`ripgrep`、`jq`、`fd`、`tree`、`wget`、`uv` 等），其中一部分在同一文件里按 OS
+条件启用（如 `xclip` 仅 Linux）。它们永远不由 `--system` 选择，始终应用。
 
 ### 系统组件
 
-系统组件是 Home Manager 在非 NixOS 主机上无法拥有的内容。它们通过
-`--system <list>` 或 `DOTFILE_SYSTEM_COMPONENTS` 选择，
-在 Home Manager 切换之后安装。
-
-- **必要的系统组件**
-  - Debian/Ubuntu 上的 `software-properties`。它提供 `add-apt-repository`，
-    是 docker/nvidia/llvm 仓库配置的前置条件。只要 `run_system` 运行，
-    就会安装它；只有 `--system none` 会跳过。
-- **可选的系统组件**
-  - `docker` — Docker Engine（rootful）
-  - `docker-rootless` — Docker（rootless）
-  - `cuda` — CUDA Toolkit 12.6
-  - `nvidia` — NVIDIA 驱动 + container toolkit
-  - `llvm` — LLVM 18（+ `update-alternatives`）
-  - `brew` — 仅 macOS 上的 Homebrew 本体（不含 formulae/casks）
-
-`--system` 支持逗号分隔的组件名、别名组和 `all`；如果同时选择了
-`docker` 和 `docker-rootless`，则保留 rootless。未指定时会使用默认组：
-macOS 为 `brew`，Linux 则没有额外的可选系统组件，但如果适用的话仍会
-安装 `software-properties`，除非指定 `--system none`。
-
-```bash
-./bootstrap.sh                       # 用户组件 + 默认系统组件
-./bootstrap.sh --system docker,llvm  # 系统组件 + 必要的 Linux 前置条件
-./bootstrap.sh --system all          # 安装适用于本 OS 的所有系统组件
-./bootstrap.sh --system none         # 完全不装系统组件（连必要组件也跳过）
-DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
-```
-
-要在 bootstrap 之后添加组件，有一个手动交互式选择器：
-
-```bash
-./nix-system-interactive-install.sh            # 选择 + 安装
-./nix-system-interactive-install.sh --dry-run  # 仅预览
-```
+Home Manager 在非 NixOS 主机上无法拥有的那部分，在 switch 之后安装，用
+`--system <list>` / `DOTFILE_SYSTEM_COMPONENTS` 选择：
 
 | 名称                  | 描述                                                                | OS             |
 | --------------------- | ------------------------------------------------------------------- | -------------- |
@@ -222,22 +235,23 @@ DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 | `llvm`                | LLVM 18（+ `update-alternatives`）                                  | debian, ubuntu |
 | `brew`                | Homebrew —— 仅包管理器本身（不含 formulae/casks）**（macOS 默认）** | darwin         |
 
-在 macOS 上，bootstrap **默认不**安装 Homebrew（CLI 工具来自 nixpkgs）。
-用 `--system brew`（或 `--system all`）添加它；在 CN 环境会使用 BFSU 镜像。
-它只安装 Homebrew _本身_——GUI 应用请自行用 `brew install --cask <app>` 添加。
-
-对于 GUI 应用，有一个手动的**交互式 cask 选择器**（不会自动运行）：
+选择器接受组件名、别名组和 `all`；同时选了 `docker` 和 `docker-rootless` 时保留
+rootless。不指定即使用 `default` 组——macOS 上是 `brew`，Linux 上没有可选组件——
+而 Debian/Ubuntu 上的 `software-properties` 仍会安装，除非用 `--system none`
+完全退出。
 
 ```bash
-./brew-cask-interactive-install.sh
+./bootstrap.sh --system docker,llvm   # + 必要的 Linux 前置条件
+DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
+./nix-system-interactive-install.sh   # 之后再加组件（--dry-run 仅预览）
+uv run platform/installers/components.py   # 列出全部可选组件
 ```
 
-它运行一个小的 `uv` 脚本（[platform/brew_cask_install.py](platform/brew_cask_install.py)，
-依赖以 uv script 模式内联声明），将推荐的 cask 以清单形式展示（Edge + Alacritty
-预先勾选——在文件里编辑列表），允许你为本次运行选择一个 Homebrew 镜像
-（默认跟随 `DOTFILE_NETWORK_ENV`），然后安装你的选择。
-
-随时列出它们：`uv run platform/installers/components.py`。
+**macOS：** `brew` 只安装 Homebrew _本身_（CLI 工具来自 nixpkgs；CN 环境走 BFSU
+镜像）。GUI 应用是另一个手动、绝不自动运行的选择器——`./brew-cask-interactive-install.sh`，
+一个 uv 脚本（[platform/brew_cask_install.py](platform/brew_cask_install.py)），把推荐
+的 cask 以清单形式展示（Edge + Alacritty 预先勾选，列表在文件里改），并让你为本次
+运行选择镜像（默认跟随 `DOTFILE_NETWORK_ENV`）。
 
 ## 添加软件包（教程）
 
@@ -294,7 +308,7 @@ nix shell nixpkgs#hyperfine      # 然后：hyperfine --version
 
 unfree 包不需要额外步骤——`mkHome` 实例化 nixpkgs 时已设置
 `config.allowUnfree = true`（`flake.nix:41`）。然后
-[同步到你的 home](#把改动同步到当前的-home)。
+[同步到你的 home](#保持同步)。
 
 ### Nix —— 项目内
 
@@ -324,10 +338,23 @@ nix shell nixpkgs#ffmpeg nixpkgs#imagemagick   # 仅当前 shell，不持久化
 }
 ```
 
-想让它在 `cd` 时自动加载，就往*本*配置里加 direnv
-（在某个 `home/*.nix` 模块中写 `programs.direnv.enable = true;` +
-`nix-direnv.enable = true;`——目前配置里还没有），并在项目里放一行
-`.envrc`（`use flake`）。
+想让它在 `cd` 时自动加载，只需在 flake 旁边放一行 `.envrc`——direnv 与
+nix-direnv 已经内置在本配置里（[`home/direnv.nix`](home/direnv.nix)）：
+
+```bash
+echo 'use flake' > .envrc
+direnv allow          # 每个 .envrc 需授权一次，改动后要重新授权
+echo '.direnv/' >> .gitignore
+```
+
+`cd` 进目录即进入该 devShell，`cd` 出去即退出。首次进入要构建整个闭包（慢）；
+nix-direnv 会把结果缓存在 `.direnv/` 并打上 GC root，因此后续进入是瞬时的，
+`nix-collect-garbage` 也不会把它回收掉。
+
+direnv 与全局的 `mise activate` 可以共存，且 devShell 优先：如果 devShell 里列了
+一个 mise 也在管的工具（`node`、`just` 等），那么在该项目内 PATH 上生效的是
+devShell 的那份——即使项目里的 `mise.toml` 固定了另一个版本。想用 mise 的版本，
+就不要把该工具写进 devShell。
 
 ### mise —— 查找工具
 
@@ -410,57 +437,11 @@ mise which node                # 实际解析到哪个 shim/二进制
 插件的顺序——completions → fzf-tab → autosuggestions → 语法高亮放最后，
 这个顺序关乎正确性。
 
-### 把改动同步到当前的 home
-
-上面所有改动在 Home Manager 切换之前都不生效。在仓库目录里：
-
-```bash
-# 1) 预览：构建新 generation，不激活，也不留下 ./result 软链接
-nix build --no-link --print-out-paths .#homeConfigurations.dotfiles-debian.activationPackage
-nix store diff-closures /nix/var/nix/profiles/per-user/"$USER"/home-manager <上面打印的路径>
-
-# 2) 激活
-home-manager switch --flake .#dotfiles-debian -b backup
-```
-
-**用哪个 host？** 如果 `flake.nix` 里定义了你的 hostname 就用它，否则用 OS/架构
-的默认值（`platform/lib.sh:211`）。其他用户——包括 root——走非纯（impure）的
-`generic` 回退 host，需要加 `--impure`：
-
-```bash
-home-manager switch --flake .#generic -b backup --impure
-```
-
-`-b backup` 与 bootstrap 的做法一致（`HOME_MANAGER_BACKUP_EXT=backup`）；
-不加它的话，一旦发现该放软链接的位置上是真实文件，switch 就会中止。
-也可以直接让 bootstrap 来做——它会检测 host，并把 post-HM 的步骤也重跑一遍：
-
-```bash
-./bootstrap.sh --dry-run --verbose   # 预览全过程
-./bootstrap.sh --yes                 # 直接执行，跳过许可提问
-```
-
-之后在你的 shell 里：
-
-```bash
-exec zsh -l                          # 加载新的 PATH / 环境变量 / 补全
-mise install                         # 实体化新声明的 mise 工具
-home-manager packages | grep hyperfine   # 确认这个 generation 里确实有它
-```
-
-如果结果不对：`home-manager switch --rollback`——见
-[在新机器上试用（以及如何恢复）](#在新机器上试用以及如何恢复)。
-
-**升级版本**（区别于添加软件包）：
-
-```bash
-nix flake update                     # 全部 input
-nix flake update nixpkgs             # 只更新 nixpkgs
-home-manager switch --flake .#dotfiles-debian -b backup
-mise up                              # mise 工具，在声明的范围内升级
-```
-
-把改动后的 `flake.lock` 与需要它的那次改动一起提交。
+上面所有改动在 Home Manager 切换之前都不生效：switch、预览与回滚见
+[保持同步](#保持同步)。想确认某个包确实进来了：
+`home-manager packages | grep hyperfine`。也可以直接让 bootstrap 来做——它会检测
+host，并把 post-HM 的步骤也重跑一遍（`./bootstrap.sh --dry-run --verbose`，然后
+`./bootstrap.sh --yes`）。
 
 ## 登录后交互式配置
 
@@ -473,18 +454,10 @@ Claude/Smithery/Lark 配置（插件、MCP 服务器、Lark CLI 认证）是*交
 dotfiles-postsetup    # 需要 TTY；成功后自删除
 ```
 
-**Smithery MCP。** [Smithery](https://smithery.ai/) CLI 预期已经安装好，
-因此脚本直接调用 `smithery`（无需 `npx`）。它会：
-
-1. **API Key 认证** —— 如果环境中设置了 `SMITHERY_API_KEY`，会询问是否用该 key 认证。
-   CLI 自身会读取该变量，所以选择「是」只是通过 `smithery auth whoami` 验证一下；
-   若未设置该 key，则改为提供交互式的 `smithery auth login`。
-2. **命名空间（namespace）形式** —— 随后询问是否把你命名空间的聚合 MCP 端点
-   （`https://mcp.smithery.run/<namespace>`）通过 `smithery mcp add … --client claude`
-   添加到 Claude，失败则回退到
-   `claude mcp add --transport http <namespace> https://mcp.smithery.run/<namespace>`。
-3. 留下一行**已注释**的 `smithery mcp add <server> --client claude`
-   （如 `upstash/context7-mcp`，它已包含在命名空间内），作为日后添加独立服务器的模板。
+它会安装 Claude 插件市场、询问是否认证 [Smithery](https://smithery.ai/) 并把你的
+namespace MCP 端点加到 Claude、以及安装 Lark CLI——每一步都可跳过，任一步失败都不
+影响其余。它具体问什么、为什么这么问：
+[platform/README.md](platform/README.md#post-login-setup-smithery--lark)。
 
 ## 中国镜像
 

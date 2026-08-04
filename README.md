@@ -41,18 +41,8 @@ are written, and every symlink it will place — then asks for clearance **once*
   privilege   sudo — privileged steps run via sudo (may ask for your password)
   network     upstream defaults (pass --network CN for the China mirrors)
 
-  will install
-    - prerequisites via apt-get: curl git xz-utils ca-certificates   [privileged]
-    - Lix (multi-user) — fetch install.lix.systems/lix, create /nix, …   [privileged]
-    - Home Manager generation for 'dotfiles-debian' — the whole user environment …
-    - mise runtimes: aws-cli, docker-cli, go, just, node, …
-
-  will write / link
-    - /etc/nix/nix.conf <- experimental-features = nix-command flakes   [privileged]
-    - Home Manager symlinks into /home/lz from the nix store (~/.zshrc, ~/.config/git, …)
-    - link map ~/link-map.jsonc: 7 entries, 1 of them displacing a real file/dir
-    - login shell /bin/bash -> ~/.nix-profile/bin/zsh (chsh; adds it to /etc/shells)   [privileged]
-
+  will install                 # prerequisites, Lix, the HM generation, mise runtimes …
+  will write / link            # system nix.conf, every HM symlink, the link map, the login shell
   will move your existing files aside (renamed, never deleted)
     - any $HOME file Home Manager wants to own -> the same name with a .backup suffix
     - /home/lz/.zsh_history (file) -> .zsh_history.pre-dotfiles.bak, then linked to …
@@ -60,9 +50,10 @@ are written, and every symlink it will place — then asks for clearance **once*
 ? Proceed with this plan? [Y/n]
 ```
 
-The last section is separate on purpose: displacing files you already have is
-the only part of a bootstrap that touches your data, so it is listed
-file-by-file, last, right where you answer.
+(Each section really lists every item, one per line, with `[privileged]` on the
+steps that use root/sudo.) The last section is separate on purpose: displacing
+files you already have is the only part of a bootstrap that touches your data, so
+it is listed file-by-file, last, right where you answer.
 
 Answering anything but yes exits without changing a thing. There is exactly one
 prompt — no step-by-step nagging. A run with **no terminal** (CI, container
@@ -163,6 +154,70 @@ home-manager remove-generations <id> [<id>…] # remove specific ones
 nix-collect-garbage -d                        # then reclaim disk
 ```
 
+## Staying in sync
+
+`git pull` on its own changes nothing in `$HOME`: every dotfile is a symlink into
+`/nix/store`, so the repo is only a build input. One switch applies whatever came
+in — from upstream or from your own edit:
+
+```bash
+git pull                     # on an env branch (prod/mewtant): rebase onto the shared branch, never merge
+home-manager switch --flake .#<host> -b backup
+exec zsh -l                  # pick up the new PATH / env / completions
+mise install                 # only if home/mise.nix gained a tool
+```
+
+**Which host?** Your hostname if `flake.nix` defines it, else the OS/arch default
+(`platform/lib.sh:211`). Any other user — including root — uses the impure
+`generic` fallback: `home-manager switch --flake .#generic -b backup --impure`.
+
+`-b backup` is what the bootstrap does (`HOME_MANAGER_BACKUP_EXT=backup`);
+without it a switch aborts as soon as it finds a real file where a symlink should
+go. To see the delta before activating:
+
+```bash
+nix build --no-link --print-out-paths .#homeConfigurations."<host>".activationPackage
+nix store diff-closures /nix/var/nix/profiles/per-user/"$USER"/home-manager <the printed path>
+```
+
+If the result is wrong, `home-manager switch --rollback` — see
+[Trying it on a new machine](#trying-it-on-a-new-machine-and-how-to-recover).
+
+**Updating versions** (as opposed to applying config):
+
+```bash
+nix flake update                     # all inputs; or `nix flake update nixpkgs`
+home-manager switch --flake .#<host> -b backup
+mise up                              # mise tools, within their declared ranges
+```
+
+Commit the changed `flake.lock` together with the change that needed it.
+
+### Re-running the bootstrap
+
+Only needed when the change is in the **imperative half**: `platform/` itself, a
+new `home/env-links.nix` / link-map entry, a login shell that never got set, or a
+new `--system` component. Re-runs are idempotent — Lix is skipped when nix exists
+(`platform/lib.sh:312`), `nix.conf` lines are deduplicated before appending
+(`platform/nix-cn.sh:59`), an unchanged generation is reused rather than created
+("No change so reusing latest profile generation"), and the link map, `chsh`,
+`mise install` and brew all no-op when already done. Four things to know:
+
+- **Pass the same flags as the first run.** Without `--network CN` the run
+  *deletes* `~/.config/dotfiles/network-env` (`platform/nix-cn.sh:94`), silently
+  dropping the pypi/uv + rustup mirrors from your shell.
+- **A leftover `.backup` aborts activation.** If a file Home Manager newly wants
+  to own already exists for real and `<name>.backup` is still there from last
+  time, activation fails with _"would be clobbered by backing up"_. Delete the
+  stale `.backup`, or re-run with `HOME_MANAGER_BACKUP_OVERWRITE=1`.
+- **The post-login script comes back.** `setup.py` rewrites
+  `post-login-setup.sh` unconditionally, so `dotfiles-postsetup` is offered again
+  even after you ran it; `codegraph upgrade` also runs every time. `--no-claude`
+  skips both.
+- **Disk is what accumulates, not installs.** Each changed `flake.lock` leaves a
+  generation behind, and `*.backup` / `*.pre-dotfiles.bak` files are never
+  removed — prune with `expire-generations` + `nix-collect-garbage` (above).
+
 ## Component classification
 
 Components in this repo are split into two broad categories:
@@ -174,57 +229,15 @@ Components in this repo are split into two broad categories:
 
 ### User components
 
-User components are the packages that Home Manager installs on every switch.
-They are the default user environment and include the core CLI toolset, runtime
-support, and the tools you use interactively.
-
-- **Default user components** are the main `home/packages.nix` list that applies
-  on all supported hosts. This includes tools such as `ripgrep`, `jq`, `fd`,
-  `tree`, `wget`, `uv`, and the rest of the core CLI toolset.
-- **Conditional user components** are still declarative, but gated by OS or
-  other build-time conditions in `home/packages.nix` (for example, `xclip` is
-  included only on Linux).
-
-These user components are not selected with `--system`; they are always applied
-by Home Manager as part of the bootstrap.
+The `home/packages.nix` list Home Manager installs on every switch — the core CLI
+toolset (`ripgrep`, `jq`, `fd`, `tree`, `wget`, `uv`, …), some of it gated by OS
+in the same file (`xclip` on Linux only). Never selected with `--system`: always
+applied.
 
 ### System components
 
-System components are the things Home Manager cannot own on a non-NixOS host.
-They are selected with `--system <list>` or `DOTFILE_SYSTEM_COMPONENTS` and
-installed after the Home Manager switch.
-
-- **Required system components**
-  - `software-properties` on Debian/Ubuntu. It provides `add-apt-repository`
-    and is installed whenever `run_system` runs. Only `--system none` skips it.
-- **Optional system components**
-  - `docker` — Docker Engine (rootful)
-  - `docker-rootless` — Docker (rootless)
-  - `cuda` — CUDA Toolkit 12.6
-  - `nvidia` — NVIDIA driver + container toolkit
-  - `llvm` — LLVM 18 (+ `update-alternatives`)
-  - `brew` — Homebrew itself on macOS only (no formulae/casks)
-
-The `--system` selector accepts comma-separated component names, alias groups,
-and `all`; if both `docker` and `docker-rootless` are selected, rootless wins.
-When unset, the default system spec is used: on macOS that means `brew`, while on
-Linux it means no optional system component, but required Linux prerequisites
-like `software-properties` still run unless `--system none` is specified.
-
-```bash
-./bootstrap.sh                       # user components + default system components
-./bootstrap.sh --system docker,llvm  # system components + required Linux prerequisites
-./bootstrap.sh --system all          # every applicable system component
-./bootstrap.sh --system none         # no system components at all (skips required too)
-DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
-```
-
-To add components after bootstrap, run the manual interactive picker:
-
-```bash
-./nix-system-interactive-install.sh            # pick + install
-./nix-system-interactive-install.sh --dry-run  # preview only
-```
+What Home Manager cannot own on a non-NixOS host, installed after the switch and
+selected with `--system <list>` / `DOTFILE_SYSTEM_COMPONENTS`:
 
 | Name                  | Description                                                                    | OS             |
 | --------------------- | ------------------------------------------------------------------------------ | -------------- |
@@ -236,24 +249,24 @@ To add components after bootstrap, run the manual interactive picker:
 | `llvm`                | LLVM 18 (+ `update-alternatives`)                                              | debian, ubuntu |
 | `brew`                | Homebrew — the package manager only (no formulae/casks) **(default on macOS)** | darwin         |
 
-On macOS the bootstrap does **not** install Homebrew by default (CLI tools
-come from nixpkgs). Add it with `--system brew` (or `--system all`); on CN it
-uses the BFSU mirror. It installs Homebrew _itself_ only — add GUI apps
-yourself with `brew install --cask <app>`.
-
-For the GUI apps, there's a manual **interactive cask picker** (not auto-run):
+The selector takes names, alias groups and `all`; `docker` + `docker-rootless`
+together resolve to rootless. Unset means the `default` group — `brew` on macOS,
+nothing optional on Linux — and `software-properties` still runs on Debian/Ubuntu
+unless you pass `--system none`, which opts out of everything.
 
 ```bash
-./brew-cask-interactive-install.sh
+./bootstrap.sh --system docker,llvm   # + the required Linux prerequisites
+DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
+./nix-system-interactive-install.sh   # add components later (--dry-run to preview)
+uv run platform/installers/components.py   # list what exists
 ```
 
-It runs a small `uv` script ([platform/brew_cask_install.py](platform/brew_cask_install.py),
-deps declared inline via uv script mode) that shows the recommended casks as a
-checklist (Edge + Alacritty pre-checked — edit the list in the file), lets you
-pick a Homebrew mirror for the run (default follows `DOTFILE_NETWORK_ENV`), then
-installs your selection.
-
-List them anytime: `uv run platform/installers/components.py`.
+**macOS:** `brew` installs Homebrew _itself_ only (CLI tools come from nixpkgs; on
+CN via the BFSU mirror). GUI apps are a separate, manual, never-auto-run picker —
+`./brew-cask-interactive-install.sh`, a uv script
+([platform/brew_cask_install.py](platform/brew_cask_install.py)) that offers the
+recommended casks as a checklist (Edge + Alacritty pre-checked; edit the list in
+the file) and a mirror choice defaulting to `DOTFILE_NETWORK_ENV`.
 
 ## Adding software (tutorial)
 
@@ -313,7 +326,7 @@ the group it belongs to; wrap it in `lib.optionals stdenv.isLinux` /
 
 Unfree packages need no extra step — `mkHome` instantiates nixpkgs with
 `config.allowUnfree = true` (`flake.nix:41`). Then
-[sync it into your home](#syncing-a-change-into-the-running-home).
+[sync it into your home](#staying-in-sync).
 
 ### Nix — per project
 
@@ -344,10 +357,25 @@ with `nix develop` (commit its `flake.nix` + `flake.lock`):
 }
 ```
 
-To have the shell load on `cd`, add direnv to *this* config
-(`programs.direnv.enable = true;` + `nix-direnv.enable = true;` in a
-`home/*.nix` module — it is not part of the config today) and a one-line
-`.envrc` (`use flake`) in the project.
+To have that shell load on `cd` instead, drop a one-line `.envrc` next to the
+flake — direnv + nix-direnv are already part of this config
+([`home/direnv.nix`](home/direnv.nix)):
+
+```bash
+echo 'use flake' > .envrc
+direnv allow          # required once per .envrc, and again after every edit
+echo '.direnv/' >> .gitignore
+```
+
+`cd` in and the devShell is active; `cd` out and it's gone. The first entry
+builds the closure (slow); nix-direnv caches the result in `.direnv/` and pins
+it with a GC root, so later entries are instant and `nix-collect-garbage` leaves
+it alone.
+
+direnv and the global `mise activate` coexist, and the devShell wins: if the
+devShell lists a tool mise also manages (`node`, `just`, …), the devShell's copy
+is the one on PATH inside that project — even if a project `mise.toml` pins a
+different version. Leave such a tool out of the devShell to keep mise's.
 
 ### mise — find a tool
 
@@ -435,58 +463,11 @@ Two conventions worth keeping (see [AGENT.md](AGENT.md)): prefer an upstream
 nix strings. Don't reorder the zsh plugin list in `home/shell.nix` — completions
 → fzf-tab → autosuggestions → syntax-highlighting-last is correctness-critical.
 
-### Syncing a change into the running home
-
-Everything above is inert until Home Manager switches. From the repo:
-
-```bash
-# 1) preview: build the new generation, activate nothing, leave no ./result symlink
-nix build --no-link --print-out-paths .#homeConfigurations.dotfiles-debian.activationPackage
-nix store diff-closures /nix/var/nix/profiles/per-user/"$USER"/home-manager <the printed path>
-
-# 2) activate
-home-manager switch --flake .#dotfiles-debian -b backup
-```
-
-**Which host?** Your hostname if `flake.nix` defines it, else the OS/arch default
-(`platform/lib.sh:211`). Any other user — including root — uses the impure
-`generic` fallback, which needs `--impure`:
-
-```bash
-home-manager switch --flake .#generic -b backup --impure
-```
-
-`-b backup` is what the bootstrap does (`HOME_MANAGER_BACKUP_EXT=backup`);
-without it, a switch aborts as soon as it finds a real file where a symlink
-should go. Or let the bootstrap drive it — it detects the host and re-runs the
-post-HM steps too:
-
-```bash
-./bootstrap.sh --dry-run --verbose   # preview the whole thing
-./bootstrap.sh --yes                 # apply without the clearance prompt
-```
-
-Afterwards, in your shell:
-
-```bash
-exec zsh -l                          # pick up the new PATH / env / completions
-mise install                         # materialize newly declared mise tools
-home-manager packages | grep hyperfine   # verify the generation contains it
-```
-
-If the result is wrong, `home-manager switch --rollback` — see
-[Trying it on a new machine](#trying-it-on-a-new-machine-and-how-to-recover).
-
-**Updating versions** (as opposed to adding packages):
-
-```bash
-nix flake update                     # all inputs
-nix flake update nixpkgs             # just nixpkgs
-home-manager switch --flake .#dotfiles-debian -b backup
-mise up                              # mise tools, within their declared ranges
-```
-
-Commit the changed `flake.lock` together with the change that needed it.
+Everything above is inert until Home Manager switches: see
+[Staying in sync](#staying-in-sync) for the switch, the preview, and the rollback.
+Verify a package landed with `home-manager packages | grep hyperfine`. Or let the
+bootstrap drive it — it detects the host and re-runs the post-HM steps too
+(`./bootstrap.sh --dry-run --verbose`, then `./bootstrap.sh --yes`).
 
 ## Post-login interactive setup
 
@@ -499,21 +480,10 @@ it's pending. Run it once when you're ready to authorize:
 dotfiles-postsetup    # needs a TTY; self-removes on success
 ```
 
-**Smithery MCP.** The [Smithery](https://smithery.ai/) CLI is declared as an
-mise npm tool (`npm:@smithery/cli`) and materialized eagerly by `setup.py`
-alongside node, so the script calls `smithery` directly (no `npx`). It:
-
-1. **API-key auth** — if `SMITHERY_API_KEY` is set in the environment, it asks
-   whether to authenticate with that key. The CLI reads the variable itself, so
-   choosing yes just verifies it via `smithery auth whoami`; with no key set it
-   offers an interactive `smithery auth login` instead.
-2. **Namespace form** — it then offers to add your namespace's aggregated MCP
-   endpoint (`https://mcp.smithery.run/<namespace>`) to Claude via
-   `smithery mcp add … --client claude`, falling back to
-   `claude mcp add --transport http <namespace> https://mcp.smithery.run/<namespace>`.
-3. Leaves a **commented-out** `smithery mcp add <server> --client claude` line
-   (e.g. `upstash/context7-mcp`, which the namespace already covers) as a
-   template for adding a separate server later.
+It installs the Claude plugin marketplaces, offers to authenticate
+[Smithery](https://smithery.ai/) and add your namespace's MCP endpoint to Claude,
+and installs the Lark CLI — each step skippable, nothing fatal. Details of what it
+asks and why: [platform/README.md](platform/README.md#post-login-setup-smithery--lark).
 
 ## China mirrors
 

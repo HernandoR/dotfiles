@@ -49,14 +49,42 @@ optional system components.
 
 | File | Role |
 |---|---|
-| `bootstrap.sh` | orchestrator / entry point |
-| `lib.sh` | shared helpers (OS/host detection, Lix install, chsh) |
+| `bootstrap.sh` | orchestrator / entry point (pre-HM shell half) |
+| `lib.sh` | shared helpers (OS/host detection, Lix install, plan + clearance) |
 | `nix-cn.sh` | flakes + CN mirror gating (system nix.conf, sudo) + persist `~/.config/dotfiles/network-env` |
-| `claude-setup.sh` | Claude Code CLI + deferred OAuth post-login setup (ADR-0005) |
-| `system/cuda.sh` | CUDA Toolkit (Debian/Ubuntu, x86_64) |
-| `system/docker.sh` | Docker Engine + GPU toolchain |
-| `system/nvidia.sh` | NVIDIA driver + container toolkit |
-| `system/llvm.sh` | LLVM/Clang + update-alternatives |
+| `setup.py` | post-HM half: link map → `chsh` → mise runtimes → Claude → system components |
+| `installers/components.py` | the `OptionalComponent` registry (docker, cuda, nvidia, llvm, brew) + CodeGraph |
+| `installers/managers.py` | install backends (`apt`, `brew`, `scripts`) and their specs |
+| `installers/context.py` | `Ctx`: privilege detection, `run_command`, dry-run, clearance |
+| `link-map.jsonc` | example ADR-0008 link map for `DOTFILE_LINK_MAP_JSON` |
+
+## Post-login setup (Smithery + Lark)
+
+`setup_claude` installs the Claude Code CLI and CodeGraph non-interactively, then
+*writes* the rest to `~/.local/share/dotfiles/post-login-setup.sh` instead of
+running it — it needs a TTY. The user invokes it once via the `dotfiles-postsetup`
+zsh function; it self-removes on success, and every step is `|| true` so nothing
+aborts the rest. What it asks:
+
+1. **Claude plugins** — adds the `hernandor/agent-skillset` and
+   `astral-sh/claude-code-plugins` marketplaces and installs the pinned plugin
+   list at user scope.
+2. **Smithery auth** — the [Smithery](https://smithery.ai/) CLI is a mise npm tool
+   (`npm:@smithery/cli`), materialized eagerly by `setup_runtimes`, so it is called
+   directly (no `npx`). With `SMITHERY_API_KEY` in the environment it offers to
+   verify that key (`smithery auth whoami`); without one it offers an interactive
+   `smithery auth login`.
+3. **Smithery namespace** — offers to add your namespace's aggregated MCP endpoint
+   (`https://mcp.smithery.run/<namespace>`) to Claude via
+   `smithery mcp add … --client claude`, falling back to
+   `claude mcp add --transport http …`. A commented-out
+   `smithery mcp add <server>` line (e.g. `upstash/context7-mcp`, already covered
+   by the namespace) is left as a template for adding a single server later.
+4. **Lark CLI** — `npx -y @larksuite/cli@latest install` (node from mise).
+
+Note that `setup.py` rewrites this script on **every** run, so a re-bootstrap
+offers it again even after you completed it; `--no-claude` skips this half
+entirely.
 
 ## What is NOT here (owned by Home Manager)
 
