@@ -11,10 +11,34 @@ shell, and install Linux system-level software.
 ```bash
 ./bootstrap.sh                     # auto-detect host; full bootstrap
 ./platform/bootstrap.sh --dry-run  # print every action without executing
+./platform/bootstrap.sh --yes      # skip the clearance prompt (CI-style run)
 ./platform/bootstrap.sh --network CN            # enable China mirrors
 ./platform/bootstrap.sh --host dotfiles-debian  # pick a flake host explicitly
 ./platform/bootstrap.sh --system docker,cuda    # + Linux system components
 ```
+
+## Plan + clearance (ADR-0010)
+
+On an interactive terminal nothing is touched until the whole plan has been
+printed and cleared **once** — installs, the network/mirrors in use, the config
+files written and the symlinks placed, with `[privileged]` on the steps that use
+root/sudo, and a final highlighted section listing every existing file that gets
+moved aside (`*.backup`, `*.pre-dotfiles.bak`). There are deliberately no
+per-step prompts.
+
+Each script describes its own steps so the plan cannot drift from the run:
+
+| Producer | Emits |
+|---|---|
+| `lib.sh` `plan_fact`/`plan_install`/`plan_config`/`plan_backup` | facts + the pre-HM shell steps (`plan_prereqs`, `plan_nix`) |
+| `nix-cn.sh --plan` | `section<TAB>text<TAB>priv` for the network marker + system `nix.conf` |
+| `setup.py --plan-items` | the same TSV for the post-HM half (link map incl. its backups, login shell, mise, Claude, system components) |
+
+`bootstrap.sh` merges them with `plan_import_tsv`, prints with `print_plan`, and
+calls `require_clearance`. No terminal (CI, container, cron) or `--yes` /
+`DF_ASSUME_YES=1` or `--dry-run` → no prompt. A yes exports `DF_ASSUME_YES=1`, so
+`setup.py` (which asks for its own clearance when run standalone) does not ask
+twice. `setup.py --plan` prints the post-HM half on its own.
 
 `bootstrap.sh` runs, in order: prerequisites → install Lix → configure nix
 (flakes; CERNET mirror only when `DOTFILE_NETWORK_ENV=CN`) → `home-manager

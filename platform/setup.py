@@ -14,12 +14,21 @@ Privilege is self-detected (Ctx.priv, live): privileged calls pass
 `with_sudo=True` (or interpolate `ctx.sudo` in a shell pipeline), so sudo is
 prepended only when non-root with a sudo binary; root runs bare and privileged
 steps are skipped entirely when there is no way to escalate (`priv == none`).
+
+Clearance: `build_plan()` describes every step *before* anything runs — what is
+installed, from which network, which config is written or linked. On an
+interactive run the plan is printed and cleared once (`Ctx.require_clearance`);
+`--plan` prints it and exits; `--plan-items` emits it as TSV for
+platform/bootstrap.sh, which merges both halves into one document and asks for
+the single clearance itself (then exports $DF_ASSUME_YES so this script does not
+re-ask).
 """
 import argparse
 import json
 import logging
 import os
 import pathlib
+import re
 import shutil
 import sys
 
@@ -358,6 +367,188 @@ def run_system(ctx, spec):
         OptionalComponent.get(name).run(ctx)
 
 
+# --- the plan (printed before anything runs; cleared once) -------------------
+
+REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
+DEFERRED_CLAUDE_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
+
+
+def _mise_tools():
+    """Tool names declared in the ``tools = { … }`` block of home/mise.nix, for
+    the plan's "will install" line. Read from the nix source because mise itself
+    is not on PATH until Home Manager has switched — and the plan prints before
+    that. Only depth-1 keys count, so a nested entry (``"npm:@smithery/cli" = {
+    version = …; }``) contributes its own name and not its attributes. Returns []
+    if the block cannot be found; the caller then falls back to naming the file.
+    """
+    try:
+        text = (REPO_DIR / "home" / "mise.nix").read_text()
+    except OSError:
+        return []
+    start = re.search(r"\btools\s*=\s*\{", text)
+    if not start:
+        return []
+    tools, depth = [], 1
+    for raw in text[start.end():].splitlines():
+        line = re.sub(r"#.*$", "", raw).strip()
+        if depth == 1:
+            key = re.match(r'"?([A-Za-z0-9:@._/-]+)"?\s*=', line)
+            if key:
+                tools.append(key.group(1))
+        depth += line.count("{") - line.count("}")
+        if depth <= 0:
+            break
+    return tools
+
+
+def _login_shell_plan():
+    """(target, current) login-shell paths for the plan. The target is the Nix
+    zsh whether or not it exists yet: pre-switch it does not, and reporting a
+    system /bin/zsh (what shutil.which would find) would misdescribe the run."""
+    target = str(pathlib.Path.home() / ".nix-profile" / "bin" / "zsh")
+    try:
+        import pwd
+
+        user = os.environ.get("USER") or pwd.getpwuid(os.geteuid()).pw_name
+        current = pwd.getpwnam(user).pw_shell
+    except (ImportError, KeyError):
+        current = ""
+    return target, current
+
+
+def _link_map_plan():
+    """Describe the link map as ``(config_lines, backup_lines)``: what is linked
+    where, plus — separately, so it cannot be missed among the link lines — every
+    file of the user's that gets renamed out of the way first (ADR-0008's
+    ``.pre-dotfiles.bak``). Mirrors apply_link_map's decisions without touching
+    anything; a malformed map is reported, not raised (the real step still fails
+    loudly later)."""
+    raw = os.environ.get(LINK_MAP_ENV, "").strip()
+    if not raw:
+        return [f"no link map (${LINK_MAP_ENV} unset)"], []
+    path = pathlib.Path(os.path.abspath(os.path.expanduser(raw)))
+    if not path.is_file():
+        return [f"link map ${LINK_MAP_ENV}={path} DOES NOT EXIST — the run will abort here"], []
+    try:
+        links = _load_jsonc(path).get("links") or {}
+    except (ValueError, OSError, AttributeError, TypeError) as e:
+        # Describing must never be what breaks the run: report the bad map and let
+        # apply_link_map fail on it properly, with its own message.
+        return [f"link map {path} could not be parsed ({e})"], []
+    lines, backups = [], []
+    for label, spec in links.items():
+        src = pathlib.Path(os.path.abspath(os.path.expanduser(str(spec.get("source", "")))))
+        dest = pathlib.Path(os.path.abspath(os.path.expanduser(str(spec.get("target", "")))))
+        typ = str(spec.get("type", "")).lower()
+        note = ""
+        if not os.path.lexists(src):
+            note = "  (source missing — skipped)"
+        elif dest.is_symlink() and os.path.realpath(dest) == os.path.realpath(src):
+            note = "  (already linked)"
+        elif dest.is_symlink():
+            note = "  (relinked from another target)"
+        elif dest.exists():
+            kind = "dir" if dest.is_dir() else "file"
+            note = "  (existing real %s — moved aside first)" % kind
+            backups.append(f"{dest} ({kind}) -> {dest.name}.pre-dotfiles.bak, then linked to {src}")
+        lines.append(f"  {label}: {dest} -> {src} [{typ or '?'}]{note}")
+    header = f"link map {path}: {len(links)} entr{'y' if len(links) == 1 else 'ies'}"
+    if backups:
+        header += f", {len(backups)} of them displacing a real file/dir"
+    return [header] + lines, backups
+
+
+def build_plan(ctx, system_spec, with_claude):
+    """Everything this script would do, as ``[(section, text, privileged)]`` with
+    section in {"install", "config", "backup"} — "backup" being anything that
+    displaces a file the user already has. Pure description: it reads the filesystem
+    and the environment but changes nothing, so it is safe to run before
+    clearance (and from platform/bootstrap.sh *before* the Home Manager switch,
+    via --plan-items)."""
+    items = []
+
+    def add(section, text, privileged=False):
+        items.append((section, text, privileged))
+
+    if with_claude:
+        tools = _mise_tools()
+        add("install", "mise runtimes: " + (", ".join(tools) if tools else "as declared in home/mise.nix"))
+        if shutil.which("claude"):
+            add("install", "Claude Code CLI already present — left as is")
+        else:
+            add("install", "Claude Code CLI from claude.ai/install.sh")
+        if shutil.which("codegraph"):
+            add("install", "CodeGraph self-update (codegraph upgrade) + register its MCP server with Claude")
+        else:
+            add("install", "CodeGraph from raw.githubusercontent.com/colbymchenry/codegraph + register its MCP server with Claude")
+        add("config", f"deferred Claude/Smithery/Lark setup script -> {DEFERRED_CLAUDE_SETUP} (run later via dotfiles-postsetup)")
+    else:
+        add("install", "Claude/CodeGraph/mise runtimes: SKIPPED (--no-claude)")
+
+    if system_spec:
+        if ctx.priv == "none":
+            add("install", f"system components '{system_spec}': SKIPPED (no root/sudo)")
+        else:
+            names = [n for n in OptionalComponent.required_names()
+                     if OptionalComponent.get(n).applicable(ctx)]
+            names += [n for n in OptionalComponent.resolve(system_spec)
+                      if n not in names and OptionalComponent.get(n).applicable(ctx)]
+            if names:
+                add("install",
+                    f"{len(names)} system component(s) on {ctx.os_type} (spec: {system_spec}):",
+                    privileged=True)
+                for n in names:
+                    add("install", f"  {n} — {OptionalComponent.get(n).description}")
+            else:
+                add("install", f"no system component in '{system_spec}' applies to {ctx.os_type}")
+
+    link_lines, link_backups = _link_map_plan()
+    for line in link_lines:
+        add("config", line)
+    for line in link_backups:
+        add("backup", line)
+
+    target, current = _login_shell_plan()
+    if current == target:
+        add("config", f"login shell already {target} — unchanged")
+    elif ctx.priv == "none":
+        add("config", f"login shell {current or '?'} -> {target}: SKIPPED (no root/sudo)")
+    else:
+        add("config", f"login shell {current or '?'} -> {target} (chsh; adds it to /etc/shells)",
+            privileged=True)
+    return items
+
+
+def render_plan(items, ctx=None, network=None):
+    """Print the plan as the shell half does (platform/lib.sh plan_line), so a
+    standalone run of this script and a full bootstrap read the same."""
+    out = []
+    if ctx is not None:
+        out.append("\033[1;34m==>\033[0m Plan — nothing has run yet")
+        out.append(f"  os          {ctx.os_type}")
+        out.append(f"  privilege   {ctx.priv}")
+        out.append(f"  network     {network or os.environ.get('DOTFILE_NETWORK_ENV') or 'upstream (no CN mirrors)'}")
+    sections = (
+        ("install", "\033[1mwill install\033[0m"),
+        ("config", "\033[1mwill write / link\033[0m"),
+        # Last, and highlighted: the only part that touches data the user already
+        # has (see platform/lib.sh print_plan for the shell half's ordering).
+        ("backup", "\033[1;33mwill move your existing files aside (renamed, never deleted)\033[0m"),
+    )
+    for section, title in sections:
+        rows = [(text, priv) for sec, text, priv in items if sec == section]
+        if not rows:
+            continue
+        out.append(f"\n  {title}")
+        for text, priv in rows:
+            tag = "  \033[33m[privileged]\033[0m" if priv else ""
+            # A leading-space item is a detail of the line above it (the link-map
+            # entries under their file) — indent it instead of re-bulleting.
+            bullet = f"      \033[2m{text.strip()}\033[0m" if text.startswith("  ") else f"    - {text}"
+            out.append(f"{bullet}{tag}")
+    print("\n".join(out))
+
+
 def main():
     ap = argparse.ArgumentParser(description="Post-Home-Manager imperative setup")
     ap.add_argument("--dry-run", action="store_true")
@@ -365,10 +556,21 @@ def main():
                     help="comma-separated components, or 'all' / 'default' / 'none' "
                          "(unset = the 'default' group)")
     ap.add_argument("--no-claude", action="store_true", help="skip Claude post-setup")
+    ap.add_argument("-y", "--yes", action="store_true",
+                    help="skip the interactive clearance (also: DF_ASSUME_YES=1)")
+    ap.add_argument("--plan", action="store_true",
+                    help="print the plan and exit; change nothing")
+    ap.add_argument("--plan-items", action="store_true",
+                    help="print the plan as TSV (section<TAB>text<TAB>priv) for bootstrap.sh")
     args = ap.parse_args()
 
-    ctx = Ctx(dry_run=args.dry_run)
-    logger.info("post-HM setup | os=%s priv=%s dry_run=%s", ctx.os_type, ctx.priv, ctx.dry_run)
+    # --plan/--plan-items describe only; keep them side-effect free by construction.
+    # Their output IS the result, so demote the log stream (component resolution
+    # logs at INFO) to keep stray lines out of the plan the user is reading.
+    planning = args.plan or args.plan_items
+    if planning:
+        logger.setLevel(logging.ERROR)
+    ctx = Ctx(dry_run=args.dry_run or planning, assume_yes=True if args.yes else None)
 
     # System components: --system wins; else DOTFILE_SYSTEM_COMPONENTS; else the
     # `default` group (brew on macOS). software-properties is `required` on
@@ -377,6 +579,25 @@ def main():
     system_spec = args.system or os.environ.get("DOTFILE_SYSTEM_COMPONENTS") or "default"
     if system_spec.strip().lower() == "none":
         system_spec = ""
+
+    # A standalone interactive run shows the plan and takes the one-shot clearance
+    # itself. Under platform/bootstrap.sh clearance is already granted
+    # ($DF_ASSUME_YES=1, exported after the merged plan was cleared), so nothing
+    # is asked twice — and the plan is not even built, keeping the automated path
+    # free of describe-only work.
+    needs_clearance = not (ctx.assume_yes or ctx.dry_run) and ctx.interactive
+    if planning or needs_clearance:
+        plan = build_plan(ctx, system_spec, with_claude=not args.no_claude)
+        if args.plan_items:
+            for section, text, priv in plan:
+                print(f"{section}\t{text}\t{1 if priv else 0}")
+            return
+        render_plan(plan, ctx=ctx)
+        if args.plan:
+            return
+        ctx.require_clearance()
+
+    logger.info("post-HM setup | os=%s priv=%s dry_run=%s", ctx.os_type, ctx.priv, ctx.dry_run)
 
     # First post-HM step: apply the JSON(C) link map before anything else runs
     # (uv — hence this script — is only available after the HM switch). A missing

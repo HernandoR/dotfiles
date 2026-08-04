@@ -14,13 +14,78 @@ from installers.managers import PackageManager
 logger = logging.getLogger("dotfiles")
 
 
+ASSUME_YES_ENV = "DF_ASSUME_YES"
+
+
 class Ctx:
     """Execution context passed to components (the ADR-0003 ``ctx``)."""
 
-    def __init__(self, dry_run=False, options=None):
+    def __init__(self, dry_run=False, options=None, assume_yes=None):
         self.dry_run = dry_run
         self.options = options or {}
         self.os_type = self._detect_os()
+        # One-shot clearance (see require_clearance): already granted when the
+        # caller says so, or when $DF_ASSUME_YES=1 — which platform/bootstrap.sh
+        # exports once the user has cleared the plan, so this process does not
+        # ask a second time for the same run.
+        self.assume_yes = (
+            os.environ.get(ASSUME_YES_ENV, "") == "1" if assume_yes is None else bool(assume_yes)
+        )
+
+    # -- interactivity ----------------------------------------------------
+    @property
+    def interactive(self):
+        """Is a human there to answer? True when stdin is a terminal, or when
+        stdin is a pipe but the terminal is still reachable via /dev/tty with
+        stdout attached to it (`curl … | python3 -`). False under CI, a container
+        build or `bash -c`, where a prompt would hang a headless run."""
+        try:
+            if sys.stdin is not None and sys.stdin.isatty():
+                return True
+            if sys.stdout is not None and sys.stdout.isatty() and os.access("/dev/tty", os.R_OK):
+                return True
+        except (ValueError, OSError):  # closed / detached stream
+            pass
+        return False
+
+    def require_clearance(self, prompt="Proceed with the plan above?"):
+        """Ask ONCE for clearance to run the printed plan, then remember the
+        answer (``assume_yes``) so nothing asks again. Yes -> return True; no ->
+        SystemExit. Returns True without asking when clearance is already
+        granted, under --dry-run (nothing to clear), or with no terminal — so the
+        caller can invoke it unconditionally."""
+        if self.assume_yes or self.dry_run or not self.interactive:
+            self.assume_yes = True
+            return True
+        tty = None
+        try:
+            if not sys.stdin.isatty():
+                tty = open("/dev/tty", "r+")
+            while True:
+                self._ask(f"\n? {prompt} [Y/n] ", tty)
+                line = (tty.readline() if tty else sys.stdin.readline())
+                if not line:  # EOF on the terminal: do not guess, stop.
+                    raise SystemExit("aborted (no answer on the terminal)")
+                answer = line.strip().lower()
+                if answer in ("", "y", "yes"):
+                    self.assume_yes = True
+                    self._ask("\n", tty)
+                    return True
+                if answer in ("n", "no", "q", "quit"):
+                    raise SystemExit("aborted — nothing has been installed or changed")
+                self._ask("  please answer y or n\n", tty)
+        finally:
+            if tty is not None:
+                tty.close()
+
+    @staticmethod
+    def _ask(text, tty=None):
+        """Write a prompt where the human can see it: the terminal when we hold
+        it, else stderr (a stdout redirected to a log file must not swallow a
+        prompt the run is blocking on)."""
+        stream = tty or (sys.stdout if sys.stdout.isatty() else sys.stderr)
+        stream.write(text)
+        stream.flush()
 
     @property
     def is_root(self):

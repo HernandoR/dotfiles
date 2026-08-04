@@ -104,6 +104,19 @@ configure nix (+CN) → seed flake inputs (optional) → **build + activate HM**
 - **Privilege model** (`lib.sh` `detect_priv`): `root` (run directly), `sudo`
   (via sudo), `none` (skip everything needing sudo; do only user-level nix/HM;
   if nix is absent and can't be installed → respectful exit).
+- **Plan + one-shot clearance** (ADR-0010; `lib.sh:9-105`, `bootstrap.sh:102-155`):
+  before the first mutation, every step registers what it *would* do
+  (`plan_fact`/`plan_install`/`plan_config`/`plan_backup` — the last bucket,
+  printed last and highlighted, is anything that displaces a file the user
+  already has), the merged plan is printed
+  (`print_plan`) and `require_clearance` takes a single yes/no. The nested
+  scripts describe their own half — `nix-cn.sh --plan` and `setup.py
+  --plan-items` emit `section<TAB>text<TAB>priv`, merged by `plan_import_tsv` —
+  so the plan cannot drift from the run. **No per-step prompts.** A run with no
+  terminal never asks (`is_interactive`: stdin tty, or stdout tty + readable
+  `/dev/tty` for the `curl | bash` case), so CI/containers are unchanged;
+  `--yes`/`DF_ASSUME_YES=1` and `--dry-run` skip the prompt. Clearance exports
+  `DF_ASSUME_YES=1`, which is how `setup.py` knows not to ask again.
 - **Lix install** (`lib.sh` `install_lix`): multi-user (service-managed daemon)
   when an init system exists; otherwise a **single-user `--no-daemon`** install
   (bare docker/CI) with `build-users-group =` so root needs no `nixbld` pool.
@@ -154,6 +167,7 @@ plus the `installers` package only). Steps: `set_login_shell` (chsh to
 
 | Var | Where | Effect |
 | --- | --- | --- |
+| `DF_ASSUME_YES=1` | bootstrap / `lib.sh` / `setup.py` (`Ctx.assume_yes`) | Skip the one-shot clearance (same as `--yes`/`-y`). Exported by `require_clearance` after a yes, so nested steps don't re-ask. |
 | `DOTFILE_NETWORK_ENV=CN` | bootstrap / `nix-cn.sh` / HM `envExtra` | Enable CERNET (nix system.conf) + pypi/uv + rustup mirrors. Unset = upstream. |
 | `DOTFILE_SYSTEM_COMPONENTS` | bootstrap / `setup.py` | Fallback for `--system` (e.g. `all`). |
 | `DOTFILE_FLAKE_CACHE` | bootstrap | Dir with `seed-paths.txt` to `nix copy` flake inputs from (CN/offline/CI). |
@@ -170,6 +184,12 @@ a TTY); the HM zsh prints a reminder and the user runs it once via the
   options over hand-rolled config; embed verbatim files
   (`builtins.readFile`/`source ${./file}`) to dodge nix-string escaping (see
   `git-aliases.conf`, `zsh/*.zsh`, `starship.toml`).
+- **Adding a step that installs, needs privilege, or displaces a file:** register
+  it in the plan too, next to the code that performs it (`plan_prereqs`/`plan_nix`
+  sit beside `ensure_prereqs`/`install_lix`; `nix-cn.sh --plan` and `setup.py`'s
+  `build_plan` share their read-only decision helpers with the apply path). A
+  step that runs without appearing in the plan defeats the clearance — ADR-0010
+  makes this a standing rule, not a nicety.
 - **Shell (`platform/*.sh`):** `set -euo pipefail`; route side effects through
   `run` (dry-run aware); internal flags are `DF_DRY_RUN`/`DF_VERBOSE` — **never**
   bare `DRY_RUN` (home-manager's `activate` treats `-v DRY_RUN` as set-or-unset

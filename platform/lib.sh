@@ -1,10 +1,143 @@
 #!/usr/bin/env bash
 # platform/lib.sh — shared helpers for the pre-Home-Manager shell prelude.
-# Sourced by bootstrap.sh; DF_DRY_RUN/DF_VERBOSE/PRIV/SUDO live in the environment.
+# Sourced by bootstrap.sh; DF_DRY_RUN/DF_VERBOSE/DF_ASSUME_YES/PRIV/SUDO live in
+# the environment.
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+# ---- one-shot clearance ------------------------------------------------------
+# An interactive run prints the whole plan first — what gets installed, from
+# which network/mirrors, which config is written or linked — and then asks ONCE
+# for clearance. There is deliberately no prompt per step: the value is in
+# seeing the full blast radius before anything runs, not in being interrupted
+# eight times. A run with no terminal (CI, container build, `bash -c`, cron)
+# never asks and behaves exactly as it did before this gate existed;
+# `--yes` / DF_ASSUME_YES=1 opts a human out of the prompt (the plan still
+# prints).
+
+# is_interactive — is there a terminal to ask? True when stdin is a tty, or when
+# stdin is a pipe (`curl … | bash`) but the terminal is still reachable through
+# /dev/tty with stdout attached to it — that case is a human at a shell too, and
+# it is the one where an unattended install would be most surprising.
+is_interactive() {
+  [ -t 0 ] && return 0
+  [ -t 1 ] && [ -r /dev/tty ] && return 0
+  return 1
+}
+
+# should_confirm — whether clearance is actually asked for. Dry-run never asks:
+# it changes nothing, so there is nothing to clear (and `--dry-run` output should
+# print start-to-finish without stopping).
+should_confirm() {
+  [ "${DF_ASSUME_YES:-0}" = 1 ] && return 1
+  [ "${DF_DRY_RUN:-0}" = 1 ] && return 1
+  is_interactive
+}
+
+# _ask PROMPT — write PROMPT where the human can see it. Prefer the terminal
+# directly: with stdout redirected to a log file, a prompt on stdout would be
+# invisible while the run blocks on it.
+_ask() {
+  if [ -w /dev/tty ]; then printf '%b' "$1" >/dev/tty 2>/dev/null || printf '%b' "$1" >&2
+  else printf '%b' "$1" >&2
+  fi
+}
+
+# _read_answer VAR — read one line from the terminal (stdin when it is one,
+# else /dev/tty, mirroring is_interactive).
+_read_answer() {
+  if [ -t 0 ]; then read -r "$1"; else read -r "$1" </dev/tty; fi
+}
+
+# require_clearance PROMPT — the single gate. Proceeds (rc 0) or aborts the run;
+# it never returns "skip", because the plan it clears is the run. Non-interactive
+# / --yes / --dry-run proceed without asking, so callers can call it
+# unconditionally. On clearance DF_ASSUME_YES is exported, so the nested scripts
+# (nix-cn.sh, setup.py) treat this one answer as the whole run's clearance and do
+# not ask again.
+require_clearance() {
+  local prompt="${1:-Proceed with the plan above?}" ans=""
+  if ! should_confirm; then export DF_ASSUME_YES=1; return 0; fi
+  while :; do
+    _ask "\n\033[1;36m?\033[0m $prompt \033[2m[Y/n]\033[0m "
+    if ! _read_answer ans; then _ask "\n"; die "aborted (no answer on the terminal)"; fi
+    case "$ans" in
+      ""|y|Y|yes|Yes|YES) _ask "\n"; export DF_ASSUME_YES=1; return 0 ;;
+      n|N|no|No|NO|q|Q|quit) die "aborted — nothing has been installed or changed" ;;
+      *) _ask "  please answer y or n\n" ;;
+    esac
+  done
+}
+
+# ---- the plan ----------------------------------------------------------------
+# Steps register what they *would* do here instead of only announcing themselves
+# as they run, so the full blast radius can be printed — and cleared — up front.
+# Four buckets: facts (host/privilege/network), "will install", "will write /
+# link", and "will move aside" — anything that displaces a file the user already
+# has. That last one gets its own section, printed last (right above the prompt),
+# because it is the only part of a bootstrap that touches existing data; buried
+# among fifty symlink lines it would be missed. Rows are stored as "PRIV|TEXT"
+# (bash 3.2-compatible: no namerefs).
+DF_PLAN_FACTS=() DF_PLAN_INSTALL=() DF_PLAN_CONFIG=() DF_PLAN_BACKUP=()
+
+plan_fact()    { DF_PLAN_FACTS+=("$1|$2"); }
+# plan_install / plan_config / plan_backup TEXT [PRIVILEGED] — 1 tags the line.
+plan_install() { DF_PLAN_INSTALL+=("${2:-0}|$1"); }
+plan_config()  { DF_PLAN_CONFIG+=("${2:-0}|$1"); }
+plan_backup()  { DF_PLAN_BACKUP+=("${2:-0}|$1"); }
+
+# plan_import_tsv — merge a nested planner's items, read from stdin as
+# `section<TAB>text<TAB>priv` (what `nix-cn.sh --plan` and `setup.py
+# --plan-items` emit). Each script describes its own steps; the plan is still one
+# document.
+plan_import_tsv() {
+  local section text priv
+  while IFS=$'\t' read -r section text priv; do
+    case "$section" in
+      install) plan_install "$text" "${priv:-0}" ;;
+      config)  plan_config  "$text" "${priv:-0}" ;;
+      backup)  plan_backup  "$text" "${priv:-0}" ;;
+    esac
+  done
+}
+
+# plan_section TITLE ROW... — print one bucket (skipped when empty). A TITLE
+# starting with "!" is highlighted (the move-aside section).
+plan_section() {
+  local title="$1" row priv text
+  shift
+  [ $# -gt 0 ] || return 0
+  case "$title" in
+    "!"*) printf '\n  \033[1;33m%s\033[0m\n' "${title#!}" ;;
+    *)    printf '\n  \033[1m%s\033[0m\n' "$title" ;;
+  esac
+  local tag
+  for row in "$@"; do
+    priv="${row%%|*}"; text="${row#*|}"
+    tag=""; [ "$priv" = 1 ] && tag="$(printf '  \033[33m[privileged]\033[0m')"
+    case "$text" in
+      # A leading-space item is a detail of the line above it (a link-map entry
+      # under its file) — indent it instead of giving it its own bullet.
+      "  "*) printf '      \033[2m%s\033[0m%s\n' "${text#"${text%%[![:space:]]*}"}" "$tag" ;;
+      *)     printf '    - %s%s\n' "$text" "$tag" ;;
+    esac
+  done
+}
+
+print_plan() {
+  local row name value
+  log "Plan — nothing has run yet"
+  for row in ${DF_PLAN_FACTS[@]+"${DF_PLAN_FACTS[@]}"}; do
+    name="${row%%|*}"; value="${row#*|}"
+    printf '  \033[2m%-11s\033[0m %s\n' "$name" "$value"
+  done
+  plan_section "will install"      ${DF_PLAN_INSTALL[@]+"${DF_PLAN_INSTALL[@]}"}
+  plan_section "will write / link" ${DF_PLAN_CONFIG[@]+"${DF_PLAN_CONFIG[@]}"}
+  plan_section "!will move your existing files aside (renamed, never deleted)" \
+    ${DF_PLAN_BACKUP[@]+"${DF_PLAN_BACKUP[@]}"}
+}
 
 # run CMD... — execute, or print under --dry-run. Use for side-effecting steps.
 run() {
@@ -94,6 +227,21 @@ nix_host_exists() {
   grep -qE "\"$1\"[[:space:]]*=" "${REPO_DIR:-.}/flake.nix" 2>/dev/null
 }
 
+# plan_prereqs OS — the plan sibling of ensure_prereqs: same condition, no
+# action. Keep the two in step when either changes.
+plan_prereqs() {
+  case "$1" in
+    debian|ubuntu)
+      if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
+        plan_install "prerequisites via apt-get: curl git xz-utils ca-certificates" 1
+      fi
+      ;;
+    darwin)
+      command -v git >/dev/null 2>&1 || plan_install "Xcode command line tools (for git)" 1
+      ;;
+  esac
+}
+
 # ensure_prereqs OS — the few tools needed before nix exists. Needs privilege;
 # the caller guards on have_priv.
 ensure_prereqs() {
@@ -145,6 +293,21 @@ configure_single_user_nix() {
 # With an init system: the Lix multi-user (service-managed daemon) installer.
 # Without one (container/CI): a single-user install (--no-daemon), which needs
 # no daemon/systemd and works in a bare container.
+# plan_nix — the plan sibling of install_lix + configure_single_user_nix: which
+# nix (if any) gets installed, how, and which nix.conf that flavour writes.
+plan_nix() {
+  if have_nix; then
+    plan_fact "nix" "already installed ($(nix --version 2>/dev/null || echo present)) — not reinstalled"
+  elif ! have_priv; then
+    plan_fact "nix" "missing, and installing it needs privilege — the run will stop"
+  elif has_init_system; then
+    plan_install "Lix (multi-user) — fetch install.lix.systems/lix, create /nix, register the nix-daemon service" 1
+  else
+    plan_install "nix (single-user, --no-daemon) — fetch nixos.org/nix/install, create /nix (no daemon: this host has no init system)" 1
+  fi
+  has_init_system || plan_config "$HOME/.config/nix/nix.conf <- experimental-features = nix-command flakes; build-users-group = (single-user)"
+}
+
 install_lix() {
   if have_nix; then
     log "nix already installed ($(nix --version 2>/dev/null || echo present)); skipping install"

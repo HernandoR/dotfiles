@@ -30,6 +30,46 @@ cd dotfiles
 already installed; otherwise it needs root/sudo to install Lix (with no
 init system — bare container/CI — it falls back to a single-user install).
 
+**On a terminal it asks before it touches anything.** It prints the whole plan
+first — what will be installed, from which network/mirrors, which config files
+are written, and every symlink it will place — then asks for clearance **once**:
+
+```text
+==> Plan — nothing has run yet
+  os          ubuntu (x86_64)
+  host        dotfiles-debian
+  privilege   sudo — privileged steps run via sudo (may ask for your password)
+  network     upstream defaults (pass --network CN for the China mirrors)
+
+  will install
+    - prerequisites via apt-get: curl git xz-utils ca-certificates   [privileged]
+    - Lix (multi-user) — fetch install.lix.systems/lix, create /nix, …   [privileged]
+    - Home Manager generation for 'dotfiles-debian' — the whole user environment …
+    - mise runtimes: aws-cli, docker-cli, go, just, node, …
+
+  will write / link
+    - /etc/nix/nix.conf <- experimental-features = nix-command flakes   [privileged]
+    - Home Manager symlinks into /home/lz from the nix store (~/.zshrc, ~/.config/git, …)
+    - link map ~/link-map.jsonc: 7 entries, 1 of them displacing a real file/dir
+    - login shell /bin/bash -> ~/.nix-profile/bin/zsh (chsh; adds it to /etc/shells)   [privileged]
+
+  will move your existing files aside (renamed, never deleted)
+    - any $HOME file Home Manager wants to own -> the same name with a .backup suffix
+    - /home/lz/.zsh_history (file) -> .zsh_history.pre-dotfiles.bak, then linked to …
+
+? Proceed with this plan? [Y/n]
+```
+
+The last section is separate on purpose: displacing files you already have is
+the only part of a bootstrap that touches your data, so it is listed
+file-by-file, last, right where you answer.
+
+Answering anything but yes exits without changing a thing. There is exactly one
+prompt — no step-by-step nagging. A run with **no terminal** (CI, container
+build, cron, `bash -c`) never asks and behaves as it always has; `--yes` skips
+the prompt on a terminal too (the plan is still printed). Design record:
+[ADR-0010](docs/plans/adr-0010-plan-first-one-shot-clearance-2026-08-04.md).
+
 ## What the bootstrap does
 
 Split around the Home Manager switch:
@@ -54,8 +94,9 @@ exec ~/.nix-profile/bin/zsh -l
 
 | Flag              | Effect                                                      |
 | ----------------- | ----------------------------------------------------------- |
-| `--dry-run`       | Print every command without executing it.                   |
+| `--dry-run`       | Print every command without executing it (no clearance prompt — nothing to clear). |
 | `--verbose`       | Echo each command as it runs.                               |
+| `--yes` / `-y`    | Skip the clearance prompt (the plan is still printed). Same as `DF_ASSUME_YES=1`. |
 | `--network CN`    | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
 | `--system <list>` | Install opt-in Linux system components (`all` = every one). |
 | `--host NAME`     | Force a named flake host instead of auto-detecting.         |
@@ -63,6 +104,7 @@ exec ~/.nix-profile/bin/zsh -l
 
 | Env var                     | Effect                                                                                                                                                                                                                                                                                                                                                               |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DF_ASSUME_YES=1`           | Skip the interactive clearance (same as `--yes`); exported automatically once you have cleared the plan, so the nested steps never re-ask.                                                                                                                                                                                                                             |
 | `DOTFILE_NETWORK_ENV=CN`    | Same as `--network CN` (also read by the zsh env for pypi/rustup).                                                                                                                                                                                                                                                                                                   |
 | `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins.                                                                                                                                                                                                                                                                                                                 |
 | `DOTFILE_FLAKE_CACHE`       | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI).                                                                                                                                                                                                                                                                                                 |
@@ -72,7 +114,9 @@ exec ~/.nix-profile/bin/zsh -l
 
 **Safety model — nothing is destroyed:**
 
-- **Preview first:** `./bootstrap.sh --dry-run --verbose` runs nothing.
+- **Preview first:** `./bootstrap.sh --dry-run --verbose` runs nothing. An
+  ordinary interactive run also prints its full plan and waits for clearance
+  before the first change.
 - **Existing dotfiles are backed up, not deleted.** Activation uses `-b backup`
   (`HOME_MANAGER_BACKUP_EXT=backup`), so a pre-existing `~/.zshrc` /
   `~/.gitconfig` / etc. is renamed to `~/.zshrc.backup` before the Home Manager

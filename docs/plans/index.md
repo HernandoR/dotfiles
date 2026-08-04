@@ -11,3 +11,4 @@
 | [ADR-0007](adr-0007-nix-home-manager-migration-2026-07-09.md) | Migrate to Nix flake + standalone Home Manager | accepted | 2026-07-09 |
 | [ADR-0008](adr-0008-external-home-dir-symlinking-2026-07-20.md) | JSON(C)-driven symlink map for external files/dirs into `$HOME` | superseded (→ ADR-0009) | 2026-07-20 |
 | [ADR-0009](adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md) | Config ownership tiers — env-specific HM module owns mutable links; declarative nixification deferred | accepted | 2026-07-26 |
+| [ADR-0010](adr-0010-plan-first-one-shot-clearance-2026-08-04.md) | Plan-first bootstrap with a single interactive clearance | accepted | 2026-08-04 |

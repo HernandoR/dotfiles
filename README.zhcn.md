@@ -29,6 +29,43 @@ cd dotfiles
 `bootstrap.sh` 需要 `curl` 和 `git`。如果 Nix 已安装则无需任何权限；
 否则需要 root/sudo 来安装 Lix（在没有 init 系统的裸容器/CI 中，会回退到单用户安装）。
 
+**在终端里运行时，它会先问过你再动手。** 它会先打印完整计划——将安装什么、
+用哪个网络/镜像、写入哪些配置文件、放置哪些软链接——然后**一次性**征求许可：
+
+```text
+==> Plan — nothing has run yet
+  os          ubuntu (x86_64)
+  host        dotfiles-debian
+  privilege   sudo — privileged steps run via sudo (may ask for your password)
+  network     upstream defaults (pass --network CN for the China mirrors)
+
+  will install
+    - prerequisites via apt-get: curl git xz-utils ca-certificates   [privileged]
+    - Lix (multi-user) — fetch install.lix.systems/lix, create /nix, …   [privileged]
+    - Home Manager generation for 'dotfiles-debian' — the whole user environment …
+    - mise runtimes: aws-cli, docker-cli, go, just, node, …
+
+  will write / link
+    - /etc/nix/nix.conf <- experimental-features = nix-command flakes   [privileged]
+    - Home Manager symlinks into /home/lz from the nix store (~/.zshrc, ~/.config/git, …)
+    - link map ~/link-map.jsonc: 7 entries, 1 of them displacing a real file/dir
+    - login shell /bin/bash -> ~/.nix-profile/bin/zsh (chsh; adds it to /etc/shells)   [privileged]
+
+  will move your existing files aside (renamed, never deleted)
+    - any $HOME file Home Manager wants to own -> the same name with a .backup suffix
+    - /home/lz/.zsh_history (file) -> .zsh_history.pre-dotfiles.bak, then linked to …
+
+? Proceed with this plan? [Y/n]
+```
+
+最后一节是刻意单列的：挪动你已有的文件是 bootstrap 唯一会碰到你数据的地方，
+因此逐个文件列出、放在最后、就在你作答的位置旁边。
+
+回答 yes 之外的任何内容都会直接退出，不改动任何东西。全程只有这**一个**提问——
+不会一步一步反复打扰。**没有终端**的运行（CI、容器构建、cron、`bash -c`）不会提问，
+行为与以往完全一致；在终端上加 `--yes` 也可以跳过提问（计划仍会打印）。设计记录见
+[ADR-0010](docs/plans/adr-0010-plan-first-one-shot-clearance-2026-08-04.md)。
+
 ## bootstrap 做了什么
 
 以 Home Manager 切换为界一分为二：
@@ -51,8 +88,9 @@ exec ~/.nix-profile/bin/zsh -l
 
 | 参数              | 效果                                               |
 | ----------------- | -------------------------------------------------- |
-| `--dry-run`       | 打印每条命令但不执行。                             |
+| `--dry-run`       | 打印每条命令但不执行（不会征求许可——没有要许可的东西）。 |
 | `--verbose`       | 执行时回显每条命令。                               |
+| `--yes` / `-y`    | 跳过许可提问（计划仍会打印）。等同于 `DF_ASSUME_YES=1`。 |
 | `--network CN`    | 为 Nix、pypi/uv 和 rustup 启用中国（CERNET）镜像。 |
 | `--system <list>` | 安装可选的 Linux 系统组件（`all` = 全部）。        |
 | `--host NAME`     | 强制使用指定的 flake host，而非自动检测。          |
@@ -60,6 +98,7 @@ exec ~/.nix-profile/bin/zsh -l
 
 | 环境变量                    | 效果                                                                                                                                                                                                                                                                                                                            |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DF_ASSUME_YES=1`           | 跳过交互许可（等同于 `--yes`）；你许可计划之后它会被自动导出，因此后续步骤不会重复提问。                                                                                                                                                                                                                                         |
 | `DOTFILE_NETWORK_ENV=CN`    | 等同于 `--network CN`（zsh 环境也会读取它用于 pypi/rustup）。                                                                                                                                                                                                                                                                   |
 | `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。                                                                                                                                                                                                                                                                                     |
 | `DOTFILE_FLAKE_CACHE`       | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。                                                                                                                                                                                                                                                               |
@@ -69,7 +108,8 @@ exec ~/.nix-profile/bin/zsh -l
 
 **安全模型——不会破坏任何东西：**
 
-- **先预览：** `./bootstrap.sh --dry-run --verbose` 什么都不执行。
+- **先预览：** `./bootstrap.sh --dry-run --verbose` 什么都不执行。普通的交互式运行
+  也会先打印完整计划并等待你的许可，之后才做第一处改动。
 - **已有的 dotfiles 会被备份，而不是删除。** 激活使用 `-b backup`
   （`HOME_MANAGER_BACKUP_EXT=backup`），因此已存在的 `~/.zshrc` /
   `~/.gitconfig` 等会在放置 Home Manager 软链接前被重命名为 `~/.zshrc.backup`。
