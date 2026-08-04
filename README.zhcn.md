@@ -239,6 +239,229 @@ DOTFILE_SYSTEM_COMPONENTS=cuda,nvidia ./bootstrap.sh
 
 随时列出它们：`uv run platform/installers/components.py`。
 
+## 添加软件包（教程）
+
+一个新工具该写在哪里，取决于它归哪一层管：
+
+| 你想要的                                          | 写进哪里                                                        | 作用范围                                       |
+| ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
+| nixpkgs 里已有的 CLI 工具                         | `home/packages.nix`                                             | 所有主机，每次 switch 都应用                   |
+| 运行时，或只在 npm/cargo/go/gh-release 发布的工具 | `home/mise.nix`（`programs.mise.globalConfig.tools`）           | 所有主机，`mise install` 之后生效              |
+| 只有某一个项目需要的东西                          | 该项目自己的 `mise.toml`，**或**该项目自己的 `flake.nix` devShell | 该目录树                                       |
+| 守护进程/驱动/apt 层面的东西（docker、cuda、llvm…）| `platform/installers/components.py` + `--system`                | 见 [组件分类](#组件分类)                       |
+| 只想试一下                                        | 什么都不写 —— `nix shell nixpkgs#<pkg>`                          | 仅当前 shell                                   |
+
+**用户级的东西一律不用命令式安装。** Home Manager 会把它的 `home-manager-path`
+安装进 `~/.nix-profile` 指向的那个 profile，所以在旁边额外 `nix profile install` /
+`nix-env -i` 会和它争抢同名文件，也不会同步到另一台机器，还不会出现在
+`home-manager packages` 里。想让工具明天还在，就把它写进本仓库的某个文件。
+
+### Nix —— 查找软件包
+
+```bash
+nix search nixpkgs hyperfine     # 按正则匹配 nixpkgs 的 attribute + 描述
+nix search nixpkgs '^ripgrep$'   # 加锚点：精确的 attribute 名
+```
+
+或用 [search.nixos.org/packages](https://search.nixos.org/packages)——同样的数据，
+还会列出 attribute 名和包提供的可执行文件。
+
+`nix search nixpkgs` 解析的是 *registry* 里的 nixpkgs（当前 unstable），而本仓库
+是按 `flake.lock` 锁定的 revision 构建的。确认该 attribute 在锁定版本里存在、
+并看看你实际会拿到哪个版本：
+
+```bash
+nix eval --raw .#homeConfigurations.dotfiles-debian.pkgs.ripgrep.version   # -> 15.1.0
+```
+
+在决定长期保留之前先试用——它只把工具放进当前 shell 的 `PATH`，不做任何持久化：
+
+```bash
+nix shell nixpkgs#hyperfine      # 然后：hyperfine --version
+```
+
+### Nix —— 全局（持久化到 `home/packages.nix`）
+
+把 attribute 加进 [`home/packages.nix`](home/packages.nix) 的列表里，放在它所属的
+分组中；如果只在某个 OS 上需要，用 `lib.optionals stdenv.isLinux` /
+`isDarwin` 包起来（`home/packages.nix:47`）：
+
+```nix
+      ripgrep
+      jq
++     hyperfine # benchmarking
+```
+
+unfree 包不需要额外步骤——`mkHome` 实例化 nixpkgs 时已设置
+`config.allowUnfree = true`（`flake.nix:41`）。然后
+[同步到你的 home](#把改动同步到当前的-home)。
+
+### Nix —— 项目内
+
+项目依赖绝不要写进 `home/packages.nix`。临时用（在项目目录里）：
+
+```bash
+nix shell nixpkgs#ffmpeg nixpkgs#imagemagick   # 仅当前 shell，不持久化
+```
+
+要可复现，就给*那个*项目自己的 flake 加一个 devShell，用 `nix develop` 进入
+（把它的 `flake.nix` + `flake.lock` 提交到该项目）：
+
+```nix
+# <project>/flake.nix
+{
+  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+  outputs =
+    { nixpkgs, ... }:
+    let
+      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+    in
+    {
+      devShells.x86_64-linux.default = pkgs.mkShell {
+        packages = [ pkgs.ffmpeg pkgs.imagemagick ];
+      };
+    };
+}
+```
+
+想让它在 `cd` 时自动加载，就往*本*配置里加 direnv
+（在某个 `home/*.nix` 模块中写 `programs.direnv.enable = true;` +
+`nix-direnv.enable = true;`——目前配置里还没有），并在项目里放一行
+`.envrc`（`use flake`）。
+
+### mise —— 查找工具
+
+```bash
+mise registry | grep -i terraform   # 工具名 -> mise 会使用的 backend
+mise ls-remote node                 # 某个工具可用的版本
+```
+
+短名字通过 mise 的 registry 解析（core/aqua/ubi）；其他 backend 要显式写出：
+`npm:<pkg>`、`cargo:<crate>`、`go:<module>`、`pipx:<pkg>`、`ubi:<owner>/<repo>`。
+
+### mise —— 全局（持久化到 `home/mise.nix`）
+
+`~/.config/mise/config.toml` 是**生成的**：Home Manager 把它软链接到 nix store，
+因此 `mise use --global …` 无法在那里持久化（写入会碰到只读的 store 路径；
+以 root 运行则会改到 store 里的副本，下一次 switch 就被还原）。全局工具列表在
+[`home/mise.nix`](home/mise.nix)：
+
+```nix
+        just = "latest";
+        node = "lts";
++       terraform = "latest";
++       "npm:@openai/codex" = "latest";
+```
+
+npm 系的工具用 **pnpm** 安装（`npm.package_manager = "pnpm"`，
+`home/mise.nix:21`），而 pnpm 默认阻止依赖的生命周期脚本。如果某个包确实需要它的
+`postinstall`，就像 `@smithery/cli` 那样精确放行这一个包（`home/mise.nix:38`）：
+
+```nix
+        "npm:@smithery/cli" = {
+          version = "latest";
+          allow_builds = [ "@smithery/cli" ];
+        };
+```
+
+然后切换并实体化——只是声明、尚未安装的工具不会进 `PATH`，要跑过
+`mise install` 才行（`home/mise.nix:3-8`）：
+
+```bash
+home-manager switch --flake .#dotfiles-debian -b backup
+mise install                     # 安装全局配置声明的全部工具
+mise ls                          # 查看已安装 / 生效的版本
+```
+
+**只针对单台机器的逃生口：** mise 也会读 `~/.config/mise/conf.d/*.toml`，
+这个目录不由 Home Manager 拥有——放在那里的文件能在 switch 后存活，
+适合放本机专属的工具。代价一如往常：它在 git 之外，别的机器不会有。
+
+### mise —— 项目内
+
+```bash
+cd <project>
+mise use node@22 python@3.12   # 写入（必要时创建）./mise.toml 并安装
+mise trust                     # 从 git 拿到的、不是你自己写的 mise.toml 需要先信任
+mise current                   # 当前目录生效的版本
+mise which node                # 实际解析到哪个 shim/二进制
+```
+
+把 `mise.toml` 提交到那个项目里；项目配置与 Home Manager 互不相干。
+`mise up` 在声明的范围内升级（也适用于全局配置，因为它不改写配置文件）；
+`mise up --bump` *会*改写配置文件，所以全局工具的版本变更请改
+`home/mise.nix`。
+
+### 修改 Home Manager 配置
+
+| 想改什么                                | 文件                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------- |
+| zsh 选项/插件、`PATH`、session 变量     | `home/shell.nix`                                                     |
+| zsh 函数、别名、fzf-tab 细节            | `home/zsh/functions.zsh`、`home/zsh/fzf-tab.zsh`（原样 source）      |
+| 提示符                                  | `home/starship.toml`（由 `home/starship.nix` 读取）                   |
+| git 配置                                | `home/git.nix`；别名在 `home/git-aliases.conf`                        |
+| tmux                                    | `home/tmux.conf`（+ `home/tmux.nix`）                                 |
+| 指向环境专属可变路径的链接              | `home/env-links.nix`（ADR-0009 Tier B —— 真实条目只在 env 分支上）    |
+| 新机器                                  | `flake.nix:17` 的 `hosts` attrset                                     |
+
+有两个约定值得保持（见 [AGENT.md](AGENT.md)）：优先使用上游的 `programs.*` 选项
+而不是自己拼配置；大段内容用原样嵌入文件（`builtins.readFile` /
+`source ${./file}`），不要转义进 nix 字符串。不要调整 `home/shell.nix` 里 zsh
+插件的顺序——completions → fzf-tab → autosuggestions → 语法高亮放最后，
+这个顺序关乎正确性。
+
+### 把改动同步到当前的 home
+
+上面所有改动在 Home Manager 切换之前都不生效。在仓库目录里：
+
+```bash
+# 1) 预览：构建新 generation，不激活，也不留下 ./result 软链接
+nix build --no-link --print-out-paths .#homeConfigurations.dotfiles-debian.activationPackage
+nix store diff-closures /nix/var/nix/profiles/per-user/"$USER"/home-manager <上面打印的路径>
+
+# 2) 激活
+home-manager switch --flake .#dotfiles-debian -b backup
+```
+
+**用哪个 host？** 如果 `flake.nix` 里定义了你的 hostname 就用它，否则用 OS/架构
+的默认值（`platform/lib.sh:211`）。其他用户——包括 root——走非纯（impure）的
+`generic` 回退 host，需要加 `--impure`：
+
+```bash
+home-manager switch --flake .#generic -b backup --impure
+```
+
+`-b backup` 与 bootstrap 的做法一致（`HOME_MANAGER_BACKUP_EXT=backup`）；
+不加它的话，一旦发现该放软链接的位置上是真实文件，switch 就会中止。
+也可以直接让 bootstrap 来做——它会检测 host，并把 post-HM 的步骤也重跑一遍：
+
+```bash
+./bootstrap.sh --dry-run --verbose   # 预览全过程
+./bootstrap.sh --yes                 # 直接执行，跳过许可提问
+```
+
+之后在你的 shell 里：
+
+```bash
+exec zsh -l                          # 加载新的 PATH / 环境变量 / 补全
+mise install                         # 实体化新声明的 mise 工具
+home-manager packages | grep hyperfine   # 确认这个 generation 里确实有它
+```
+
+如果结果不对：`home-manager switch --rollback`——见
+[在新机器上试用（以及如何恢复）](#在新机器上试用以及如何恢复)。
+
+**升级版本**（区别于添加软件包）：
+
+```bash
+nix flake update                     # 全部 input
+nix flake update nixpkgs             # 只更新 nixpkgs
+home-manager switch --flake .#dotfiles-debian -b backup
+mise up                              # mise 工具，在声明的范围内升级
+```
+
+把改动后的 `flake.lock` 与需要它的那次改动一起提交。
+
 ## 登录后交互式配置
 
 Claude/Smithery/Lark 配置（插件、MCP 服务器、Lark CLI 认证）是*交互式*的，

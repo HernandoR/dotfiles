@@ -255,6 +255,239 @@ installs your selection.
 
 List them anytime: `uv run platform/installers/components.py`.
 
+## Adding software (tutorial)
+
+Where a new tool is written down depends on which layer owns it:
+
+| What you want                                                   | Write it in                                                              | Scope                                     |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------- |
+| A CLI tool that exists in nixpkgs                               | `home/packages.nix`                                                      | every host, on every switch               |
+| A runtime, or a tool that only ships via npm/cargo/go/gh-release | `home/mise.nix` (`programs.mise.globalConfig.tools`)                     | every host, after `mise install`          |
+| Something only one project needs                                | that project's `mise.toml`, **or** its own `flake.nix` devShell          | that directory tree                       |
+| A daemon/driver/apt-level thing (docker, cuda, llvm, …)          | `platform/installers/components.py` + `--system`                         | see [Component classification](#component-classification) |
+| A one-off experiment                                            | nothing — `nix shell nixpkgs#<pkg>`                                      | the current shell only                    |
+
+**Nothing user-level is installed imperatively.** Home Manager installs its
+`home-manager-path` into the same profile `~/.nix-profile` points at, so a
+`nix profile install` / `nix-env -i` on the side competes with it for the same
+file names, never reaches another machine, and does not show up in
+`home-manager packages`. If you want the tool tomorrow, it goes into a file in
+this repo.
+
+### Nix — find a package
+
+```bash
+nix search nixpkgs hyperfine     # regex match over nixpkgs attributes + descriptions
+nix search nixpkgs '^ripgrep$'   # anchored: the exact attribute name
+```
+
+or [search.nixos.org/packages](https://search.nixos.org/packages) — same data,
+with the attribute name and the binaries a package provides.
+
+`nix search nixpkgs` resolves the *registry* nixpkgs (current unstable), while
+this repo builds from the revision pinned in `flake.lock`. Confirm the attribute
+exists there and see the version you'd actually get:
+
+```bash
+nix eval --raw .#homeConfigurations.dotfiles-debian.pkgs.ripgrep.version   # -> 15.1.0
+```
+
+Try it before committing to it — this puts it on `PATH` for one shell and
+persists nothing:
+
+```bash
+nix shell nixpkgs#hyperfine      # then: hyperfine --version
+```
+
+### Nix — global (persist in `home/packages.nix`)
+
+Add the attribute to the list in [`home/packages.nix`](home/packages.nix), in
+the group it belongs to; wrap it in `lib.optionals stdenv.isLinux` /
+`isDarwin` if it is OS-specific (`home/packages.nix:47`):
+
+```nix
+      ripgrep
+      jq
++     hyperfine # benchmarking
+```
+
+Unfree packages need no extra step — `mkHome` instantiates nixpkgs with
+`config.allowUnfree = true` (`flake.nix:41`). Then
+[sync it into your home](#syncing-a-change-into-the-running-home).
+
+### Nix — per project
+
+Project dependencies never go into `home/packages.nix`. Ad hoc, in the project
+directory:
+
+```bash
+nix shell nixpkgs#ffmpeg nixpkgs#imagemagick   # this shell only, nothing persisted
+```
+
+Reproducible: give *that* project its own flake with a devShell and enter it
+with `nix develop` (commit its `flake.nix` + `flake.lock`):
+
+```nix
+# <project>/flake.nix
+{
+  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+  outputs =
+    { nixpkgs, ... }:
+    let
+      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+    in
+    {
+      devShells.x86_64-linux.default = pkgs.mkShell {
+        packages = [ pkgs.ffmpeg pkgs.imagemagick ];
+      };
+    };
+}
+```
+
+To have the shell load on `cd`, add direnv to *this* config
+(`programs.direnv.enable = true;` + `nix-direnv.enable = true;` in a
+`home/*.nix` module — it is not part of the config today) and a one-line
+`.envrc` (`use flake`) in the project.
+
+### mise — find a tool
+
+```bash
+mise registry | grep -i terraform   # tool name -> the backend(s) mise would use
+mise ls-remote node                 # versions available for a tool
+```
+
+Short names resolve through mise's registry (core/aqua/ubi); other backends are
+named explicitly: `npm:<pkg>`, `cargo:<crate>`, `go:<module>`, `pipx:<pkg>`,
+`ubi:<owner>/<repo>`.
+
+### mise — global (persist in `home/mise.nix`)
+
+`~/.config/mise/config.toml` is **generated**: Home Manager symlinks it into the
+nix store, so `mise use --global …` cannot persist there (the write hits a
+read-only store path; as root it edits the store copy and the next switch
+reverts it). The global tool list lives in
+[`home/mise.nix`](home/mise.nix):
+
+```nix
+        just = "latest";
+        node = "lts";
++       terraform = "latest";
++       "npm:@openai/codex" = "latest";
+```
+
+npm-backed tools are installed with **pnpm** (`npm.package_manager = "pnpm"`,
+`home/mise.nix:21`), and pnpm blocks dependency lifecycle scripts by default. If
+a package genuinely needs its `postinstall`, approve exactly that package the way
+`@smithery/cli` does (`home/mise.nix:38`):
+
+```nix
+        "npm:@smithery/cli" = {
+          version = "latest";
+          allow_builds = [ "@smithery/cli" ];
+        };
+```
+
+Then switch and materialize — a declared-but-not-installed tool is not on `PATH`
+until `mise install` has run (`home/mise.nix:3-8`):
+
+```bash
+home-manager switch --flake .#dotfiles-debian -b backup
+mise install                     # install everything the global config declares
+mise ls                          # what is installed / active
+```
+
+**Escape hatch for one machine only:** mise also reads
+`~/.config/mise/conf.d/*.toml`, which Home Manager does not own — a file there
+survives switches and is a legitimate place for host-local tools. The trade-off
+is the usual one: it is outside git, so no other machine gets it.
+
+### mise — per project
+
+```bash
+cd <project>
+mise use node@22 python@3.12   # writes ./mise.toml (creating it) and installs
+mise trust                     # needed for a mise.toml that came from git, not from you
+mise current                   # active versions here
+mise which node                # which shim/binary resolves
+```
+
+Commit `mise.toml` in that project; project config is independent of Home
+Manager. `mise up` upgrades within the declared range (global config included,
+since it rewrites nothing); `mise up --bump` *would* rewrite the config file, so
+for global tools make that version change in `home/mise.nix` instead.
+
+### Editing the Home Manager config
+
+| Want to change                                  | File                                                                       |
+| ----------------------------------------------- | -------------------------------------------------------------------------- |
+| zsh options/plugins, `PATH`, session variables  | `home/shell.nix`                                                           |
+| zsh functions, aliases, fzf-tab tweaks          | `home/zsh/functions.zsh`, `home/zsh/fzf-tab.zsh` (sourced verbatim)        |
+| the prompt                                      | `home/starship.toml` (read by `home/starship.nix`)                          |
+| git settings                                    | `home/git.nix`; aliases in `home/git-aliases.conf`                          |
+| tmux                                            | `home/tmux.conf` (+ `home/tmux.nix`)                                       |
+| mise tools/settings                             | `home/mise.nix`                                                            |
+| links to env-specific mutable paths             | `home/env-links.nix` (ADR-0009 Tier B — real entries live on env branches)  |
+| a new machine                                   | the `hosts` attrset in `flake.nix:17`                                       |
+
+Two conventions worth keeping (see [AGENT.md](AGENT.md)): prefer an upstream
+`programs.*` option over hand-rolled config, and embed verbatim files
+(`builtins.readFile` / `source ${./file}`) instead of escaping large blobs into
+nix strings. Don't reorder the zsh plugin list in `home/shell.nix` — completions
+→ fzf-tab → autosuggestions → syntax-highlighting-last is correctness-critical.
+
+### Syncing a change into the running home
+
+Everything above is inert until Home Manager switches. From the repo:
+
+```bash
+# 1) preview: build the new generation, activate nothing, leave no ./result symlink
+nix build --no-link --print-out-paths .#homeConfigurations.dotfiles-debian.activationPackage
+nix store diff-closures /nix/var/nix/profiles/per-user/"$USER"/home-manager <the printed path>
+
+# 2) activate
+home-manager switch --flake .#dotfiles-debian -b backup
+```
+
+**Which host?** Your hostname if `flake.nix` defines it, else the OS/arch default
+(`platform/lib.sh:211`). Any other user — including root — uses the impure
+`generic` fallback, which needs `--impure`:
+
+```bash
+home-manager switch --flake .#generic -b backup --impure
+```
+
+`-b backup` is what the bootstrap does (`HOME_MANAGER_BACKUP_EXT=backup`);
+without it, a switch aborts as soon as it finds a real file where a symlink
+should go. Or let the bootstrap drive it — it detects the host and re-runs the
+post-HM steps too:
+
+```bash
+./bootstrap.sh --dry-run --verbose   # preview the whole thing
+./bootstrap.sh --yes                 # apply without the clearance prompt
+```
+
+Afterwards, in your shell:
+
+```bash
+exec zsh -l                          # pick up the new PATH / env / completions
+mise install                         # materialize newly declared mise tools
+home-manager packages | grep hyperfine   # verify the generation contains it
+```
+
+If the result is wrong, `home-manager switch --rollback` — see
+[Trying it on a new machine](#trying-it-on-a-new-machine-and-how-to-recover).
+
+**Updating versions** (as opposed to adding packages):
+
+```bash
+nix flake update                     # all inputs
+nix flake update nixpkgs             # just nixpkgs
+home-manager switch --flake .#dotfiles-debian -b backup
+mise up                              # mise tools, within their declared ranges
+```
+
+Commit the changed `flake.lock` together with the change that needed it.
+
 ## Post-login interactive setup
 
 The Claude/Smithery/Lark setup (plugins, MCP servers, Lark CLI auth) is
