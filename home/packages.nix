@@ -41,10 +41,26 @@
       # interpreter (ADR-0007).
       uv
 
-      # Fonts
+      # Fonts. `nerd-fonts.fira-code` ships all three FiraCode families
+      # (FiraCodeNerdFont / …NerdFontMono / …NerdFontPropo); `fira-mono` is the
+      # separate ligature-free Fira Mono typeface, patched the same way.
       nerd-fonts.fira-code
+      nerd-fonts.fira-mono
+
+      # getnf — Nerd Fonts installer CLI, for pulling an extra font ad hoc
+      # without a rebuild. Packaged locally (not in nixpkgs); see pkgs/getnf.nix.
+      (callPackage ./pkgs/getnf.nix { })
     ]
     ++ lib.optionals stdenv.isLinux [
       xclip # tmux copy/paste bindings on Linux
     ];
+
+  # Standalone HM defaults this to false, which means fonts installed above are
+  # in the profile but invisible to fontconfig — `fc-list` and every Linux
+  # terminal would miss FiraCode Nerd Font. Enabling it generates the
+  # fontconfig.d snippets that point at the profile's share/fonts and refreshes
+  # the cache on activation. (Darwin needs no flag: HM's darwin fonts module
+  # rsyncs profile fonts into ~/Library/Fonts/HomeManager, since macOS ignores
+  # symlinked fonts.)
+  fonts.fontconfig.enable = true;
 }

@@ -41,6 +41,7 @@ home/                 Home Manager modules (the declarative user environment)
   git-aliases.conf    verbatim git aliases (avoids nix-string escaping)
   tmux.nix / tmux.conf, mise.nix
   zsh/                functions.zsh, fzf-tab.zsh — sourced verbatim from initContent
+  pkgs/               local derivations for tools nixpkgs lacks (getnf.nix — the Nerd Fonts installer CLI)
 platform/             Imperative layer (see platform/README.md)
   bootstrap.sh        Orchestrator: privilege → prereqs → Lix → nix-cn → HM switch → setup.py
   lib.sh              Shared shell helpers (log/run, detect_priv, load_nix_path, install_lix, …)
@@ -204,6 +205,11 @@ a TTY); the HM zsh prints a reminder and the user runs it once via the
 ## Adding a new X
 
 - **A user CLI tool** → add to `home/packages.nix`. Done (declarative, all hosts).
+- **A user CLI tool nixpkgs doesn't have** → a derivation in `home/pkgs/<tool>.nix`,
+  pulled in as `(callPackage ./pkgs/<tool>.nix { })` from the `with pkgs` list in
+  `packages.nix` (`home/packages.nix:52`). `git add` the new file — the flake
+  copies only tracked files, so an untracked derivation fails eval with "path …
+  does not exist".
 - **Shell config** → the relevant `home/*.nix` `programs.*` option, or a verbatim
   file sourced from `initContent`.
 - **A new machine** → add a `hosts` entry in `flake.nix` (name = hostname for
