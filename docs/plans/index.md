@@ -6,9 +6,10 @@
 | [ADR-0002](adr-0002-optional-node-toolchain-2026-06-23.md) | Optional Node toolchain (nvm + Node LTS + pnpm) | accepted | 2026-06-23 |
 | [ADR-0003](adr-0003-package-manager-install-abstraction-2026-06-25.md) | PackageManager install abstraction for optional components | accepted | 2026-06-25 |
 | [ADR-0004](adr-0004-necessary-components-and-phase-separation-2026-06-25.md) | Necessary components and main-path phase separation | accepted | 2026-06-25 |
-| [ADR-0005](adr-0005-claude-post-setup-ownership-2026-06-29.md) | Claude config owned by a post-setup, excluded from linking | accepted | 2026-06-29 |
+| [ADR-0005](adr-0005-claude-post-setup-ownership-2026-06-29.md) | Claude config owned by a post-setup, excluded from linking | superseded (→ ADR-0011) | 2026-06-29 |
 | [ADR-0006](adr-0006-ssh-key-deployment-2026-06-29.md) | SSH keys deployed by copy, git-ignored in staging | superseded (→ ADR-0008) | 2026-06-29 |
 | [ADR-0007](adr-0007-nix-home-manager-migration-2026-07-09.md) | Migrate to Nix flake + standalone Home Manager | accepted | 2026-07-09 |
 | [ADR-0008](adr-0008-external-home-dir-symlinking-2026-07-20.md) | JSON(C)-driven symlink map for external files/dirs into `$HOME` | superseded (→ ADR-0009) | 2026-07-20 |
 | [ADR-0009](adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md) | Config ownership tiers — env-specific HM module owns mutable links; declarative nixification deferred | accepted | 2026-07-26 |
 | [ADR-0010](adr-0010-plan-first-one-shot-clearance-2026-08-04.md) | Plan-first bootstrap with a single interactive clearance | accepted | 2026-08-04 |
+| [ADR-0011](adr-0011-multi-agent-toolchain-single-source-2026-08-04.md) | Multi-agent toolchain — one manifest projected by CLI; instructions single-sourced | accepted | 2026-08-04 |

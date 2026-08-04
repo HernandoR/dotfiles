@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | accepted |
+| Status | superseded (→ [ADR-0011](adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)) |
 | Date | 2026-06-29 |
 
 ## Context
