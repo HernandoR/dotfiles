@@ -259,11 +259,15 @@ def setup_claude(ctx):
         ctx.run_command("curl -fsSL https://claude.ai/install.sh | bash", shell=True, check=False)
 
     logger.info("installing codegraph")
-    install_codegraph(ctx)
+    codegraph = install_codegraph(ctx)
     # `codegraph install` wires the MCP server into Claude Code; `--yes` skips the
     # interactive agent picker. `codegraph init` is per-project and intentionally
-    # not run here (a bootstrap has no project context).
-    ctx.run_command(["codegraph", "install", "--target=claude", "--yes"], check=False)
+    # not run here (a bootstrap has no project context). Invoke it by absolute
+    # path — the upstream installer only symlinks into ~/.local/bin.
+    if codegraph:
+        ctx.run_command([codegraph, "install", "--target=claude", "--yes"], check=False)
+    elif not ctx.dry_run:
+        logger.warning("codegraph not found after install; skipping MCP wiring")
 
     if ctx.dry_run:
         logger.info("[DRY-RUN] would write %s", deferred)

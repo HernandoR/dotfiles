@@ -307,11 +307,17 @@ def install_codegraph(ctx):
     Idempotent: if codegraph is already on PATH, defer to its own in-place
     updater rather than re-running the installer — matches upstream guidance
     ("Already installed? Run `codegraph upgrade`.").
+
+    Returns the absolute path of the resulting binary, or None when it is still
+    not resolvable (install failed, or dry-run). Callers that go on to invoke
+    codegraph must use the returned path: the upstream installer only links into
+    ~/.local/bin and tells the *user* to fix their PATH.
     """
-    if shutil.which("codegraph"):
+    found = shutil.which("codegraph")
+    if found:
         logger.info("codegraph already installed; running self-update.")
-        ctx.run_command(["codegraph", "upgrade"], check=False)
-        return
+        ctx.run_command([found, "upgrade"], check=False)
+        return found
     ctx.package_manager("scripts").install(
         ctx,
         Script(
@@ -319,6 +325,9 @@ def install_codegraph(ctx):
             interpreter="sh",
         ),
     )
+    # The installer links ~/.local/bin/codegraph; Ctx puts that dir on PATH, so a
+    # plain which() picks up what was just installed.
+    return shutil.which("codegraph")
 
 
 def main():

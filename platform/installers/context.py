@@ -31,6 +31,22 @@ class Ctx:
         self.assume_yes = (
             os.environ.get(ASSUME_YES_ENV, "") == "1" if assume_yes is None else bool(assume_yes)
         )
+        self._extend_path()
+
+    @staticmethod
+    def _extend_path():
+        """Put the per-user bin dirs that upstream installers link into on this
+        process' PATH. Those installers (codegraph, the Claude CLI, uv, …) drop a
+        symlink in ~/.local/bin and print "add this to your PATH" — the login
+        shell gets it from the HM zsh config, but a bootstrap run that installs
+        and then *uses* a tool in the same process would not, so `shutil.which`
+        and the exec lookup would both miss it. Prepending is safe: these dirs
+        are exactly where the HM config puts them for the interactive shell."""
+        user_bins = [pathlib.Path.home() / ".local/bin", pathlib.Path.home() / "bin"]
+        path = os.environ.get("PATH", "").split(os.pathsep)
+        missing = [str(p) for p in user_bins if str(p) not in path]
+        if missing:
+            os.environ["PATH"] = os.pathsep.join([*missing, *path])
 
     # -- interactivity ----------------------------------------------------
     @property
@@ -156,6 +172,14 @@ class Ctx:
             if check:
                 sys.exit(1)
             return e
+        except OSError as e:
+            # Binary not found / not executable. Without this, check=False still
+            # aborted the whole bootstrap with a traceback, because the failure
+            # happens in exec (FileNotFoundError) rather than in the exit status.
+            logger.error("could not run %s: %s", cmd_str, e)
+            if check:
+                sys.exit(1)
+            return subprocess.CompletedProcess(cmd, 127, b"", b"")
 
     def package_manager(self, manager_id):
         return PackageManager.get(manager_id)
