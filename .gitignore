@@ -15,6 +15,9 @@ venv/
 # uv
 uv.lock
 
+# direnv (nix-direnv's cached devShell + its GC roots)
+.direnv/
+
 # SSH private keys must never be committed (ADR-0006); public keys are fine.
 sources/root/.ssh/id_*
 !sources/root/.ssh/id_*.pub
