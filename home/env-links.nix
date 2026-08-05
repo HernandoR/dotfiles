@@ -47,6 +47,47 @@ let
   # with a period, and the entry names all do.
   seedFile = name: e:
     pkgs.writeText "env-link-seed-${lib.replaceStrings [ "." "/" ] [ "_" "_" ] name}" e.seed;
+
+  # Repair a $HOME path that is a REGULAR FILE where a link belongs.
+  #
+  # Some writers replace rather than update: they write a temp file next to the
+  # path and rename it over the top, which silently turns our symlink into a
+  # regular file. Claude Code does this to ~/.claude.json (measured on a clean
+  # devpod). Two things then go wrong, and both are silent until much later:
+  #
+  #   1. the file stops being the link — so it stops persisting to stateRoot,
+  #      which is the entire point of the entry;
+  #   2. the next activation finds an unmanaged file in the way, tries to back it
+  #      up, collides with the `.backup` left by the previous cycle, and ABORTS —
+  #      taking the whole bootstrap with it (reproduced twice).
+  #
+  # So fold the file back into its target and leave the path free; Home Manager
+  # then places the link itself, as it would on a first run. The newer copy wins,
+  # because the $HOME file is what the tool just wrote and the target is the stale
+  # side — but say which way it went rather than deciding quietly.
+  #
+  # Files only. A real *directory* in the way is not this failure mode (writers
+  # create files inside a dir, they never rename over it), and merging two trees
+  # is a judgement call, so those keep going through HM's own `.backup` path.
+  repairLink = name: e:
+    let
+      # Double-quoted, NOT escapeShellArg'd: that helper single-quotes, which
+      # would stop $HOME from expanding. Entry names are plain dotfile names.
+      link = "\"$HOME/${name}\"";
+      tgt = lib.escapeShellArg (target name);
+    in
+    if e.kind != "file" then "" else ''
+      if [ -e ${link} ] && [ ! -L ${link} ]; then
+        if [ ${link} -nt ${tgt} ]; then
+          warnEcho "env-links: ~/${name} was replaced by a regular file (newer than its target) — folding it back into ${target name}"
+          $DRY_RUN_CMD mv -f ${link} ${tgt}
+          $DRY_RUN_CMD chmod ${e.mode} ${tgt}
+        else
+          warnEcho "env-links: ~/${name} is a regular file older than its target — discarding it, the target wins"
+          $DRY_RUN_CMD rm -f ${link}
+        fi
+      fi
+    '';
 in
 {
   options.envLinks = {
@@ -162,7 +203,9 @@ in
     #
     # This is the `home.activation` escape hatch ADR-0009 reserved: the entries
     # stay the single declarative inventory, and this only makes what they
-    # already declare exist. It creates stateRoot but NOT stateRoot's parent: if
+    # already declare TRUE — first by creating a missing target (below), then by
+    # repairing a $HOME file that a rename-happy writer left where a link belongs
+    # (see repairLink). Neither invents anything the entries do not already say. It creates stateRoot but NOT stateRoot's parent: if
     # the persistent volume is not mounted, mkdir -p would happily build the
     # whole tree on the container's ephemeral disk, and every link would then
     # "work" while silently persisting nothing — the exact failure this module
@@ -176,6 +219,7 @@ in
         else
           $DRY_RUN_CMD mkdir -p ${lib.escapeShellArg cfg.stateRoot}
           ${lib.concatStringsSep "\n  " (lib.mapAttrsToList seedTarget cfg.entries)}
+          ${lib.concatStringsSep "\n  " (lib.filter (s: s != "") (lib.mapAttrsToList repairLink cfg.entries))}
         fi
       '';
   };
