@@ -150,11 +150,17 @@ class Ctx:
         return "sudo " if self._needs_sudo() else ""
 
     def run_command(self, cmd, check=True, shell=False, capture_output=False,
-                    env=None, with_sudo=False):
+                    env=None, with_sudo=False, stdin_devnull=False):
         # with_sudo prepends sudo when the live environment needs it (non-root
         # with a sudo binary) — see _needs_sudo(). Callers pass the bare command
         # + with_sudo=True instead of a literal "sudo", so a root session (incl.
         # a container with no sudo) runs it unprefixed automatically.
+        #
+        # stdin_devnull detaches the child from the terminal, so a command that
+        # was expected to be non-interactive FAILS on an unexpected prompt instead
+        # of blocking the whole bootstrap on a question nobody can see. Use it for
+        # anything driven off a list (the ADR-0011 agent projection); steps that
+        # legitimately ask keep the inherited stdin.
         if with_sudo and self._needs_sudo():
             cmd = ["sudo", *cmd] if isinstance(cmd, list) else "sudo " + cmd
         run_env = {**os.environ, **env} if env else None
@@ -165,7 +171,8 @@ class Ctx:
             return subprocess.CompletedProcess(cmd, 0, b"", b"")
         try:
             return subprocess.run(
-                cmd, check=check, shell=shell, capture_output=capture_output, env=run_env
+                cmd, check=check, shell=shell, capture_output=capture_output, env=run_env,
+                stdin=subprocess.DEVNULL if stdin_devnull else None,
             )
         except subprocess.CalledProcessError as e:
             logger.error("command failed: %s", e)

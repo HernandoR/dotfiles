@@ -8,7 +8,7 @@ Run by platform/bootstrap.sh via `uv run` *after* `home-manager switch`, when
 uv/python are available on the HM profile. Home Manager already owns the user
 environment; this handles the imperative remainder:
 
-    login shell (chsh) · Claude post-setup · Linux system SW
+    login shell (chsh) · agent toolchain (ADR-0011) · Linux system SW
 
 Privilege is self-detected (Ctx.priv, live): privileged calls pass
 `with_sudo=True` (or interpolate `ctx.sudo` in a shell pipeline), so sudo is
@@ -32,6 +32,7 @@ import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from installers import agents  # noqa: E402
 from installers.components import OptionalComponent, install_codegraph  # noqa: E402
 from installers.context import Ctx  # noqa: E402
 
@@ -89,61 +90,60 @@ def setup_runtimes(ctx):
     ctx.run_command([mise, "install"], check=False)
 
 
-def setup_claude(ctx):
-    """Install the Claude Code CLI + CodeGraph, then write the deferred interactive
-    setup (plugins/Smithery-MCP/Lark). The CLI binary and CodeGraph installs are
-    fully non-interactive and run every time; the rest needs a TTY, so it is NOT
-    auto-run — the user invokes it once via the `dotfiles-postsetup` shell
-    function. The Smithery CLI is installed by setup_runtimes (mise npm tool), so
-    it is called directly (no `npx`); only the Lark CLI still needs npx (node from
-    mise). The HM zsh prints a one-line reminder while the script is still
-    present. No privilege."""
+def setup_agents(ctx, agent_ids):
+    """Install the selected coding agents and project the ADR-0011 capability
+    manifest onto each with that agent's own CLI (installers/agents.py owns both
+    the manifest and the per-agent commands).
+
+    Everything here is non-interactive, so it runs on every bootstrap: the
+    manifest is only a single source if applying it needs no human. What genuinely
+    needs a TTY — Smithery auth and the Lark CLI's own installer — is written to
+    the deferred script below instead. No privilege."""
+    agents.provision(ctx, agent_ids, install_codegraph)
+
+
+def write_deferred_setup(ctx, agent_ids):
+    """Write the interactive remainder to
+    ``~/.local/share/dotfiles/post-login-setup.sh`` instead of running it: both
+    steps below can stop and ask (an OAuth login, a package-manager picker), which
+    a bootstrap must never do. The user invokes it once via the
+    `dotfiles-postsetup` shell function; it self-removes on success, and the HM zsh
+    prints a one-line reminder while the file is still there.
+
+    The Smithery CLI is a mise npm tool (installed by setup_runtimes), so it is
+    called directly (no `npx`); only the Lark CLI still needs npx (node from mise).
+    Claude plugins/marketplaces/MCP are NOT here anymore — they are part of the
+    manifest projection (ADR-0011) and run unattended. No privilege."""
     deferred = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
-    if shutil.which("claude"):
-        logger.info("claude CLI already installed")
-    else:
-        logger.info("installing Claude Code CLI")
-        ctx.run_command("curl -fsSL https://claude.ai/install.sh | bash", shell=True, check=False)
-
-    logger.info("installing codegraph")
-    codegraph = install_codegraph(ctx)
-    # `codegraph install` wires the MCP server into Claude Code; `--yes` skips the
-    # interactive agent picker. `codegraph init` is per-project and intentionally
-    # not run here (a bootstrap has no project context). Invoke it by absolute
-    # path — the upstream installer only symlinks into ~/.local/bin.
-    if codegraph:
-        ctx.run_command([codegraph, "install", "--target=claude", "--yes"], check=False)
-    elif not ctx.dry_run:
-        logger.warning("codegraph not found after install; skipping MCP wiring")
-
+    if not agent_ids:
+        logger.info("no agents selected; not writing %s", deferred)
+        return
     if ctx.dry_run:
         logger.info("[DRY-RUN] would write %s", deferred)
         return
-    plugins = ("discuss", "implement", "dev_loop", "fetch_external_knowledge")
-    # Astral's marketplace (astral-sh/claude-code-plugins) — Python tooling skills.
-    astral_plugins = ("astral",)
     # Individual Smithery-registry MCP servers (qualified registry names, not npm
     # specifiers). context7 already lives in the namespace, so these are emitted
     # COMMENTED OUT — kept as a template for adding a separate server later.
     smithery_servers = ("upstash/context7-mcp",)
     lines = [
         "#!/usr/bin/env bash",
-        "# Claude/Smithery/Lark setup (written by platform/setup.py). Run manually via",
+        "# Interactive agent extras (written by platform/setup.py). Run manually via",
         "# the `dotfiles-postsetup` shell function (needs a TTY); self-removes on",
         "# success. The Smithery CLI is a mise npm tool (installed by setup.py), so it",
         "# is called directly (no npx); only the Lark CLI still needs npx (node from mise).",
+        "#",
+        "# Everything that can run unattended — marketplaces, plugins, MCP servers, pi",
+        "# packages — is projected from platform/installers/agents.py during bootstrap",
+        "# (ADR-0011) and is deliberately NOT repeated here.",
         "",
         "# Put mise-managed tools (node/npx, smithery) on PATH even when this script",
         "# is run from a shell without mise activated (e.g. a bare bash subshell).",
         'command -v mise >/dev/null 2>&1 && eval "$(mise activate bash --shims)" || true',
         "",
-        "# --- Claude plugins --------------------------------------------------------",
-        "claude plugin marketplace add hernandor/agent-skillset || true",
-        *[f"claude plugin install {p}@agent-skillset --scope user || true" for p in plugins],
-        "claude plugin marketplace add astral-sh/claude-code-plugins || true",
-        *[f"claude plugin install {p}@astral-sh --scope user || true" for p in astral_plugins],
-        "",
         "# --- Smithery MCP ----------------------------------------------------------",
+        "# The namespace endpoint is per-account (its name comes from the logged-in",
+        "# Smithery account, not from the repo), which is why it lives here and not in",
+        "# the manifest's MCP_SERVERS.",
         "if command -v smithery >/dev/null 2>&1; then",
         '  if [ -n "${SMITHERY_API_KEY:-}" ]; then',
         "    # (a/b) API key present -> offer API-key (Smithery auth) startup. The CLI",
@@ -180,6 +180,8 @@ def setup_claude(ctx):
         "fi",
         "",
         "# --- Lark CLI (needs npx / node from mise) ---------------------------------",
+        "# Its installer asks which agents to wire and drops the skills into",
+        f"# {agents.SHARED_SKILLS} — the loose-skills root every agent reads (ADR-0011).",
         "if command -v npx >/dev/null 2>&1; then",
         "  npx -y @larksuite/cli@latest install || true",
         "else",
@@ -191,7 +193,8 @@ def setup_claude(ctx):
     deferred.parent.mkdir(parents=True, exist_ok=True)
     deferred.write_text("\n".join(lines) + "\n")
     deferred.chmod(0o755)
-    logger.info("Claude/Smithery/Lark setup written -> %s (run it with: dotfiles-postsetup)", deferred)
+    logger.info("interactive agent extras (Smithery/Lark) written -> %s (run: dotfiles-postsetup)",
+                deferred)
 
 
 def run_system(ctx, spec):
@@ -221,7 +224,7 @@ def run_system(ctx, spec):
 # --- the plan (printed before anything runs; cleared once) -------------------
 
 REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
-DEFERRED_CLAUDE_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
+DEFERRED_AGENT_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
 
 
 def _mise_tools():
@@ -267,7 +270,7 @@ def _login_shell_plan():
     return target, current
 
 
-def build_plan(ctx, system_spec, with_claude):
+def build_plan(ctx, system_spec, agent_ids):
     """Everything this script would do, as ``[(section, text, privileged)]`` with
     section in {"install", "config", "backup"} — "backup" being anything that
     displaces a file the user already has. Pure description: it reads the filesystem
@@ -279,20 +282,15 @@ def build_plan(ctx, system_spec, with_claude):
     def add(section, text, privileged=False):
         items.append((section, text, privileged))
 
-    if with_claude:
+    if agent_ids:
         tools = _mise_tools()
         add("install", "mise runtimes: " + (", ".join(tools) if tools else "as declared in home/mise.nix"))
-        if shutil.which("claude"):
-            add("install", "Claude Code CLI already present — left as is")
-        else:
-            add("install", "Claude Code CLI from claude.ai/install.sh")
-        if shutil.which("codegraph"):
-            add("install", "CodeGraph self-update (codegraph upgrade) + register its MCP server with Claude")
-        else:
-            add("install", "CodeGraph from raw.githubusercontent.com/colbymchenry/codegraph + register its MCP server with Claude")
-        add("config", f"deferred Claude/Smithery/Lark setup script -> {DEFERRED_CLAUDE_SETUP} (run later via dotfiles-postsetup)")
-    else:
-        add("install", "Claude/CodeGraph/mise runtimes: SKIPPED (--no-claude)")
+    # The agent half describes itself (installers/agents.py owns the manifest, so
+    # it also owns the wording) — the same reason nix-cn.sh and this script each
+    # emit their own plan rows instead of one place guessing about the others.
+    agents.plan_items(ctx, agent_ids, add)
+    if agent_ids:
+        add("config", f"interactive agent extras (Smithery/Lark) -> {DEFERRED_AGENT_SETUP} (run later via dotfiles-postsetup)")
 
     if system_spec:
         if ctx.priv == "none":
@@ -358,7 +356,13 @@ def main():
     ap.add_argument("--system", default="",
                     help="comma-separated components, or 'all' / 'default' / 'none' "
                          "(unset = the 'default' group)")
-    ap.add_argument("--no-claude", action="store_true", help="skip Claude post-setup")
+    ap.add_argument("--agents", default="",
+                    help="comma-separated agents to provision, or 'all' / 'none' "
+                         "(unset = all: " + ", ".join(agents.Agent.names()) + ")")
+    # ADR-0011 generalised --no-claude to --agents; kept as an alias because it is
+    # the documented way to opt out of this whole half, and scripts use it.
+    ap.add_argument("--no-claude", action="store_true",
+                    help="deprecated alias for --agents=none")
     ap.add_argument("-y", "--yes", action="store_true",
                     help="skip the interactive clearance (also: DF_ASSUME_YES=1)")
     ap.add_argument("--plan", action="store_true",
@@ -383,6 +387,17 @@ def main():
     if system_spec.strip().lower() == "none":
         system_spec = ""
 
+    # Agents: --agents wins; else DOTFILE_AGENTS; else all three (ADR-0011 wants a
+    # fresh bootstrap to end up with the whole toolchain). `--no-claude` is the
+    # deprecated way to say `none`, and `none` also skips the mise runtimes — that
+    # coupling predates this ADR (the runtimes exist to give the agents node) and
+    # is kept so the opt-out keeps meaning "no agent tooling at all".
+    agent_spec = args.agents or os.environ.get("DOTFILE_AGENTS") or "all"
+    if args.no_claude:
+        logger.warning("--no-claude is deprecated; use --agents=none")
+        agent_spec = "none"
+    agent_ids = agents.Agent.resolve(agent_spec)
+
     # A standalone interactive run shows the plan and takes the one-shot clearance
     # itself. Under platform/bootstrap.sh clearance is already granted
     # ($DF_ASSUME_YES=1, exported after the merged plan was cleared), so nothing
@@ -390,7 +405,7 @@ def main():
     # free of describe-only work.
     needs_clearance = not (ctx.assume_yes or ctx.dry_run) and ctx.interactive
     if planning or needs_clearance:
-        plan = build_plan(ctx, system_spec, with_claude=not args.no_claude)
+        plan = build_plan(ctx, system_spec, agent_ids)
         if args.plan_items:
             for section, text, priv in plan:
                 print(f"{section}\t{text}\t{1 if priv else 0}")
@@ -405,9 +420,10 @@ def main():
     # Out-of-store $HOME links are Home Manager's job now (ADR-0009 Tier B,
     # home/env-links.nix), so they already exist by the time this runs.
     set_login_shell(ctx)
-    if not args.no_claude:
+    if agent_ids:
         setup_runtimes(ctx)
-        setup_claude(ctx)
+        setup_agents(ctx, agent_ids)
+        write_deferred_setup(ctx, agent_ids)
     if system_spec:
         run_system(ctx, system_spec)
     logger.info("post-HM setup complete.")

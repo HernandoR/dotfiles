@@ -15,8 +15,12 @@ import logging
 import os
 import pathlib
 import shutil
+import sys
 
-from installers.managers import Deb, PackageManager, Script  # noqa: F401
+if __package__ in (None, ""):  # run directly (`python3 platform/installers/components.py`)
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from installers.managers import Deb, PackageManager, Script  # noqa: E402,F401
 
 logger = logging.getLogger("dotfiles")
 

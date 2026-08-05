@@ -5,7 +5,7 @@
 #
 #   pre-HM  (shell; no nix/uv yet):  privilege → prereqs → install Lix →
 #                                    configure nix (+CN mirror) → home-manager switch
-#   post-HM (python via `uv run`):   login shell → Claude → system SW
+#   post-HM (python via `uv run`):   login shell → coding agents → system SW
 #
 # Privilege model:
 #   root  — run privileged steps directly (no sudo)
@@ -21,15 +21,20 @@
 #   never asks; --yes/-y skips the prompt but still prints the plan.
 #
 # Usage:
-#   ./platform/bootstrap.sh [--host NAME] [--system LIST] [--network CN]
-#                           [--yes] [--dry-run] [--verbose]
+#   ./platform/bootstrap.sh [--host NAME] [--system LIST] [--agents LIST]
+#                           [--network CN] [--yes] [--dry-run] [--verbose]
+#
+#   --agents  which coding agents to provision and project the ADR-0011 manifest
+#             onto: a comma-separated list of claude,codex,pi — or `all`
+#             (the default) / `none`. `--no-claude` is a deprecated alias for
+#             `--agents none`.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLATFORM_DIR="$REPO_DIR/platform"
 export REPO_DIR
 
-DF_DRY_RUN=0 DF_VERBOSE=0 HOST="" SYSTEM_COMPONENTS="" NO_CLAUDE=0
+DF_DRY_RUN=0 DF_VERBOSE=0 HOST="" SYSTEM_COMPONENTS="" AGENTS="" NO_CLAUDE=0
 # DF_ASSUME_YES=1 (env or --yes) disables the interactive confirmations. It is
 # exported so the nested scripts (nix-cn.sh, setup.py) inherit the choice.
 DF_ASSUME_YES="${DF_ASSUME_YES:-0}"
@@ -48,9 +53,10 @@ while [ $# -gt 0 ]; do
     -y|--yes) DF_ASSUME_YES=1 ;;
     --host) need_val "$1" "${2-}"; HOST="$2"; shift ;;
     --system) need_val "$1" "${2-}"; SYSTEM_COMPONENTS="$2"; shift ;;
+    --agents) need_val "$1" "${2-}"; AGENTS="$2"; shift ;;
     --no-claude) NO_CLAUDE=1 ;;
     --network) need_val "$1" "${2-}"; export DOTFILE_NETWORK_ENV="$2"; shift ;;
-    -h|--help) sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
   shift
@@ -59,6 +65,10 @@ export DF_DRY_RUN DF_VERBOSE DF_ASSUME_YES
 # --system wins; otherwise fall back to DOTFILE_SYSTEM_COMPONENTS (platform can
 # inject it). 'all' selects every optional component (see setup.py / ADR-0007).
 SYSTEM_COMPONENTS="${SYSTEM_COMPONENTS:-${DOTFILE_SYSTEM_COMPONENTS:-}}"
+# Same shape for the agent selection (ADR-0011): flag wins, then DOTFILE_AGENTS,
+# then setup.py's own default (all three). Passed through rather than defaulted
+# here, so the list of agents lives in exactly one place — the manifest.
+AGENTS="${AGENTS:-${DOTFILE_AGENTS:-}}"
 # shellcheck source=platform/lib.sh
 . "$PLATFORM_DIR/lib.sh"
 
@@ -109,6 +119,7 @@ fi
 post_args=""
 [ "$DF_DRY_RUN" = 1 ] && post_args="$post_args --dry-run"
 [ -n "$SYSTEM_COMPONENTS" ] && post_args="$post_args --system $SYSTEM_COMPONENTS"
+[ -n "$AGENTS" ] && post_args="$post_args --agents $AGENTS"
 [ "$NO_CLAUDE" = 1 ] && post_args="$post_args --no-claude"
 
 plan_fact "os" "$OS_TYPE ($(uname -m))"
@@ -144,7 +155,7 @@ else
   plan_config "nix config: could not be planned (nix-cn.sh --plan failed)"
 fi
 if ! command -v python3 >/dev/null 2>&1; then
-  plan_config "post-Home-Manager steps (login shell, Claude, system components) — not detailed here: no system python3 yet"
+  plan_config "post-Home-Manager steps (login shell, coding agents, system components) — not detailed here: no system python3 yet"
 # shellcheck disable=SC2086  # post_args is a deliberate word list
 elif plan_tsv="$(python3 "$PLATFORM_DIR/setup.py" --plan-items $post_args)"; then
   plan_import_tsv <<<"$plan_tsv"
@@ -208,7 +219,7 @@ load_nix_path
 if ! command -v uv >/dev/null 2>&1 && [ "$DF_DRY_RUN" != 1 ]; then
   warn "uv not found after switch; skipping the Python post-setup"
 else
-  log "post-setup (uv run platform/setup.py): login shell, Claude, system SW"
+  log "post-setup (uv run platform/setup.py): login shell, coding agents, system SW"
   # setup.py self-detects privilege (Ctx.priv, live) — no --priv to pass. Its half
   # of the plan is already cleared, and $DF_ASSUME_YES (exported by
   # require_clearance) tells it not to ask again. post_args was built with the
