@@ -311,6 +311,30 @@ def _npm_global_bin(ctx):
     return resolved
 
 
+def ensure_node_on_path(ctx):
+    """Put the mise node's bin dir on this process' PATH.
+
+    Resolving npm by absolute path is not enough, because the *children* need
+    node too: npm runs a dependency's ``postinstall`` as ``sh -c node …``, and the
+    CLIs installed here (``pi``, ``agentmemory``) are node scripts behind a
+    ``#!/usr/bin/env node`` shebang. On a clean pod both failed with
+    ``node: not found`` until this existed.
+
+    Same idea as ``Ctx._extend_path`` for ~/.local/bin: this process installs
+    tools and then uses them, so it needs the PATH the login shell would have. It
+    also means npm's global bin (the mise node's own bin dir) is on PATH, so a
+    freshly installed ``pi`` resolves by name.
+    """
+    npm = _npm(ctx)
+    if not npm or npm == "npm":
+        return
+    bin_dir = str(pathlib.Path(npm).parent)
+    path = os.environ.get("PATH", "").split(os.pathsep)
+    if bin_dir not in path:
+        os.environ["PATH"] = os.pathsep.join([bin_dir, *path])
+        logger.info("added the mise node bin dir to PATH: %s", bin_dir)
+
+
 def _resolve_bin(ctx, name):
     """Find a freshly npm-installed binary. ``shutil.which`` first (the usual
     case), then the npm global bin dir, which is not on this process' PATH."""
@@ -797,6 +821,8 @@ def provision(ctx, ids, codegraph_installer):
         return
     logger.info("agents: %s", ", ".join(ids))
     ensure_shared_root(ctx)
+    # Before any npm work: node must be reachable by name, not just by path.
+    ensure_node_on_path(ctx)
 
     agents = [Agent.get(i) for i in ids]
     for agent in agents:
