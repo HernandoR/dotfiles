@@ -1,28 +1,150 @@
-# Tier B of ADR-0009 (docs/plans/adr-0009): env-specific mutable links.
+# Tier B of ADR-0009 (docs/plans/adr-0009): mutable, out-of-store $HOME links —
+# the MECHANISM plus the default entry set. Shared on every branch.
 #
-# This module is the ONLY env-specific file in the flake. On the shared
-# branches it is deliberately a no-op placeholder; each environment carries
-# its real entries on its own branch (e.g. prod/mewtant), so the env delta —
-# machine paths, secrets locations, intranet-only tools — never lands on the
-# shared history and is always reviewable as a plain git diff.
+# Each entry links a $HOME name to a *writable* target under `envLinks.stateRoot`
+# — a persistent volume that outlives the machine ($HOME does not survive
+# container recreation). This list is the inventory that replaced the ADR-0008
+# JSON(C) link map: a new persistent top-level $HOME file/dir needs an entry
+# before it survives recreation, and adding one is a reviewable commit.
 #
-# Entries link $HOME names to *writable* out-of-store targets on persistent
-# storage. Two rules for every entry:
+# WHERE TO ADD AN ENTRY decides which file you edit:
 #
-#   1. Use config.lib.file.mkOutOfStoreSymlink with an ABSOLUTE PATH STRING.
-#      A Nix path literal (./foo or /fsx/foo without quotes) is copied into
-#      the read-only store when the flake is evaluated, silently defeating
-#      the purpose. Strings are never copied.
-#   2. Say WHY the entry is env-specific/mutable in a comment — the entry
-#      list is the inventory that replaced the ADR-0008 link map, and the
-#      "why" is what keeps it auditable.
+#   every environment wants it       -> here, in `envLinks.entries` below
+#   only this environment wants it,
+#   or the volume path differs       -> home/env-branch.nix, on the env branch
 #
-# Shape of a real entry (see the env branch for live ones):
+# home/env-branch.nix is empty on shared branches and is the only file an env
+# branch touches, so rebasing an env branch over `main` never conflicts (see its
+# header). Keeping the mechanism and the shared list here means neither branch
+# re-derives the other's work.
 #
-#   home.file.".zsh_history".source =
-#     config.lib.file.mkOutOfStoreSymlink "/persist/home-state/.zsh_history";
+# Two rules when adding an entry:
 #
-{ ... }:
+#   1. Paths reach mkOutOfStoreSymlink as ABSOLUTE PATH STRINGS. A Nix path
+#      literal (/fsx/foo unquoted) is copied into the read-only store at flake
+#      eval, silently defeating the purpose. Strings are never copied.
+#   2. Say WHY the entry is mutable — the "why" is what keeps the inventory
+#      auditable. `kind`/`mode` are how a missing target gets seeded (below).
+{ config, lib, ... }:
+let
+  cfg = config.envLinks;
+  target = name: "${cfg.stateRoot}/${name}";
+
+  seedTarget = name: e:
+    if e.kind == "dir" then
+      # -m applies to directories this run creates; existing ones are a no-op.
+      ''$DRY_RUN_CMD mkdir -p -m ${e.mode} ${lib.escapeShellArg (target name)}''
+    else
+      # Guarded so an existing file keeps its own mode (and content).
+      ''[ -e ${lib.escapeShellArg (target name)} ] || { $DRY_RUN_CMD touch ${lib.escapeShellArg (target name)} && $DRY_RUN_CMD chmod ${e.mode} ${lib.escapeShellArg (target name)}; }'';
+in
 {
-  # Intentionally empty on this branch.
+  options.envLinks = {
+    stateRoot = lib.mkOption {
+      type = lib.types.str;
+      default = "/fsx/hernando/dotfile_home_link_src";
+      description = ''
+        Persistent per-user state root holding every link target. An env branch
+        overrides this in home/env-branch.nix; it is the only path in the
+        default set, so overriding it moves the whole inventory at once.
+      '';
+    };
+
+    entries = lib.mkOption {
+      default = { };
+      description = ''
+        $HOME-relative name -> how to seed its target under stateRoot when it
+        does not exist yet. Merged across files, so an env branch adds entries
+        without restating these.
+      '';
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          kind = lib.mkOption {
+            type = lib.types.enum [ "dir" "file" ];
+            description = "Seed a missing target with mkdir or touch.";
+          };
+          mode = lib.mkOption {
+            type = lib.types.str;
+            description = "chmod arg, applied ONLY when this run creates the target.";
+          };
+        };
+      });
+    };
+  };
+
+  config = {
+    envLinks.entries = {
+      # --- agents (ADR-0011: all three rewrite their own config at runtime, so
+      # none of these can be an HM store link) ---
+
+      # Cross-agent instruction + loose-skills root (ADR-0011 plane ①):
+      # ~/.agents/AGENTS.md is the single instruction source both Codex and pi
+      # read, and ~/.agents/skills the shared loose-skills dir. Mutable: skills
+      # are added and edited in place.
+      ".agents" = { kind = "dir"; mode = "755"; };
+
+      # Claude Code: ONE whole-dir link (ADR-0009 grilling Q2) so config and
+      # state travel together and /model + /config persistence keeps working;
+      # new Claude-internal state dirs then persist automatically.
+      ".claude" = { kind = "dir"; mode = "755"; };
+      # Claude Code runtime state (onboarding, MCP auth cache) — mutable JSON,
+      # and it holds OAuth material, hence 600.
+      ".claude.json" = { kind = "file"; mode = "600"; };
+
+      # Codex CLI: whole-dir for the same reason as .claude — config.toml is
+      # rewritten by /model (openai/codex#14979), /experimental and /statusline,
+      # and the dir also holds auth.json, history and sessions. The AGENTS.md
+      # and skills links into ~/.agents (ADR-0011) live *inside* this dir, so
+      # they are part of the persistent volume rather than HM-managed.
+      ".codex" = { kind = "dir"; mode = "700"; };
+
+      # pi: whole-dir. ~/.pi/agent/settings.json is rewritten by /settings and
+      # by `pi install` (which records the installed extension set into it).
+      ".pi" = { kind = "dir"; mode = "700"; };
+
+      # --- shell / machine state ---
+
+      # SSH material is per-host secret data. SSH checks permissions on the link
+      # TARGET, so this is safe only while the target stays 700 and its keys 600
+      # (ADR-0006 rationale, carried forward through ADR-0008).
+      ".ssh" = { kind = "dir"; mode = "700"; };
+
+      # Regenerable completion cache; persisted purely for zsh startup speed.
+      ".zcompdump" = { kind = "file"; mode = "644"; };
+
+      # Shell history must accumulate across container recreations.
+      ".zsh_history" = { kind = "file"; mode = "600"; };
+    };
+
+    home.file = lib.mapAttrs (name: _: {
+      source = config.lib.file.mkOutOfStoreSymlink (target name);
+    }) cfg.entries;
+
+    # Seed any missing link target BEFORE Home Manager places the links.
+    #
+    # A dangling out-of-store link is a trap rather than a harmless no-op: the
+    # tool that owns the path cannot repair it, because mkdir/create_dir_all on
+    # a dangling symlink fails with EEXIST instead of following it. And the
+    # tools cannot win the race anyway — the HM switch runs before
+    # platform/setup.py installs codex/pi, so the link is always there first.
+    #
+    # This is the `home.activation` escape hatch ADR-0009 reserved: the entries
+    # stay the single declarative inventory, and this only makes what they
+    # already declare exist. It creates stateRoot but NOT stateRoot's parent: if
+    # the persistent volume is not mounted, mkdir -p would happily build the
+    # whole tree on the container's ephemeral disk, and every link would then
+    # "work" while silently persisting nothing — the exact failure this module
+    # exists to prevent. So a missing parent warns and skips instead.
+    home.activation.seedEnvLinkTargets =
+      let parent = builtins.dirOf cfg.stateRoot; in
+      lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+        if [ ! -d ${lib.escapeShellArg parent} ]; then
+          warnEcho "env-links: ${parent} does not exist — not seeding link targets."
+          warnEcho "env-links: mount the persistent volume, then re-run; until then the \$HOME links dangle."
+        else
+          $DRY_RUN_CMD mkdir -p ${lib.escapeShellArg cfg.stateRoot}
+          ${lib.concatStringsSep "\n  " (lib.mapAttrsToList seedTarget cfg.entries)}
+        fi
+      '';
+  };
 }

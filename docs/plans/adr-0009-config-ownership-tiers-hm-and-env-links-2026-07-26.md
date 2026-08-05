@@ -117,3 +117,56 @@ suffix, retiring `.pre-dotfiles.bak`.
   path — run bootstrap `--dry-run` first.
 - The tier principle stands ready for future Tier A adoptions (Claude or
   otherwise) without re-deciding the mechanism split.
+
+## Update log
+
+- **2026-08-05 — supersession executed.** `apply_link_map`, `_link_map_plan`,
+  the hand-rolled JSONC parser and `platform/link-map.jsonc` are deleted;
+  `DOTFILE_LINK_MAP_JSON` is no longer read anywhere, and the
+  `.pre-dotfiles.bak` convention is gone with it (HM's `.backup` is now the
+  only backup suffix, as decided). Refinement to the branch split: the
+  *default* entry set — the agent config/state and shell state any environment
+  of this repo wants — now lives in `home/env-links.nix` on the shared
+  branches, with `state` (the persistent root) as the single line an env branch
+  overrides plus its env-only entries appended. The original "placeholder on
+  shared branches" shape re-derived the same list per branch, which is the
+  drift this ADR exists to prevent. Codex (`~/.codex`) and pi (`~/.pi`) joined
+  the set as whole-dir links, on ADR-0011's finding that both rewrite their own
+  config at runtime. The out-of-repo copy of the map on the reference host is
+  left in place (inert, unread) — cleanup there is an environment step.
+- **2026-08-05 — the `home.activation` escape hatch is taken, narrowly.** The
+  alternatives table reserved activation scripts for emergencies; seeding
+  missing *link targets* is that case. A dangling out-of-store link is not a
+  benign no-op: `mkdir`/`create_dir_all` on one fails with `EEXIST` rather than
+  following it (verified), so the tool that owns the path cannot repair it — and
+  it never gets the chance, since the HM switch precedes `platform/setup.py`'s
+  installs. `home.activation.seedEnvLinkTargets` therefore runs
+  `entryBefore [ "checkLinkTargets" ]` and creates only what the entries already
+  declare, with a per-entry `kind`/`mode` that is applied on creation only, so
+  an existing target's permissions and content are never touched. Scope limit
+  that keeps this honest: it creates `state` but **not** `state`'s parent — an
+  unmounted volume warns and skips, because `mkdir -p` would otherwise rebuild
+  the tree on ephemeral disk and every link would "work" while persisting
+  nothing. The entries stay the single declarative inventory; the script only
+  makes them true.
+- **2026-08-05 — the rebase conflict is removed by splitting the file, not by
+  git config.** "Env branches must be rebased over `main`; conflicts are
+  confined to `home/env-links.nix`" (above) was accepted as a cost; with the
+  shared branch now owning a default entry set *in that same file*, the conflict
+  would fire on every rebase. Two git-level fixes were rejected on inspection.
+  `.gitignore` cannot work at all: the repo is consumed through a git flakeref
+  (`nix build "$REPO_DIR#…"`, which warns "Git tree is dirty"), and under the
+  git fetcher an untracked file is invisible to eval — verified: `readFile` on
+  an untracked probe fails while a tracked-but-modified file reads fine, so the
+  `import` would break. A `.gitattributes` `merge=ours` driver resolves
+  *backwards* under rebase — "ours" is the upstream being replayed onto, so it
+  would silently drop the env branch's entries — and the driver itself must be
+  configured per clone, failing open to a normal conflict when it is not. So
+  the mechanism plus the shared entries stay in `home/env-links.nix`, and
+  `home/env-branch.nix` — empty on shared branches, the only file an env branch
+  edits — carries the delta via two options (`envLinks.stateRoot`,
+  `envLinks.entries`, merged by the module system). Verified with real git: the
+  split rebases clean with both changes present, where the single-file shape
+  conflicts on the same history. A target outside `stateRoot` (a distributed
+  binary) stays a plain `home.file` line there, deliberately outside the
+  auto-seeded inventory.

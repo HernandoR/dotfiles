@@ -42,10 +42,9 @@ are written, and every symlink it will place — then asks for clearance **once*
   network     upstream defaults (pass --network CN for the China mirrors)
 
   will install                 # prerequisites, Lix, the HM generation, mise runtimes …
-  will write / link            # system nix.conf, every HM symlink, the link map, the login shell
+  will write / link            # system nix.conf, every HM symlink, the login shell
   will move your existing files aside (renamed, never deleted)
     - any $HOME file Home Manager wants to own -> the same name with a .backup suffix
-    - /home/lz/.zsh_history (file) -> .zsh_history.pre-dotfiles.bak, then linked to …
 
 ? Proceed with this plan? [Y/n]
 ```
@@ -67,10 +66,10 @@ Split around the Home Manager switch:
 
 1. **Pre-HM (shell):** detect privilege (root / sudo / none) → install
    prerequisites → **install Lix** → configure Nix (+ optional CERNET mirror) →
-   **build & activate Home Manager** with `-b backup`.
-2. **Post-HM (Python via `uv`):** apply the JSON(C) link map
-   (`DOTFILE_LINK_MAP_JSON`, if set) → set the login shell to the Nix zsh
-   (`chsh`) → write the deferred Claude setup → install any opt-in Linux system
+   **build & activate Home Manager** with `-b backup` (this is also where the
+   out-of-store `$HOME` links from `home/env-links.nix` are placed).
+2. **Post-HM (Python via `uv`):** set the login shell to the Nix zsh (`chsh`) →
+   write the deferred Claude setup → install any opt-in Linux system
    components.
 
 When it finishes, the shell that launched it keeps its **old** PATH, so a bare
@@ -99,7 +98,6 @@ exec ~/.nix-profile/bin/zsh -l
 | `DOTFILE_NETWORK_ENV=CN`    | Same as `--network CN` (also read by the zsh env for pypi/rustup).                                                                                                                                                                                                                                                                                                   |
 | `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins.                                                                                                                                                                                                                                                                                                                 |
 | `DOTFILE_FLAKE_CACHE`       | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI).                                                                                                                                                                                                                                                                                                 |
-| `DOTFILE_LINK_MAP_JSON`     | Opt-in: path to a JSON/JSONC link map (`{"links":{"<label>":{"source","target","type":"dir"\|"file"}}}`), applied as the **first** post-HM step. Unset = skip; set-but-missing file = error. Real targets are backed up to `.pre-dotfiles.bak` before linking; source type/existence mismatches warn (re-summarized at the end). Example: `platform/link-map.jsonc`. |
 
 ## Trying it on a new machine (and how to recover)
 
@@ -196,12 +194,12 @@ Commit the changed `flake.lock` together with the change that needed it.
 ### Re-running the bootstrap
 
 Only needed when the change is in the **imperative half**: `platform/` itself, a
-new `home/env-links.nix` / link-map entry, a login shell that never got set, or a
-new `--system` component. Re-runs are idempotent — Lix is skipped when nix exists
+login shell that never got set, or a new `--system` component. Re-runs are
+idempotent — Lix is skipped when nix exists
 (`platform/lib.sh:312`), `nix.conf` lines are deduplicated before appending
 (`platform/nix-cn.sh:59`), an unchanged generation is reused rather than created
-("No change so reusing latest profile generation"), and the link map, `chsh`,
-`mise install` and brew all no-op when already done. Four things to know:
+("No change so reusing latest profile generation"), and `chsh`, `mise install`
+and brew all no-op when already done. Four things to know:
 
 - **Pass the same flags as the first run.** Without `--network CN` the run
   *deletes* `~/.config/dotfiles/network-env` (`platform/nix-cn.sh:94`), silently
@@ -215,7 +213,7 @@ new `--system` component. Re-runs are idempotent — Lix is skipped when nix exi
   even after you ran it; `codegraph upgrade` also runs every time. `--no-claude`
   skips both.
 - **Disk is what accumulates, not installs.** Each changed `flake.lock` leaves a
-  generation behind, and `*.backup` / `*.pre-dotfiles.bak` files are never
+  generation behind, and `*.backup` files are never
   removed — prune with `expire-generations` + `nix-collect-garbage` (above).
 
 ## Component classification
@@ -454,7 +452,8 @@ for global tools make that version change in `home/mise.nix` instead.
 | git settings                                    | `home/git.nix`; aliases in `home/git-aliases.conf`                          |
 | tmux                                            | `home/tmux.conf` (+ `home/tmux.nix`)                                       |
 | mise tools/settings                             | `home/mise.nix`                                                            |
-| links to env-specific mutable paths             | `home/env-links.nix` (ADR-0009 Tier B — real entries live on env branches)  |
+| links to writable, out-of-store paths           | `home/env-links.nix` (ADR-0009 Tier B — the set every environment wants)  |
+| the same, for one environment only              | `home/env-branch.nix` (empty on shared branches; the only file an env branch edits, so its rebases never conflict)  |
 | a new machine                                   | the `hosts` attrset in `flake.nix:17`                                       |
 
 Two conventions worth keeping (see [AGENT.md](AGENT.md)): prefer an upstream

@@ -40,10 +40,9 @@ cd dotfiles
   network     upstream defaults (pass --network CN for the China mirrors)
 
   will install                 # 前置依赖、Lix、HM generation、mise 运行时 …
-  will write / link            # 系统 nix.conf、每一条 HM 软链接、link map、登录 shell
+  will write / link            # 系统 nix.conf、每一条 HM 软链接、登录 shell
   will move your existing files aside (renamed, never deleted)
     - any $HOME file Home Manager wants to own -> the same name with a .backup suffix
-    - /home/lz/.zsh_history (file) -> .zsh_history.pre-dotfiles.bak, then linked to …
 
 ? Proceed with this plan? [Y/n]
 ```
@@ -63,9 +62,9 @@ cd dotfiles
 
 1. **HM 之前（shell）：** 检测权限（root / sudo / 无）→ 安装前置依赖 →
    **安装 Lix** → 配置 Nix（+ 可选的 CERNET 镜像）→
-   **构建并激活 Home Manager**（使用 `-b backup`）。
-2. **HM 之后（通过 `uv` 运行 Python）：** 应用 JSON(C) 链接映射（若设置了
-   `DOTFILE_LINK_MAP_JSON`）→ 把登录 shell 设为 Nix 的 zsh（`chsh`）→
+   **构建并激活 Home Manager**（使用 `-b backup`；`home/env-links.nix` 里那些
+   指向 store 之外的 `$HOME` 链接也是在这一步落地的）。
+2. **HM 之后（通过 `uv` 运行 Python）：** 把登录 shell 设为 Nix 的 zsh（`chsh`）→
    写入延迟执行的 Claude 配置 → 安装任意可选的 Linux 系统组件。
 
 执行完成后，启动它的那个 shell 仍保留**旧的** PATH，因此直接输入 `zsh` 还找不到。
@@ -93,7 +92,6 @@ exec ~/.nix-profile/bin/zsh -l
 | `DOTFILE_NETWORK_ENV=CN`    | 等同于 `--network CN`（zsh 环境也会读取它用于 pypi/rustup）。                                                                                                                                                                                                                                                                   |
 | `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。                                                                                                                                                                                                                                                                                     |
 | `DOTFILE_FLAKE_CACHE`       | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。                                                                                                                                                                                                                                                               |
-| `DOTFILE_LINK_MAP_JSON`     | 可选：指向一个 JSON/JSONC 链接映射文件（`{"links":{"<标签>":{"source","target","type":"dir"\|"file"}}}`），作为 post-HM **第一步**执行。未设置则跳过；设置了但文件不存在则报错。目标若已是真实文件/目录，先备份为 `.pre-dotfiles.bak` 再链接；源的类型/存在性不匹配会告警（并在结束时汇总）。示例见 `platform/link-map.jsonc`。 |
 
 ## 在新机器上试用（以及如何恢复）
 
@@ -185,12 +183,11 @@ mise up                              # mise 工具，在声明的范围内升级
 
 ### 重跑 bootstrap
 
-只有当改动落在**命令式那一半**时才需要：`platform/` 自身、新增的
-`home/env-links.nix` / link map 条目、登录 shell 没设置成功，或要装新的
-`--system` 组件。重跑是幂等的——nix 已存在时跳过 Lix（`platform/lib.sh:312`），
+只有当改动落在**命令式那一半**时才需要：`platform/` 自身、登录 shell 没设置成功，
+或要装新的 `--system` 组件。重跑是幂等的——nix 已存在时跳过 Lix（`platform/lib.sh:312`），
 `nix.conf` 的每一行都先去重再追加（`platform/nix-cn.sh:59`），generation 没变化时
-复用而不新建（"No change so reusing latest profile generation"），link map、
-`chsh`、`mise install`、brew 也都在已完成时 no-op。有四点要知道：
+复用而不新建（"No change so reusing latest profile generation"），`chsh`、
+`mise install`、brew 也都在已完成时 no-op。有四点要知道：
 
 - **要带上第一次运行时的同一套参数。** 不传 `--network CN` 时，这次运行会
   **删除** `~/.config/dotfiles/network-env`（`platform/nix-cn.sh:94`），你 shell 里的
@@ -203,7 +200,7 @@ mise up                              # mise 工具，在声明的范围内升级
   你已经跑过，`dotfiles-postsetup` 还是会再次出现；`codegraph upgrade` 也每次都跑。
   `--no-claude` 可跳过这两者。
 - **累积的是磁盘占用，而不是重复安装。** 每次 `flake.lock` 变动都会留下一代
-  generation，`*.backup` / `*.pre-dotfiles.bak` 也从不自动删除——用上面的
+  generation，`*.backup` 也从不自动删除——用上面的
   `expire-generations` + `nix-collect-garbage` 清理。
 
 ## 组件分类
@@ -428,7 +425,8 @@ mise which node                # 实际解析到哪个 shim/二进制
 | 提示符                                  | `home/starship.toml`（由 `home/starship.nix` 读取）                   |
 | git 配置                                | `home/git.nix`；别名在 `home/git-aliases.conf`                        |
 | tmux                                    | `home/tmux.conf`（+ `home/tmux.nix`）                                 |
-| 指向环境专属可变路径的链接              | `home/env-links.nix`（ADR-0009 Tier B —— 真实条目只在 env 分支上）    |
+| 指向 store 之外可写路径的链接            | `home/env-links.nix`（ADR-0009 Tier B —— 每个环境都要的那一份）    |
+| 同上，但只有某一个环境要                 | `home/env-branch.nix`（共享分支上为空；env 分支唯一会改的文件，因此 rebase 永不冲突）    |
 | 新机器                                  | `flake.nix:17` 的 `hosts` attrset                                     |
 
 有两个约定值得保持（见 [AGENT.md](AGENT.md)）：优先使用上游的 `programs.*` 选项

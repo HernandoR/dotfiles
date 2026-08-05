@@ -5,7 +5,7 @@
 #
 #   pre-HM  (shell; no nix/uv yet):  privilege → prereqs → install Lix →
 #                                    configure nix (+CN mirror) → home-manager switch
-#   post-HM (python via `uv run`):   link map → login shell → Claude → system SW
+#   post-HM (python via `uv run`):   login shell → Claude → system SW
 #
 # Privilege model:
 #   root  — run privileged steps directly (no sudo)
@@ -144,7 +144,7 @@ else
   plan_config "nix config: could not be planned (nix-cn.sh --plan failed)"
 fi
 if ! command -v python3 >/dev/null 2>&1; then
-  plan_config "post-Home-Manager steps (link map, login shell, Claude, system components) — not detailed here: no system python3 yet"
+  plan_config "post-Home-Manager steps (login shell, Claude, system components) — not detailed here: no system python3 yet"
 # shellcheck disable=SC2086  # post_args is a deliberate word list
 elif plan_tsv="$(python3 "$PLATFORM_DIR/setup.py" --plan-items $post_args)"; then
   plan_import_tsv <<<"$plan_tsv"
@@ -208,7 +208,7 @@ load_nix_path
 if ! command -v uv >/dev/null 2>&1 && [ "$DF_DRY_RUN" != 1 ]; then
   warn "uv not found after switch; skipping the Python post-setup"
 else
-  log "post-setup (uv run platform/setup.py): link map, login shell, Claude, system SW"
+  log "post-setup (uv run platform/setup.py): login shell, Claude, system SW"
   # setup.py self-detects privilege (Ctx.priv, live) — no --priv to pass. Its half
   # of the plan is already cleared, and $DF_ASSUME_YES (exported by
   # require_clearance) tells it not to ask again. post_args was built with the

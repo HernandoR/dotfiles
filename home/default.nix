@@ -8,9 +8,12 @@
     ./tmux.nix
     ./mise.nix
     ./direnv.nix
-    # Env-specific mutable links (ADR-0009 Tier B). No-op on shared branches;
-    # env branches (e.g. prod/mewtant) override this file with real entries.
+    # Mutable out-of-store $HOME links (ADR-0009 Tier B): mechanism + the set
+    # every environment wants…
     ./env-links.nix
+    # …and the per-environment delta. Empty on shared branches; the only file an
+    # env branch (e.g. prod/mewtant) edits, so its rebases never conflict.
+    ./env-branch.nix
   ];
 
   home.username = username;

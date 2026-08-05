@@ -118,8 +118,8 @@ plan_section() {
     priv="${row%%|*}"; text="${row#*|}"
     tag=""; [ "$priv" = 1 ] && tag="$(printf '  \033[33m[privileged]\033[0m')"
     case "$text" in
-      # A leading-space item is a detail of the line above it (a link-map entry
-      # under its file) — indent it instead of giving it its own bullet.
+      # A leading-space item is a detail of the line above it (a system
+      # component under its count) — indent it instead of giving it its own bullet.
       "  "*) printf '      \033[2m%s\033[0m%s\n' "${text#"${text%%[![:space:]]*}"}" "$tag" ;;
       *)     printf '    - %s%s\n' "$text" "$tag" ;;
     esac

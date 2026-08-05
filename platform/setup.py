@@ -8,7 +8,7 @@ Run by platform/bootstrap.sh via `uv run` *after* `home-manager switch`, when
 uv/python are available on the HM profile. Home Manager already owns the user
 environment; this handles the imperative remainder:
 
-    JSON(C) link map · login shell (chsh) · Claude post-setup · Linux system SW
+    login shell (chsh) · Claude post-setup · Linux system SW
 
 Privilege is self-detected (Ctx.priv, live): privileged calls pass
 `with_sudo=True` (or interpolate `ctx.sudo` in a shell pipeline), so sudo is
@@ -24,7 +24,6 @@ the single clearance itself (then exports $DF_ASSUME_YES so this script does not
 re-ask).
 """
 import argparse
-import json
 import logging
 import os
 import pathlib
@@ -70,158 +69,6 @@ def set_login_shell(ctx):
         ctx.run_command(f'echo "{zsh_path}" | {ctx.sudo}tee -a /etc/shells >/dev/null', shell=True)
     if ctx.run_command(["chsh", "-s", zsh_path, user], with_sudo=True, check=False).returncode != 0:
         ctx.run_command(["usermod", "-s", zsh_path, user], with_sudo=True, check=False)
-
-
-LINK_MAP_ENV = "DOTFILE_LINK_MAP_JSON"
-
-
-def _load_jsonc(path):
-    """Parse a JSON/JSONC file with stdlib only (the platform scripts stay
-    dependency-free — see bootstrap.sh's UV_PYTHON_PREFERENCE=system). Strips
-    `//` and `/* */` comments and trailing commas, then json.loads. Both passes
-    are string-literal aware, so a `//`, `/*`, or `,}` *inside* a JSON string is
-    preserved verbatim."""
-
-    def _skip_string(text, i, out):
-        # text[i] == '"'; copy the whole string literal (incl. escapes), return
-        # the index just past the closing quote.
-        out.append(text[i]); i += 1
-        n = len(text)
-        while i < n:
-            out.append(text[i])
-            if text[i] == "\\" and i + 1 < n:
-                out.append(text[i + 1]); i += 2; continue
-            if text[i] == '"':
-                return i + 1
-            i += 1
-        return i
-
-    text = path.read_text()
-    # Pass 1: strip comments.
-    out, i, n = [], 0, len(text)
-    while i < n:
-        c = text[i]
-        if c == '"':
-            i = _skip_string(text, i, out); continue
-        if c == "/" and i + 1 < n and text[i + 1] == "/":
-            i += 2
-            while i < n and text[i] != "\n":
-                i += 1
-            continue
-        if c == "/" and i + 1 < n and text[i + 1] == "*":
-            i += 2
-            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
-                i += 1
-            i += 2; continue
-        out.append(c); i += 1
-    # Pass 2: drop commas that only precede whitespace then } or ].
-    stage1, out, i, n = "".join(out), [], 0, len("".join(out))
-    n = len(stage1)
-    while i < n:
-        c = stage1[i]
-        if c == '"':
-            i = _skip_string(stage1, i, out); continue
-        if c == ",":
-            j = i + 1
-            while j < n and stage1[j] in " \t\r\n":
-                j += 1
-            if j < n and stage1[j] in "}]":
-                i += 1; continue  # trailing comma
-        out.append(c); i += 1
-    return json.loads("".join(out))
-
-
-def apply_link_map(ctx):
-    """Apply a JSON(C) symlink map (ADR-0008) — the FIRST post-Home-Manager step
-    (uv is on PATH by now and nothing else has run yet).
-
-    $DOTFILE_LINK_MAP_JSON points at a JSON/JSONC file:
-
-        {
-          "links": {
-            "<label>": {"source": "/abs/src", "target": "/abs/dst", "type": "dir"|"file"}
-          }
-        }
-
-    - Env unset/empty  -> feature ignored.
-    - Env set, file missing -> hard error (raise).
-    - Both present -> each entry is validated and linked.
-
-    A source-side *mismatch* — declared `type` != what `source` actually is, an
-    unknown `type`, or a missing `source` — logs a warning and skips the entry.
-    Target handling is non-destructive and idempotent:
-
-        does not exist          -> create the symlink
-        already correct symlink -> skip
-        wrong / broken symlink  -> replace with the correct symlink
-        real file or real dir   -> back up to a free .pre-dotfiles.bak, then link
-
-    The `.pre-dotfiles.bak` suffix is the imperative-layer backup convention,
-    distinct from Home Manager's `.backup`. Every warning is logged when hit AND
-    re-emitted in a summary after the whole map is processed. No privilege."""
-    raw = os.environ.get(LINK_MAP_ENV, "").strip()
-    if not raw:
-        return
-    path = pathlib.Path(os.path.abspath(os.path.expanduser(raw)))
-    if not path.is_file():
-        raise FileNotFoundError(f"{LINK_MAP_ENV}={path} does not exist")
-    links = _load_jsonc(path).get("links") or {}
-    warnings = []
-
-    def warn(msg):
-        warnings.append(msg)
-        logger.warning(msg)
-
-    n = 0
-    for label, spec in links.items():
-        src = pathlib.Path(os.path.abspath(os.path.expanduser(str(spec["source"]))))
-        dest = pathlib.Path(os.path.abspath(os.path.expanduser(str(spec["target"]))))
-        typ = str(spec.get("type", "")).lower()
-        # --- source-side validation (mismatch -> warn + skip) ---
-        if typ not in ("dir", "file"):
-            warn(f"[{label}] unknown type {spec.get('type')!r}; expected 'dir' or 'file' (skipped)")
-            continue
-        if not os.path.lexists(src):
-            warn(f"[{label}] source does not exist: {src} (skipped)")
-            continue
-        if typ == "dir" and not src.is_dir():
-            warn(f"[{label}] type=dir but source is not a directory: {src} (skipped)")
-            continue
-        if typ == "file" and not src.is_file():
-            warn(f"[{label}] type=file but source is not a file: {src} (skipped)")
-            continue
-        # --- target handling (non-destructive, idempotent) ---
-        if dest.is_symlink():
-            if os.path.realpath(dest) == os.path.realpath(src):
-                continue  # already the correct symlink -> idempotent skip
-            if ctx.dry_run:
-                logger.info("[%s] [DRY-RUN] would relink %s -> %s", label, dest, src)
-                continue
-            dest.unlink()  # wrong-target / broken symlink: no real data to back up
-        elif dest.exists():
-            bak = dest.with_name(dest.name + ".pre-dotfiles.bak")
-            k = 1
-            while os.path.lexists(bak):
-                bak = dest.with_name(f"{dest.name}.pre-dotfiles.bak.{k}")
-                k += 1
-            warn(f"[{label}] target exists as real {'dir' if dest.is_dir() else 'file'}: "
-                 f"{dest} -> backing up to {bak}")
-            if ctx.dry_run:
-                logger.info("[%s] [DRY-RUN] would link %s -> %s", label, dest, src)
-                continue
-            shutil.move(str(dest), str(bak))
-        elif ctx.dry_run:
-            logger.info("[%s] [DRY-RUN] would link %s -> %s", label, dest, src)
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.symlink_to(src)
-        logger.info("[%s] linked %s -> %s", label, dest, src)
-        n += 1
-    logger.info("link map %s applied: %d link(s), %d warning(s)", path, n, len(warnings))
-    if warnings:
-        logger.warning("link map finished with %d warning(s):", len(warnings))
-        for w in warnings:
-            logger.warning("  - %s", w)
 
 
 def setup_runtimes(ctx):
@@ -420,48 +267,6 @@ def _login_shell_plan():
     return target, current
 
 
-def _link_map_plan():
-    """Describe the link map as ``(config_lines, backup_lines)``: what is linked
-    where, plus — separately, so it cannot be missed among the link lines — every
-    file of the user's that gets renamed out of the way first (ADR-0008's
-    ``.pre-dotfiles.bak``). Mirrors apply_link_map's decisions without touching
-    anything; a malformed map is reported, not raised (the real step still fails
-    loudly later)."""
-    raw = os.environ.get(LINK_MAP_ENV, "").strip()
-    if not raw:
-        return [f"no link map (${LINK_MAP_ENV} unset)"], []
-    path = pathlib.Path(os.path.abspath(os.path.expanduser(raw)))
-    if not path.is_file():
-        return [f"link map ${LINK_MAP_ENV}={path} DOES NOT EXIST — the run will abort here"], []
-    try:
-        links = _load_jsonc(path).get("links") or {}
-    except (ValueError, OSError, AttributeError, TypeError) as e:
-        # Describing must never be what breaks the run: report the bad map and let
-        # apply_link_map fail on it properly, with its own message.
-        return [f"link map {path} could not be parsed ({e})"], []
-    lines, backups = [], []
-    for label, spec in links.items():
-        src = pathlib.Path(os.path.abspath(os.path.expanduser(str(spec.get("source", "")))))
-        dest = pathlib.Path(os.path.abspath(os.path.expanduser(str(spec.get("target", "")))))
-        typ = str(spec.get("type", "")).lower()
-        note = ""
-        if not os.path.lexists(src):
-            note = "  (source missing — skipped)"
-        elif dest.is_symlink() and os.path.realpath(dest) == os.path.realpath(src):
-            note = "  (already linked)"
-        elif dest.is_symlink():
-            note = "  (relinked from another target)"
-        elif dest.exists():
-            kind = "dir" if dest.is_dir() else "file"
-            note = "  (existing real %s — moved aside first)" % kind
-            backups.append(f"{dest} ({kind}) -> {dest.name}.pre-dotfiles.bak, then linked to {src}")
-        lines.append(f"  {label}: {dest} -> {src} [{typ or '?'}]{note}")
-    header = f"link map {path}: {len(links)} entr{'y' if len(links) == 1 else 'ies'}"
-    if backups:
-        header += f", {len(backups)} of them displacing a real file/dir"
-    return [header] + lines, backups
-
-
 def build_plan(ctx, system_spec, with_claude):
     """Everything this script would do, as ``[(section, text, privileged)]`` with
     section in {"install", "config", "backup"} — "backup" being anything that
@@ -506,12 +311,6 @@ def build_plan(ctx, system_spec, with_claude):
             else:
                 add("install", f"no system component in '{system_spec}' applies to {ctx.os_type}")
 
-    link_lines, link_backups = _link_map_plan()
-    for line in link_lines:
-        add("config", line)
-    for line in link_backups:
-        add("backup", line)
-
     target, current = _login_shell_plan()
     if current == target:
         add("config", f"login shell already {target} — unchanged")
@@ -546,8 +345,8 @@ def render_plan(items, ctx=None, network=None):
         out.append(f"\n  {title}")
         for text, priv in rows:
             tag = "  \033[33m[privileged]\033[0m" if priv else ""
-            # A leading-space item is a detail of the line above it (the link-map
-            # entries under their file) — indent it instead of re-bulleting.
+            # A leading-space item is a detail of the line above it (the system
+            # components under their count) — indent it instead of re-bulleting.
             bullet = f"      \033[2m{text.strip()}\033[0m" if text.startswith("  ") else f"    - {text}"
             out.append(f"{bullet}{tag}")
     print("\n".join(out))
@@ -603,10 +402,8 @@ def main():
 
     logger.info("post-HM setup | os=%s priv=%s dry_run=%s", ctx.os_type, ctx.priv, ctx.dry_run)
 
-    # First post-HM step: apply the JSON(C) link map before anything else runs
-    # (uv — hence this script — is only available after the HM switch). A missing
-    # $DOTFILE_LINK_MAP_JSON file raises here and aborts the run by design.
-    apply_link_map(ctx)
+    # Out-of-store $HOME links are Home Manager's job now (ADR-0009 Tier B,
+    # home/env-links.nix), so they already exist by the time this runs.
     set_login_shell(ctx)
     if not args.no_claude:
         setup_runtimes(ctx)
