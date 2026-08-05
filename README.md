@@ -110,9 +110,9 @@ exec ~/.nix-profile/bin/zsh -l
   (`HOME_MANAGER_BACKUP_EXT=backup`), so a pre-existing `~/.zshrc` /
   `~/.gitconfig` / etc. is renamed to `~/.zshrc.backup` before the Home Manager
   symlink is placed.
-- **The old setup stays intact.** This lives on the `feat/lix-based` branch; the
-  previous config remains on `main`, and previous Home Manager generations are
-  kept until you expire them.
+- **The old setup stays intact.** The previous (pre-Nix) config remains on the
+  `archive` branch, and previous Home Manager generations are kept until you
+  expire them.
 
 **Roll back (after the `home-manager` CLI is on PATH):**
 
@@ -505,7 +505,6 @@ platform/         Imperative layer (see platform/README.md)
   bootstrap.sh    Orchestrator; lib.sh; nix-cn.sh; setup.py; installers/
 docs/plans/       ADRs (0007 governs)
 docs/rfc/         RFCs (0001 = migration log)
-sources/          Legacy assets (not deployed by Home Manager)
 ```
 
 ## Notes

@@ -1,8 +1,0 @@
-# Track this directory but ignore generated/sensitive Claude files
-*.log
-*.tmp
-todos.md
-__pycache__/
-*.pyc
-.env
-statsig/

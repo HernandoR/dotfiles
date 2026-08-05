@@ -102,8 +102,8 @@ exec ~/.nix-profile/bin/zsh -l
 - **已有的 dotfiles 会被备份，而不是删除。** 激活使用 `-b backup`
   （`HOME_MANAGER_BACKUP_EXT=backup`），因此已存在的 `~/.zshrc` /
   `~/.gitconfig` 等会在放置 Home Manager 软链接前被重命名为 `~/.zshrc.backup`。
-- **旧的配置保持不变。** 本套配置位于 `feat/lix-based` 分支；
-  之前的配置仍在 `main` 分支，且之前的 Home Manager generation 在你手动清理前一直保留。
+- **旧的配置保持不变。** 之前（Nix 迁移前）的配置保留在 `archive` 分支，
+  且之前的 Home Manager generation 在你手动清理前一直保留。
 
 **回滚（在 `home-manager` CLI 进入 PATH 之后）：**
 
@@ -477,7 +477,6 @@ platform/         命令式层（见 platform/README.md）
   bootstrap.sh    编排器；lib.sh；nix-cn.sh；setup.py；installers/
 docs/plans/       ADR（0007 为准）
 docs/rfc/         RFC（0001 = 迁移日志）
-sources/          遗留资产（不由 Home Manager 部署）
 ```
 
 ## 说明

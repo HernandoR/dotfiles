@@ -56,7 +56,6 @@ platform/             Imperative layer (see platform/README.md)
 hosts/                (reserved for per-host modules)
 docs/plans/           ADRs (0007 governs; 0001–0006 legacy/superseded)
 docs/rfc/             RFCs (0001 = migration discussion log)
-sources/              Legacy asset scripts (install/*.sh) — NOT deployed by HM
 ```
 
 ## Commands
@@ -134,7 +133,7 @@ configure nix (+CN) → seed flake inputs (optional) → **build + activate HM**
 
 Runs after the switch, when `uv` exists on the HM profile. PEP723 script (stdlib
 plus the `installers` package only). Steps: `set_login_shell` (chsh to
-`~/.nix-profile/bin/zsh`) → `deploy_ssh_keys` (copy `id_*`, strict perms) →
+`~/.nix-profile/bin/zsh`) → `setup_runtimes` (`mise install` for node/rust/…) →
 `setup_claude` (write the deferred setup) → `run_system` (opt-in components).
 
 ## The component model
@@ -172,7 +171,6 @@ plus the `installers` package only). Steps: `set_login_shell` (chsh to
 | `DOTFILE_NETWORK_ENV=CN` | bootstrap / `nix-cn.sh` / HM `envExtra` | Enable CERNET (nix system.conf) + pypi/uv + rustup mirrors. Unset = upstream. |
 | `DOTFILE_SYSTEM_COMPONENTS` | bootstrap / `setup.py` | Fallback for `--system` (e.g. `all`). |
 | `DOTFILE_FLAKE_CACHE` | bootstrap | Dir with `seed-paths.txt` to `nix copy` flake inputs from (CN/offline/CI). |
-| `DOTFILE_SSH_SRC` | `setup.py` | Override the SSH key source dir (default `sources/root/.ssh`). |
 
 The deferred, **interactive** Claude/Lark/MCP setup is written to
 `~/.local/share/dotfiles/post-login-setup.sh` and is **not** auto-run (it needs
@@ -231,7 +229,6 @@ a TTY); the HM zsh prints a reminder and the user runs it once via the
   fzf-tab). Don't "simplify" it.
 - **CERNET / mirror wiring** — deliberate, gated on `DOTFILE_NETWORK_ENV=CN`;
   don't hardcode mirrors unconditionally.
-- **`sources/`** — legacy assets; not deployed by HM. Don't wire back in blindly.
 - **Legacy ADRs 0001–0006** — describe the retired Python pipeline; ADR-0007
   governs. Don't cite them as current design.
 
