@@ -1,0 +1,34 @@
+# for those web cannot be directly accessed
+# https://askubuntu.com/questions/82880/how-do-i-set-a-system-wide-proxy-with-a-username-and-password
+# export http_proxy=http://{usr}:{passwd}@{ip}:{port}
+
+# usr=
+# passwd=
+# ip=10.10.1.1
+# port=7890
+if [[ ! -z ${ip} ]]
+then
+    if [[ ! -z ${usr} ]]
+    then
+        url=${usr}:${passwd}@${ip}:${port}
+    else
+        url=${ip}:${port}
+    fi
+    export http_proxy=http://${url}
+    export https_proxy=http://${url}
+    # export sock5_proxy=sock5://
+    unset url ip port usr passwd
+fi
+
+# check if brew is available
+MIRROR_HOST=mirrors.bfsu.edu.cn
+
+if command -v brew >/dev/null 2>&1; then
+# https://help.mirrors.cernet.edu.cn/homebrew/
+export HOMEBREW_BREW_GIT_REMOTE="https://${MIRROR_HOST}/git/homebrew/brew.git"
+export HOMEBREW_CORE_GIT_REMOTE="https://${MIRROR_HOST}/git/homebrew/homebrew-core.git"
+export HOMEBREW_INSTALL_FROM_API=1
+# https://help.mirrors.cernet.edu.cn/homebrew-bottles/
+export HOMEBREW_API_DOMAIN="https://${MIRROR_HOST}/homebrew-bottles/api"
+export HOMEBREW_BOTTLE_DOMAIN="https://${MIRROR_HOST}/homebrew-bottles"
+fi

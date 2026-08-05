@@ -1,0 +1,20 @@
+/bkp
+/output
+
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+
+# uv
+uv.lock
+
+# SSH private keys must never be committed (ADR-0006); public keys are fine.
+sources/root/.ssh/id_*
+!sources/root/.ssh/id_*.pub
