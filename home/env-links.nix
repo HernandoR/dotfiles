@@ -42,11 +42,12 @@ in
   options.envLinks = {
     stateRoot = lib.mkOption {
       type = lib.types.str;
-      default = "/fsx/hernando/dotfile_home_link_src";
+      default = "${config.home.homeDirectory}/dotfile_home";
       description = ''
-        Persistent per-user state root holding every link target. An env branch
-        overrides this in home/env-branch.nix; it is the only path in the
-        default set, so overriding it moves the whole inventory at once.
+        Persistent per-user state root holding every link target, rooted under
+        the user's home directory by default. An env branch overrides this in
+        home/env-branch.nix; it is the only path in the default set, so
+        overriding it moves the whole inventory at once.
       '';
     };
 
