@@ -4,10 +4,10 @@
     enable = true;
     lfs.enable = true;
 
-    # SSH commit signing (replaces the old [gpg]/[commit] block).
+    # SSH commit signing: ask ssh-agent for the available signing keys and let
+    # Git skip signing when no agent key is currently available.
     signing = {
       format = "ssh";
-      key = "~/.ssh/id_ed25519.pub";
       signByDefault = true;
     };
 
@@ -79,6 +79,10 @@
       };
 
       init.defaultBranch = "main";
+
+      # Let Git discover the signing key from the active ssh-agent; if the
+      # agent has no loaded key, Git will not sign by default.
+      gpg.ssh.defaultKeyCommand = "ssh-add -L";
 
       # difftastic as the external differ (provides `difft`; see packages.nix).
       diff = {
