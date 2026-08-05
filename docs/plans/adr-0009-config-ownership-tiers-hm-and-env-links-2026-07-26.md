@@ -120,6 +120,32 @@ suffix, retiring `.pre-dotfiles.bak`.
 
 ## Update log
 
+- **2026-08-05 — two seeding hazards found by a clean-machine bootstrap** (a
+  fresh jcc devpod with an empty `stateRoot`, during the ADR-0011
+  implementation). Both are properties of this ADR's seeding, invisible on any
+  host whose `stateRoot` was already populated:
+
+  - **An empty seeded file is not always a valid empty state.** `.claude.json`
+    is parsed by Claude Code at startup, so a zero-byte file reads as *corrupt*,
+    not as "nothing yet": it backs the file up and exits non-zero, which on a
+    fresh machine also fails its own installer. Entries therefore gained an
+    optional `seed` (content applied on creation only, exactly like `mode`), and
+    `.claude.json` seeds `{}`. Seeding switched from `touch` + `chmod` to
+    `install -m` so content and mode arrive in one dry-run-safe command — a shell
+    redirection would have written even under `$DRY_RUN_CMD`, since the redirect
+    belongs to the shell rather than to the command.
+  - **`~/.ssh` can lock you out of the machine you are provisioning.** With an
+    empty `stateRoot`, the switch moves the host's real `~/.ssh` to
+    `.ssh.backup` and points `~/.ssh` at a freshly created empty directory — so
+    `authorized_keys` disappears and the next inbound SSH fails. On the reference
+    hosts `stateRoot` already holds the right keys, which is why this never
+    surfaced; on a *new* environment the first bootstrap severs remote access to
+    it. Nothing in the mechanism is wrong (a whole-dir link is what ADR-0006
+    asked for), so this is recorded as a **provisioning prerequisite**: seed
+    `stateRoot/.ssh` from the host's existing keys *before* the first switch, or
+    run that switch from a session that does not depend on SSH. Worth a plan-time
+    warning when `stateRoot/.ssh` is missing but `~/.ssh/authorized_keys` exists.
+
 - **2026-08-05 — supersession executed.** `apply_link_map`, `_link_map_plan`,
   the hand-rolled JSONC parser and `platform/link-map.jsonc` are deleted;
   `DOTFILE_LINK_MAP_JSON` is no longer read anywhere, and the
