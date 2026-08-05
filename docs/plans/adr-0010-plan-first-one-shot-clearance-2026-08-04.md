@@ -111,7 +111,7 @@ questionary confirm and are unchanged.
 - The dangerous facts arrive when they are still actionable. `--dry-run` becomes
   an option rather than the only safety net, and the README's warning has a
   mechanism behind it.
-- **New rule for contributors** (recorded in `AGENT.md`): a step that installs,
+- **New rule for contributors** (recorded in `AGENTS.md`): a step that installs,
   uses privilege, or displaces a file must register a plan line next to the code
   that performs it. A step that runs without appearing in the plan silently
   defeats the clearance — this is the standing maintenance cost of this ADR.

@@ -11,7 +11,7 @@ zsh + Starship（catppuccin_mocha）+ fzf-tab 的使用体验被完整保留。
 
 设计记录见 [ADR-0007](docs/plans/adr-0007-nix-home-manager-migration-2026-07-09.md)
 （意图）与 [RFC-0001](docs/rfc/rfc-0001-nix-home-manager-migration-2026-07-09.md)
-（讨论过程）；[AGENT.md](AGENT.md) 是贡献者/agent 指南。
+（讨论过程）；[AGENTS.md](AGENTS.md) 是贡献者/agent 指南。
 
 > **警告：** 这些是我的个人配置。请先 fork 本仓库并审阅代码，再运行它——不要盲目套用别人的配置。
 > bootstrap 可能会安装 Nix、更改你的登录 shell，并安装系统软件。请先阅读
@@ -429,7 +429,7 @@ mise which node                # 实际解析到哪个 shim/二进制
 | 同上，但只有某一个环境要                 | `home/env-branch.nix`（共享分支上为空；env 分支唯一会改的文件，因此 rebase 永不冲突）    |
 | 新机器                                  | `flake.nix:17` 的 `hosts` attrset                                     |
 
-有两个约定值得保持（见 [AGENT.md](AGENT.md)）：优先使用上游的 `programs.*` 选项
+有两个约定值得保持（见 [AGENTS.md](AGENTS.md)）：优先使用上游的 `programs.*` 选项
 而不是自己拼配置；大段内容用原样嵌入文件（`builtins.readFile` /
 `source ${./file}`），不要转义进 nix 字符串。不要调整 `home/shell.nix` 里 zsh
 插件的顺序——completions → fzf-tab → autosuggestions → 语法高亮放最后，

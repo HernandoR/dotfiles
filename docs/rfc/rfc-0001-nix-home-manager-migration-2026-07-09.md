@@ -455,7 +455,7 @@ Owner raised six questions. Findings + resolutions:
 - **Is there still a `stage` level / can its env var go?** The rsync→staging→
   symlink pipeline is gone (HM links from the store). The only surviving
   staging-era var, `DOTFILE_EDIT_HOME_TARGET`, lived solely in an orphaned
-  `edit_home.sh`. **Decision: remove both.** Also: `AGENT.md` still described the
+  `edit_home.sh`. **Decision: remove both.** Also: `AGENTS.md` still described the
   retired `main.py` pipeline — rewritten for the flake+HM+platform model.
 - **Point the nix cache at external persistable storage via an env var.** Only
   `DOTFILE_FLAKE_CACHE` (flake-input seed) exists today; no store persistence.
@@ -466,7 +466,7 @@ Owner raised six questions. Findings + resolutions:
 
 Net changes this round: `dotfiles-postsetup` + login reminder; `--system all` +
 `DOTFILE_SYSTEM_COMPONENTS`; removed `edit_home.sh`/`DOTFILE_EDIT_HOME_TARGET`;
-rewrote `AGENT.md`. The active env-var set is now `DOTFILE_NETWORK_ENV`,
+rewrote `AGENTS.md`. The active env-var set is now `DOTFILE_NETWORK_ENV`,
 `DOTFILE_SYSTEM_COMPONENTS`, `DOTFILE_FLAKE_CACHE`, `DOTFILE_SSH_SRC`.
 
 Correction (same day): the docker/docker-rootless tie-break above was first
@@ -585,4 +585,4 @@ checks out. Also spot-checked the `DOTFILE_NETWORK_ENV` /
 `DOTFILE_SYSTEM_COMPONENTS` / `DOTFILE_FLAKE_CACHE` / `DOTFILE_SSH_SRC` env-var
 table and the `dotfiles-postsetup` function against the actual code
 (`platform/*.py`, `platform/*.sh`, `home/zsh/functions.zsh`, `home/shell.nix`) —
-all present and consistent with AGENT.md/RFC/ADR-0007.
+all present and consistent with AGENTS.md/RFC/ADR-0007.

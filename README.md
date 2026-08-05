@@ -9,7 +9,7 @@ The zsh + Starship (catppuccin_mocha) + fzf-tab experience is preserved.
 
 Design is recorded in [ADR-0007](docs/plans/adr-0007-nix-home-manager-migration-2026-07-09.md)
 (intent) and [RFC-0001](docs/rfc/rfc-0001-nix-home-manager-migration-2026-07-09.md)
-(discussion trail); [AGENT.md](AGENT.md) is the contributor/agent guide.
+(discussion trail); [AGENTS.md](AGENTS.md) is the contributor/agent guide.
 
 > **Warning:** These are my personal settings. Fork the repo and review the code
 > before running it — don't blindly apply someone else's configuration. The
@@ -456,7 +456,7 @@ for global tools make that version change in `home/mise.nix` instead.
 | the same, for one environment only              | `home/env-branch.nix` (empty on shared branches; the only file an env branch edits, so its rebases never conflict)  |
 | a new machine                                   | the `hosts` attrset in `flake.nix:17`                                       |
 
-Two conventions worth keeping (see [AGENT.md](AGENT.md)): prefer an upstream
+Two conventions worth keeping (see [AGENTS.md](AGENTS.md)): prefer an upstream
 `programs.*` option over hand-rolled config, and embed verbatim files
 (`builtins.readFile` / `source ${./file}`) instead of escaping large blobs into
 nix strings. Don't reorder the zsh plugin list in `home/shell.nix` — completions

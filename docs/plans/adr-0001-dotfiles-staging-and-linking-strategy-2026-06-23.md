@@ -98,7 +98,7 @@ leaving pre-existing content untouched.
 
 - `sources/.file_list` is deleted; adding a new dotfile only requires placing
   it under `sources/root/`.
-- `AGENT.md` instructions for adding new dotfiles no longer reference
+- `AGENTS.md` instructions for adding new dotfiles no longer reference
   `.file_list`.
 - `backup_dotfiles`, `restore_dotfiles`, and the `backup`/`restore` argparse
   subcommands are removed from `main.py`.
