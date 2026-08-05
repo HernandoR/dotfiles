@@ -364,13 +364,21 @@ def _npm_install_global(ctx, package, binary):
     return _resolve_bin(ctx, binary)
 
 
-def _link(ctx, link, target):
+def _link(ctx, link, target, absorb=False):
     """Point ``link`` at ``target``, non-destructively.
 
     A correct link is a no-op; a link pointing elsewhere is repointed; a *real*
     file or directory is moved to ``<name>.backup`` first — the same suffix Home
     Manager uses, so a bootstrap only ever has one backup convention (ADR-0009).
     The plan describes that move in its own highlighted section (ADR-0010).
+
+    ``absorb`` handles the one case where a *.backup would lose real content: a
+    tool that reads the linked file, appends to it, and writes the result back
+    over the link path — which replaces the symlink with a regular file. codegraph
+    does exactly this to ``~/.codex/AGENTS.md`` (verified on a clean pod: the file
+    it left behind was the shared source plus 803 bytes of its own). When the
+    displaced file starts with the target's content, the addition is folded into
+    the target — the single source keeps it — and the link is restored.
     """
     if ctx.dry_run:
         logger.info("[DRY-RUN] would link %s -> %s", link, target)
@@ -380,6 +388,9 @@ def _link(ctx, link, target):
             return
         link.unlink()
     elif link.exists():
+        if absorb and _absorb_into_target(link, target):
+            link.symlink_to(target)
+            return
         backup = link.with_name(link.name + ".backup")
         logger.warning("%s exists and is not a link; moving it to %s", link, backup)
         if backup.is_dir() and not backup.is_symlink():
@@ -390,6 +401,31 @@ def _link(ctx, link, target):
     link.parent.mkdir(parents=True, exist_ok=True)
     link.symlink_to(target)
     logger.info("linked %s -> %s", link, target)
+
+
+def _absorb_into_target(link, target):
+    """Fold an appended-to copy back into ``target``. True when it was handled.
+
+    Only the unambiguous shape is accepted — the displaced file is the target's
+    content plus a suffix — because anything else is a genuine conflict that
+    deserves the .backup and a warning rather than a guess.
+    """
+    if not (link.is_file() and target.is_file()):
+        return False
+    try:
+        displaced, existing = link.read_text(), target.read_text()
+    except (OSError, UnicodeDecodeError):
+        return False
+    if displaced == existing:
+        link.unlink()
+        return True
+    if not displaced.startswith(existing):
+        return False
+    target.write_text(displaced)
+    link.unlink()
+    logger.info("absorbed %d bytes appended to %s back into %s",
+                len(displaced) - len(existing), link, target)
+    return True
 
 
 def _shared_mcp_is_usable():
@@ -535,6 +571,14 @@ class Agent:
 
     def plan(self, ctx, add):
         raise NotImplementedError
+
+    def relink(self, ctx):
+        """Re-assert links that a *delegated* installer may have replaced.
+
+        Called after codegraph, which writes into the agents' instruction files;
+        an installer that appends and writes back turns a symlink into a regular
+        file, so the link has to be re-established once the delegates are done.
+        No-op for agents nothing else writes to."""
 
     # -- shared projection helpers ------------------------------------------
     def _marketplaces(self):
@@ -690,6 +734,14 @@ class CodexAgent(Agent):
             return
         for server in self._mcp_servers():
             ctx.run_command(self._mcp_add(codex, server), check=False, stdin_devnull=True)
+
+    def relink(self, ctx):
+        # codegraph appends its usage block to ~/.codex/AGENTS.md and writes the
+        # result back over the link. Absorb the block into the shared source and
+        # restore the link, so plane ① survives every bootstrap rather than
+        # decaying into a snapshot on the first one.
+        _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS, absorb=True)
+        _link(ctx, self.SKILLS, SHARED_SKILLS)
 
     @staticmethod
     def _mcp_add(codex, server):
@@ -849,6 +901,11 @@ def provision(ctx, ids, codegraph_installer):
                         check=False, stdin_devnull=True)
     elif not codegraph and not ctx.dry_run:
         logger.warning("codegraph not found after install; skipping MCP wiring")
+
+    # codegraph writes into the agents' instruction files, so the file links it
+    # replaced are restored here — after every delegate has had its turn.
+    for agent in agents:
+        agent.relink(ctx)
 
     if _agentmemory_wanted(ids):
         start_agentmemory(ctx)
