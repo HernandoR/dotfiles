@@ -264,6 +264,25 @@ the one genuine Tier A addition is the agentmemory service unit.
   `protobufjs` / `sharp` postinstalls, so pi and agentmemory are installed with
   their native pieces unbuilt.
 
+- **2026-08-05 — two of this ADR's premises are retired, on the owner's call.**
+  Both were falsified by tooling that shipped after the ADR was written, and both
+  reversals were verified on the test pod rather than taken from release notes:
+
+  - **"Codex therefore cannot see `agent-skillset`" no longer holds.** Codex has
+    had a plugin marketplace since 2026-03-26, and its CLI accepts the same source
+    shapes Claude's does (`codex plugin marketplace add <SOURCE>`,
+    `codex plugin add PLUGIN@MARKETPLACE`). All four marketplaces and all seven
+    plugins now target Codex as well; `codex plugin list` shows every one
+    *installed, enabled*, `agent-skillset` included. The dual-track skills decision
+    stands unchanged — marketplaces stay marketplace-managed, loose skills stay in
+    `~/.agents/skills` — what changed is only the reach of the marketplace track,
+    so the "deliberately uneven capability surface" consequence loses one of its
+    three examples.
+  - **pi does not abstain from plane ①.** It loads `AGENTS.md` from its agent dir
+    at startup (pi's own README), so `~/.pi/agent/AGENTS.md` links to the shared
+    source like Codex's, and the instruction plane is a genuine three-way single
+    point instead of a two-party one.
+
   One finding upgraded from "recorded" to "confirmed, still not acted on": the
   Codex plugin CLI exists and takes the same shapes as Claude's —
   `codex plugin marketplace add <SOURCE>` (local path, `owner/repo[@ref]`, HTTPS or

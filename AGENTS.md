@@ -160,13 +160,18 @@ One manifest, three agents, projected by each agent's own CLI:
   none of it is Home-Manager-managed (ADR-0009 Tier A is excluded by
   construction). **Projection is add-only** — removing a manifest entry does not
   uninstall it.
-- **Instruction plane** — `~/.agents/AGENTS.md` is the only source.
-  `~/.codex/AGENTS.md` symlinks to it; `~/.claude/CLAUDE.md` is a thin shell that
-  `@~/.agents/AGENTS.md`-imports it and holds Claude-only lines. Nothing
-  cross-agent may go in the shell (`setup.py` warns when it grows past 40 lines).
-- **Skills** — marketplaces stay marketplace-managed for Claude; loose skills live
-  in `~/.agents/skills`, which Codex reads natively and to which `~/.codex/skills`
-  and `~/.pi/agent/skills` are linked.
+- **Instruction plane** — `~/.agents/AGENTS.md` is the only source, and all three
+  agents reach it: `~/.codex/AGENTS.md` and `~/.pi/agent/AGENTS.md` symlink to it,
+  and `~/.claude/CLAUDE.md` is a thin shell that `@~/.agents/AGENTS.md`-imports it
+  and holds Claude-only lines. Nothing cross-agent may go in the shell (`setup.py`
+  warns when it grows past 40 lines). Delegated installers that append to a linked
+  file and write it back (codegraph does) are handled by re-asserting the links
+  afterwards and folding the addition into the shared source.
+- **Skills** — dual track. Marketplaces stay marketplace-managed and now reach
+  **both** Claude and Codex (Codex grew a plugin marketplace after ADR-0011 was
+  written; the ADR's "Codex cannot see agent-skillset" gap is closed and its
+  closure is verified). Loose skills live in `~/.agents/skills`, which Codex reads
+  natively and to which `~/.codex/skills` and `~/.pi/agent/skills` are linked.
 - **Selection** — `--agents=<spec>` (`claude,codex,pi` / `all` / `none`; unset =
   all). `--no-claude` is a deprecated alias for `none`.
 - **Memory** — agentmemory is wired to pi + Codex only; Claude keeps its built-in

@@ -70,12 +70,13 @@ apply is not a single source. What lands where:
 
 | Plane | Where it lives | How it is applied |
 |---|---|---|
-| instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` symlink; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
-| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` / `PI_PACKAGES` | `claude plugin …`, `claude mcp add`, `codex mcp add`, `pi install`, and `~/.agents/mcp.json` for pi's MCP (it has no MCP CLI) |
+| instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` + `~/.pi/agent/AGENTS.md` symlinks; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
+| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` / `PI_PACKAGES` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add`, `codex mcp add`, `pi install`, and `~/.agents/mcp.json` for pi's MCP (it has no MCP CLI) |
 | preference | each agent's own config | **never touched** — all three rewrite it at runtime |
 
 Loose skills live in `~/.agents/skills` (Codex reads it natively; `~/.codex/skills`
-and `~/.pi/agent/skills` link to it). agentmemory is wired to pi + Codex only and
+and `~/.pi/agent/skills` link to it). Links are re-asserted after any delegated
+installer (`codegraph`) that appends to a linked file and writes it back. agentmemory is wired to pi + Codex only and
 its daemon is the Home Manager unit in `home/agentmemory.nix`, started here once
 the binary exists. Select agents with `--agents` (`claude,codex,pi` / `all` /
 `none`) or `DOTFILE_AGENTS`. Projection is **add-only**: dropping an entry from the
