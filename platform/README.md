@@ -15,6 +15,8 @@ system-level software.
 ./platform/bootstrap.sh --network CN            # enable China mirrors
 ./platform/bootstrap.sh --host dotfiles-debian  # pick a flake host explicitly
 ./platform/bootstrap.sh --system docker,cuda    # + Linux system components
+./platform/bootstrap.sh --agents claude         # only Claude Code (default: claude,codex,pi)
+./platform/bootstrap.sh --agents none           # no agent tooling (was --no-claude)
 ```
 
 ## Plan + clearance (ADR-0010)
@@ -32,7 +34,7 @@ Each script describes its own steps so the plan cannot drift from the run:
 |---|---|
 | `lib.sh` `plan_fact`/`plan_install`/`plan_config`/`plan_backup` | facts + the pre-HM shell steps (`plan_prereqs`, `plan_nix`) |
 | `nix-cn.sh --plan` | `section<TAB>text<TAB>priv` for the network marker + system `nix.conf` |
-| `setup.py --plan-items` | the same TSV for the post-HM half (login shell, mise, Claude, system components) |
+| `setup.py --plan-items` | the same TSV for the post-HM half (login shell, mise, the coding agents, system components) |
 
 `bootstrap.sh` merges them with `plan_import_tsv`, prints with `print_plan`, and
 calls `require_clearance`. No terminal (CI, container, cron) or `--yes` /
@@ -43,7 +45,7 @@ twice. `setup.py --plan` prints the post-HM half on its own.
 `bootstrap.sh` runs, in order: prerequisites → install Lix → configure nix
 (flakes; CERNET mirror only when `DOTFILE_NETWORK_ENV=CN`) → `home-manager
 switch -b backup` (which also places the ADR-0009 Tier-B out-of-store links from
-`home/env-links.nix`) → login shell → Claude post-setup → optional system
+`home/env-links.nix`) → login shell → the coding-agent toolchain → optional system
 components.
 
 ## Files
@@ -53,38 +55,57 @@ components.
 | `bootstrap.sh` | orchestrator / entry point (pre-HM shell half) |
 | `lib.sh` | shared helpers (OS/host detection, Lix install, plan + clearance) |
 | `nix-cn.sh` | flakes + CN mirror gating (system nix.conf, sudo) + persist `~/.config/dotfiles/network-env` |
-| `setup.py` | post-HM half: `chsh` → mise runtimes → Claude → system components |
+| `setup.py` | post-HM half: `chsh` → mise runtimes → coding agents → system components |
+| `installers/agents.py` | ADR-0011: the capability manifest (marketplaces, plugins, MCP servers, pi packages) + one `Agent` class per agent that projects it with that agent's own CLI |
 | `installers/components.py` | the `OptionalComponent` registry (docker, cuda, nvidia, llvm, brew) + CodeGraph |
 | `installers/managers.py` | install backends (`apt`, `brew`, `scripts`) and their specs |
 | `installers/context.py` | `Ctx`: privilege detection, `run_command`, dry-run, clearance |
 
+## The agent toolchain (ADR-0011)
+
+`setup_agents` installs the selected agents and projects the manifest in
+`installers/agents.py` onto each with that agent's own CLI. All of it is
+non-interactive and runs on every bootstrap — a single source that needs a human to
+apply is not a single source. What lands where:
+
+| Plane | Where it lives | How it is applied |
+|---|---|---|
+| instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` symlink; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
+| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` / `PI_PACKAGES` | `claude plugin …`, `claude mcp add`, `codex mcp add`, `pi install`, and `~/.agents/mcp.json` for pi's MCP (it has no MCP CLI) |
+| preference | each agent's own config | **never touched** — all three rewrite it at runtime |
+
+Loose skills live in `~/.agents/skills` (Codex reads it natively; `~/.codex/skills`
+and `~/.pi/agent/skills` link to it). agentmemory is wired to pi + Codex only and
+its daemon is the Home Manager unit in `home/agentmemory.nix`, started here once
+the binary exists. Select agents with `--agents` (`claude,codex,pi` / `all` /
+`none`) or `DOTFILE_AGENTS`. Projection is **add-only**: dropping an entry from the
+manifest does not uninstall it from a machine that already applied it.
+
 ## Post-login setup (Smithery + Lark)
 
-`setup_claude` installs the Claude Code CLI and CodeGraph non-interactively, then
-*writes* the rest to `~/.local/share/dotfiles/post-login-setup.sh` instead of
-running it — it needs a TTY. The user invokes it once via the `dotfiles-postsetup`
-zsh function; it self-removes on success, and every step is `|| true` so nothing
-aborts the rest. What it asks:
+What genuinely blocks on a human is *written* to
+`~/.local/share/dotfiles/post-login-setup.sh` instead of being run. The user
+invokes it once via the `dotfiles-postsetup` zsh function; it self-removes on
+success, and every step is `|| true` so nothing aborts the rest. What it asks:
 
-1. **Claude plugins** — adds the `hernandor/agent-skillset` and
-   `astral-sh/claude-code-plugins` marketplaces and installs the pinned plugin
-   list at user scope.
-2. **Smithery auth** — the [Smithery](https://smithery.ai/) CLI is a mise npm tool
+1. **Smithery auth** — the [Smithery](https://smithery.ai/) CLI is a mise npm tool
    (`npm:@smithery/cli`), materialized eagerly by `setup_runtimes`, so it is called
    directly (no `npx`). With `SMITHERY_API_KEY` in the environment it offers to
    verify that key (`smithery auth whoami`); without one it offers an interactive
    `smithery auth login`.
-3. **Smithery namespace** — offers to add your namespace's aggregated MCP endpoint
+2. **Smithery namespace** — offers to add your namespace's aggregated MCP endpoint
    (`https://mcp.smithery.run/<namespace>`) to Claude via
    `smithery mcp add … --client claude`, falling back to
    `claude mcp add --transport http …`. A commented-out
    `smithery mcp add <server>` line (e.g. `upstash/context7-mcp`, already covered
    by the namespace) is left as a template for adding a single server later.
-4. **Lark CLI** — `npx -y @larksuite/cli@latest install` (node from mise).
+3. **Lark CLI** — `npx -y @larksuite/cli@latest install` (node from mise); its
+   skills land in the shared `~/.agents/skills` root.
 
-Note that `setup.py` rewrites this script on **every** run, so a re-bootstrap
-offers it again even after you completed it; `--no-claude` skips this half
-entirely.
+The namespace endpoint is here rather than in `MCP_SERVERS` because its name comes
+from the logged-in Smithery account, not from the repo. Note that `setup.py`
+rewrites this script on **every** run, so a re-bootstrap offers it again even after
+you completed it; `--agents none` skips this half entirely.
 
 ## What is NOT here (owned by Home Manager)
 

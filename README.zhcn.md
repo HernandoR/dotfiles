@@ -65,7 +65,9 @@ cd dotfiles
    **构建并激活 Home Manager**（使用 `-b backup`；`home/env-links.nix` 里那些
    指向 store 之外的 `$HOME` 链接也是在这一步落地的）。
 2. **HM 之后（通过 `uv` 运行 Python）：** 把登录 shell 设为 Nix 的 zsh（`chsh`）→
-   写入延迟执行的 Claude 配置 → 安装任意可选的 Linux 系统组件。
+   安装各个 coding agent 并把能力清单投影到每一个上
+   （[ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)）
+   → 写入需要人参与的那部分 → 安装任意可选的 Linux 系统组件。
 
 执行完成后，启动它的那个 shell 仍保留**旧的** PATH，因此直接输入 `zsh` 还找不到。
 用它打印出来的绝对路径启动新环境，或者直接重新登录（你的登录 shell 已经是 zsh）：
@@ -84,13 +86,15 @@ exec ~/.nix-profile/bin/zsh -l
 | `--network CN`    | 为 Nix、pypi/uv 和 rustup 启用中国（CERNET）镜像。 |
 | `--system <list>` | 安装可选的 Linux 系统组件（`all` = 全部）。        |
 | `--host NAME`     | 强制使用指定的 flake host，而非自动检测。          |
-| `--no-claude`     | 跳过写入 Claude/Lark/MCP 的后置配置。              |
+| `--agents <list>` | 要装哪些 coding agent：`claude,codex,pi` / `all`（默认）/ `none`。 |
+| `--no-claude`     | 已废弃，等价于 `--agents none`。                   |
 
 | 环境变量                    | 效果                                                                                                                                                                                                                                                                                                                            |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DF_ASSUME_YES=1`           | 跳过交互许可（等同于 `--yes`）；你许可计划之后它会被自动导出，因此后续步骤不会重复提问。                                                                                                                                                                                                                                         |
 | `DOTFILE_NETWORK_ENV=CN`    | 等同于 `--network CN`（zsh 环境也会读取它用于 pypi/rustup）。                                                                                                                                                                                                                                                                   |
 | `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。                                                                                                                                                                                                                                                                                     |
+| `DOTFILE_AGENTS`            | `--agents` 的回退值（如 `claude` 或 `none`）；参数优先。                                                                                                                                                                                                                                                                          |
 | `DOTFILE_FLAKE_CACHE`       | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。                                                                                                                                                                                                                                                               |
 
 ## 在新机器上试用（以及如何恢复）
@@ -198,7 +202,10 @@ mise up                              # mise 工具，在声明的范围内升级
   `HOME_MANAGER_BACKUP_OVERWRITE=1` 重跑。
 - **登录后脚本会被写回来。** `setup.py` 无条件重写 `post-login-setup.sh`，所以即使
   你已经跑过，`dotfiles-postsetup` 还是会再次出现；`codegraph upgrade` 也每次都跑。
-  `--no-claude` 可跳过这两者。
+  `--agents none` 可跳过这两者。
+- **从清单里删掉条目不会卸载它。** agent 投影是只增不减的：把某个 marketplace、
+  插件、MCP 服务器或 pi 包从 `platform/installers/agents.py` 删掉，已经应用过的
+  机器仍然留着它——需要在那台机器上手工卸载一次。
 - **累积的是磁盘占用，而不是重复安装。** 每次 `flake.lock` 变动都会留下一代
   generation，`*.backup` 也从不自动删除——用上面的
   `expire-generations` + `nix-collect-garbage` 清理。
@@ -441,21 +448,38 @@ mise which node                # 实际解析到哪个 shim/二进制
 host，并把 post-HM 的步骤也重跑一遍（`./bootstrap.sh --dry-run --verbose`，然后
 `./bootstrap.sh --yes`）。
 
+## Coding agents
+
+三个 agent——**Claude Code**、**Codex CLI** 和 **pi**——都由仓库里的同一份清单
+（`platform/installers/agents.py`）provision，并用各自的 CLI 应用。agent *拥有什么*
+（marketplace、插件、MCP 服务器、pi 扩展）是那份可评审的表；agent *是什么*
+（模型、主题、审批策略）留在它自己的配置里——那些文件由 agent 在运行时自行重写，
+这里绝不去碰。跨 agent 的指令只有一份，放在 `~/.agents/AGENTS.md`：Codex 直接读它，
+Claude 通过薄壳 `~/.claude/CLAUDE.md` 导入。设计记录：
+[ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)。
+
+```bash
+python3 platform/installers/agents.py    # 看清单：谁拥有什么
+./bootstrap.sh --agents claude,codex     # 只装其中一部分（默认三个都装）
+```
+
+加一个能力 = 改这份清单 + 一次提交，而不是在某台机器上敲一条命令——后者正是这个
+ADR 要消灭的漂移。
+
 ## 登录后交互式配置
 
-Claude/Smithery/Lark 配置（插件、MCP 服务器、Lark CLI 认证）是*交互式*的，
-因此**不会**自动运行。`setup.py` 会把它写到
-`~/.local/share/dotfiles/post-login-setup.sh`；在其待执行期间，zsh 会打印一条提示。
-当你准备好授权时，运行一次：
+只有真正需要你本人参与的两步会被延后——Smithery 认证和 Lark CLI 自己的安装器。
+`setup.py` 会把它们写到 `~/.local/share/dotfiles/post-login-setup.sh`；在其待执行
+期间，zsh 会打印一条提示。当你准备好授权时，运行一次：
 
 ```bash
 dotfiles-postsetup    # 需要 TTY；成功后自删除
 ```
 
-它会安装 Claude 插件市场、询问是否认证 [Smithery](https://smithery.ai/) 并把你的
-namespace MCP 端点加到 Claude、以及安装 Lark CLI——每一步都可跳过，任一步失败都不
-影响其余。它具体问什么、为什么这么问：
-[platform/README.md](platform/README.md#post-login-setup-smithery--lark)。
+它会询问是否认证 [Smithery](https://smithery.ai/) 并把你的 namespace MCP 端点加到
+Claude，然后安装 Lark CLI——每一步都可跳过，任一步失败都不影响其余。marketplace、
+插件、MCP 服务器和 pi 包**不在**这里：它们在 bootstrap 期间就已无人值守地应用完了。
+细节：[platform/README.md](platform/README.md#post-login-setup-smithery--lark)。
 
 ## 中国镜像
 

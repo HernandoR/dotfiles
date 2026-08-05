@@ -157,4 +157,70 @@ the one genuine Tier A addition is the agentmemory service unit.
   periodic check (shell size / content review) rather than trust.
 - The plane partition generalises: a fourth agent joins by adding manifest
   targets and one instruction link, without re-deciding the mechanism.
-</content>
+
+## Update log
+
+- **2026-08-05 — implemented.** The manifest is
+  `platform/installers/agents.py`: the `MARKETPLACES` / `PLUGINS` /
+  `MCP_SERVERS` / `PI_PACKAGES` tables, each entry carrying the agents it targets
+  and why, plus one `Agent` subclass per agent holding *that agent's* install
+  channel and projection commands. `setup.py`'s `setup_claude` became
+  `setup_agents` + `write_deferred_setup`, `--no-claude` became `--agents=<spec>`
+  (with the old flag kept as a deprecated alias), and the daemon is
+  `home/agentmemory.nix` (`systemd.user.services` on Linux, `launchd.agents` on
+  Darwin, one shared `writeShellScript`). `~/.agentmemory` joined
+  `home/env-links.nix`, since a memory backend whose SQLite store does not
+  survive container recreation is pointless.
+
+  Four implementation choices departed from the letter of this ADR:
+
+  - **Claude's marketplaces, plugins and MCP adds moved out of the deferred
+    interactive script and now run unattended during bootstrap.** The `worktrunk`
+    / `composio` drift is only "closed by construction" if applying the manifest
+    needs no human; leaving it behind `dotfiles-postsetup` would have kept the
+    fix optional. Verified against the CLI surface first: `claude plugin
+    marketplace add` / `plugin install` / `mcp add` take flags for everything and
+    prompt for nothing. The deferred script keeps exactly what genuinely blocks on
+    a human — Smithery auth and the Lark CLI's own installer — and projection
+    commands now run with stdin on `/dev/null` (`Ctx.run_command
+    stdin_devnull=True`), so an unexpected prompt fails loudly instead of hanging
+    a bootstrap.
+  - **pi reaches agentmemory through the MCP adapter, not through a native pi
+    plugin.** agentmemory's pi integration ships as a directory in its repo to be
+    copied into `~/.pi/agent/extensions/agentmemory` and re-copied on every
+    upgrade — the same version-pinned derived artifact that got the
+    single-shared-skills-root option declined above. Since `pi-mcp-adapter` is in
+    the extension set anyway, pi gets the memory tools with nothing to re-sync.
+  - **pi's half of `MCP_SERVERS` is written to `~/.agents/mcp.json`** rather than
+    projected by a command, because pi has no MCP CLI. That file is
+    `pi-mcp-adapter`'s documented tool-agnostic source (precedence 2 of 6), no
+    agent ever rewrites it (the adapter persists its own overrides in
+    `~/.pi/agent/mcp.json` and never writes back), and only declared server names
+    are touched — so this is not the agent-config merge-patching this ADR
+    declined. The alternative, `pi-mcp-adapter init --discover-host-configs`,
+    would import whatever Claude and Codex happen to have, i.e. re-import drift
+    instead of projecting the manifest.
+  - **The `~/.codex/skills` link is a compatibility belt, not the mechanism.**
+    Codex reads `$HOME/.agents/skills` natively at user scope, which this ADR did
+    not assume. The link costs one idempotent line and is kept in case an older
+    Codex only knows the per-agent path.
+
+  Two findings recorded but deliberately **not** acted on, because each reverses a
+  premise this ADR decided on and that is an ADR-level call, not an
+  implementation one:
+
+  - **Codex has had a plugin marketplace since 2026-03-26** (`codex plugin
+    marketplace add`), so "Codex therefore cannot see `agent-skillset`" is no
+    longer a fact about the tool — it is now only a consequence of every
+    marketplace entry targeting `claude`. Closing the gap is adding `"codex"` to
+    those entries' `agents` plus a Codex marketplace projection.
+  - **pi does read a global `AGENTS.md`** under its agent dir, where this ADR has
+    it abstaining from plane ①. One more link in `PiAgent.project` would make the
+    instruction plane a genuine three-way single point.
+
+  Verified: `nix flake check --no-build`, a Linux `activationPackage` build
+  (unit + wrapper inspected in the store), a Darwin eval of the `launchd` branch,
+  and `setup.py --plan` / `--dry-run` for `--agents` = default / `none` /
+  `claude,pi`. A real bootstrap that installs Codex, pi and agentmemory on a live
+  host has **not** run yet, so the RFC-0004 acceptance criteria that describe
+  machine state stay unticked.

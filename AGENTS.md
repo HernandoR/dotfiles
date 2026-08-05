@@ -39,22 +39,27 @@ home/                 Home Manager modules (the declarative user environment)
   starship.toml       catppuccin_mocha theme (verbatim)
   git.nix             programs.git (settings/lfs/signing/attributes) + git-aliases.conf include
   git-aliases.conf    verbatim git aliases (avoids nix-string escaping)
-  tmux.nix / tmux.conf, mise.nix
+  tmux.nix / tmux.conf, mise.nix, direnv.nix
+  agentmemory.nix     the agentmemory user service (systemd user unit / launchd agent) — ADR-0011's only Tier A piece
+  env-links.nix       ADR-0009 Tier B: mkOutOfStoreSymlink mechanism + the $HOME links every env wants
+  env-branch.nix      the per-env delta (empty on shared branches; the ONLY file an env branch edits)
   zsh/                functions.zsh, fzf-tab.zsh — sourced verbatim from initContent
   pkgs/               local derivations for tools nixpkgs lacks (getnf.nix — the Nerd Fonts installer CLI)
 platform/             Imperative layer (see platform/README.md)
   bootstrap.sh        Orchestrator: privilege → prereqs → Lix → nix-cn → HM switch → setup.py
   lib.sh              Shared shell helpers (log/run, detect_priv, load_nix_path, install_lix, …)
   nix-cn.sh           Persist network-env; wire CERNET into system nix.conf when CN
-  setup.py            PEP723 uv script: post-HM steps (login shell, SSH, Claude, system SW)
+  setup.py            PEP723 uv script: post-HM steps (login shell, coding agents, system SW)
   brew_cask_install.py   uv/questionary impl of the root cask picker
   nix_system_install.py  uv/questionary impl of the root system-component picker
   installers/
     managers.py       PackageManager backends (apt/brew/scripts) + Script/Deb specs (ADR-0003)
-    components.py     System-level OptionalComponent registry (docker/cuda/nvidia/llvm/brew/…)
+    components.py     System-level OptionalComponent registry (docker/cuda/nvidia/llvm/brew/…) + codegraph
+    agents.py         ADR-0011: the multi-agent capability manifest + its per-agent CLI projection
     context.py        Shared Ctx + detect_priv (used by setup.py + the pickers)
 hosts/                (reserved for per-host modules)
-docs/plans/           ADRs (0007 governs; 0001–0006 legacy/superseded)
+docs/plans/           ADRs (0007 governs the layers, 0009 config ownership, 0010 the plan,
+                      0011 the agent toolchain; 0001–0006 + 0008 legacy/superseded)
 docs/rfc/             RFCs (0001 = migration discussion log)
 ```
 
@@ -68,6 +73,8 @@ directly:
 ./bootstrap.sh --dry-run --verbose     # preview every step, run nothing
 ./bootstrap.sh --network CN            # enable CERNET mirrors (nix + pypi/uv + rustup)
 ./bootstrap.sh --system all            # + every opt-in Linux system component
+./bootstrap.sh --agents claude         # provision only Claude Code (default: all three)
+./bootstrap.sh --agents none           # no agent tooling at all (was --no-claude)
 ./bootstrap.sh --host dotfiles-debian  # force a named flake host
 
 # Home Manager directly (owner on a named host):
@@ -77,6 +84,7 @@ nix build .#homeConfigurations.<host>.activationPackage && ./result/activate
 # List / run system components:
 uv run platform/installers/components.py            # list opt-in system components
 python3 platform/installers/components.py           # same (stdlib only)
+python3 platform/installers/agents.py               # print the agent capability manifest
 ```
 
 ## Architecture
@@ -134,7 +142,36 @@ configure nix (+CN) → seed flake inputs (optional) → **build + activate HM**
 Runs after the switch, when `uv` exists on the HM profile. PEP723 script (stdlib
 plus the `installers` package only). Steps: `set_login_shell` (chsh to
 `~/.nix-profile/bin/zsh`) → `setup_runtimes` (`mise install` for node/rust/…) →
-`setup_claude` (write the deferred setup) → `run_system` (opt-in components).
+`setup_agents` (install the selected agents + project the manifest) →
+`write_deferred_setup` (the interactive remainder) → `run_system` (opt-in
+components). The last three run only when at least one agent is selected.
+
+### 4. The agent toolchain (`platform/installers/agents.py`, ADR-0011)
+
+One manifest, three agents, projected by each agent's own CLI:
+
+- **Manifest** — `MARKETPLACES`, `PLUGINS`, `MCP_SERVERS`, `PI_PACKAGES`. Every
+  entry names the agents it targets and why. This is the single reviewed source
+  for what the agents *have*; adding one is a commit, not a per-machine command.
+- **Projection** — one `Agent` subclass per agent (`claude`/`codex`/`pi`) owning
+  that agent's install channel and its own commands (`claude plugin install`,
+  `claude mcp add`, `codex mcp add`, `pi install`). Nothing here writes an agent's
+  config file: all three rewrite their own config at runtime, which is also why
+  none of it is Home-Manager-managed (ADR-0009 Tier A is excluded by
+  construction). **Projection is add-only** — removing a manifest entry does not
+  uninstall it.
+- **Instruction plane** — `~/.agents/AGENTS.md` is the only source.
+  `~/.codex/AGENTS.md` symlinks to it; `~/.claude/CLAUDE.md` is a thin shell that
+  `@~/.agents/AGENTS.md`-imports it and holds Claude-only lines. Nothing
+  cross-agent may go in the shell (`setup.py` warns when it grows past 40 lines).
+- **Skills** — marketplaces stay marketplace-managed for Claude; loose skills live
+  in `~/.agents/skills`, which Codex reads natively and to which `~/.codex/skills`
+  and `~/.pi/agent/skills` are linked.
+- **Selection** — `--agents=<spec>` (`claude,codex,pi` / `all` / `none`; unset =
+  all). `--no-claude` is a deprecated alias for `none`.
+- **Memory** — agentmemory is wired to pi + Codex only; Claude keeps its built-in
+  file memory. Its daemon is the HM unit in `home/agentmemory.nix`, started by
+  `agents.start_agentmemory` once the binary exists (the HM switch runs first).
 
 ## The component model
 
@@ -170,12 +207,15 @@ plus the `installers` package only). Steps: `set_login_shell` (chsh to
 | `DF_ASSUME_YES=1` | bootstrap / `lib.sh` / `setup.py` (`Ctx.assume_yes`) | Skip the one-shot clearance (same as `--yes`/`-y`). Exported by `require_clearance` after a yes, so nested steps don't re-ask. |
 | `DOTFILE_NETWORK_ENV=CN` | bootstrap / `nix-cn.sh` / HM `envExtra` | Enable CERNET (nix system.conf) + pypi/uv + rustup mirrors. Unset = upstream. |
 | `DOTFILE_SYSTEM_COMPONENTS` | bootstrap / `setup.py` | Fallback for `--system` (e.g. `all`). |
+| `DOTFILE_AGENTS` | bootstrap / `setup.py` | Fallback for `--agents` (e.g. `claude` or `none`); unset = all agents. |
 | `DOTFILE_FLAKE_CACHE` | bootstrap | Dir with `seed-paths.txt` to `nix copy` flake inputs from (CN/offline/CI). |
 
-The deferred, **interactive** Claude/Lark/MCP setup is written to
-`~/.local/share/dotfiles/post-login-setup.sh` and is **not** auto-run (it needs
-a TTY); the HM zsh prints a reminder and the user runs it once via the
-`dotfiles-postsetup` shell function (self-removes on success).
+Only what genuinely blocks on a human — Smithery auth and the Lark CLI installer
+— is deferred to `~/.local/share/dotfiles/post-login-setup.sh`; the HM zsh prints
+a reminder and the user runs it once via the `dotfiles-postsetup` shell function
+(self-removes on success). Marketplaces, plugins, MCP servers and pi packages are
+**not** deferred: the manifest is only a single source if applying it needs no
+human, so they run unattended with stdin on `/dev/null`.
 
 ## Conventions
 
@@ -212,6 +252,15 @@ a TTY); the HM zsh prints a reminder and the user runs it once via the
   file sourced from `initContent`.
 - **A new machine** → add a `hosts` entry in `flake.nix` (name = hostname for
   auto-detection), or rely on the `generic` impure fallback.
+- **A marketplace / plugin / MCP server / pi extension** → one entry in the
+  matching table in `platform/installers/agents.py`, stating which agents it
+  targets and why. Verify with `python3 platform/installers/agents.py` and
+  `platform/setup.py --plan`. Never install it by hand on a machine — that is the
+  drift ADR-0011 exists to stop.
+- **A cross-agent instruction/rule** → `~/.agents/AGENTS.md` (the machine's
+  shared source), never `~/.claude/CLAUDE.md`.
+- **A fourth agent** → subclass `Agent` in `agents.py` (`id`, `binary`,
+  `install`, `project`, `plan`) and add its id to the entries it should receive.
 - **A system component** → subclass `OptionalComponent` in `components.py`
   (`name`, `description`, optional `groups`); declarative `installs = {...}` or an
   imperative `install(self, ctx)` for multi-step. Auto-registers; verify with
@@ -229,6 +278,14 @@ a TTY); the HM zsh prints a reminder and the user runs it once via the
   fzf-tab). Don't "simplify" it.
 - **CERNET / mirror wiring** — deliberate, gated on `DOTFILE_NETWORK_ENV=CN`;
   don't hardcode mirrors unconditionally.
+- **The `~/.claude/CLAUDE.md` shell** — Claude-only lines plus the
+  `@~/.agents/AGENTS.md` import. Anything another agent would also want goes in
+  `~/.agents/AGENTS.md`; nothing mechanically enforces this, which is why
+  ADR-0011 makes it a standing rule.
+- **Agent config files** (`~/.claude/settings.json`, `~/.codex/config.toml`,
+  `~/.pi/agent/settings.json`) — all three are rewritten by the agents at runtime.
+  Never manage them with Home Manager and never patch them from `platform/`;
+  project capabilities through the agents' own CLIs instead.
 - **Legacy ADRs 0001–0006** — describe the retired Python pipeline; ADR-0007
   governs. Don't cite them as current design.
 

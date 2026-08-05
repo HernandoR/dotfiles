@@ -163,16 +163,18 @@ Resolved in the 2026-08-04 grilling; see the update log. None outstanding.
 
 - [ ] A fresh bootstrap installs `codex`, `pi`, and `agentmemory`, and wires
   the pi extension set, with no manual per-machine step.
-- [ ] The four live marketplaces (`agent-skillset`, `astral-sh`, `worktrunk`,
+- [x] The four live marketplaces (`agent-skillset`, `astral-sh`, `worktrunk`,
   `composio`) all appear in the in-repo manifest — the current drift is closed.
+  (`MARKETPLACES` in `platform/installers/agents.py`.)
 - [ ] `~/.codex/AGENTS.md` resolves to `~/.agents/AGENTS.md`, and
   `~/.claude/CLAUDE.md` imports it and contains no cross-agent content.
 - [ ] `~/.codex/skills` and pi's `skills` setting both resolve to
   `~/.agents/skills/`.
 - [ ] MCP servers declared once are reachable from all three agents (pi via
   `pi-mcp-adapter`).
-- [ ] `--agents=<spec>` selects which agents to provision; `--no-claude` no
-  longer exists as the only lever.
+- [x] `--agents=<spec>` selects which agents to provision; `--no-claude` no
+  longer exists as the only lever (it survives as a deprecated alias for
+  `--agents=none`).
 - [ ] Claude's `/model`, `/config`, plugin installs, and built-in memory behave
   exactly as before.
 
@@ -240,5 +242,10 @@ agents it targets and why it is where it is.
   work that is a legitimate Tier A citizen.
 
   Outcome: [ADR-0011](../plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md).
-</content>
-</invoke>
+
+- **2026-08-05 — implemented** on `feat/adr-0011-multi-agent-toolchain`. The two
+  criteria above that are properties of the repo are met; the remaining ones
+  describe machine state after a real bootstrap and are verified there, not here.
+  Implementation notes, four deviations, and two findings that reverse premises of
+  this RFC (Codex *does* have a plugin marketplace; pi *does* read a global
+  `AGENTS.md`) are recorded in the ADR-0011 update log.

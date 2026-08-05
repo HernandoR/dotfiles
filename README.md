@@ -69,7 +69,9 @@ Split around the Home Manager switch:
    **build & activate Home Manager** with `-b backup` (this is also where the
    out-of-store `$HOME` links from `home/env-links.nix` are placed).
 2. **Post-HM (Python via `uv`):** set the login shell to the Nix zsh (`chsh`) →
-   write the deferred Claude setup → install any opt-in Linux system
+   install the coding agents and project the capability manifest onto each
+   ([ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md))
+   → write the interactive remainder → install any opt-in Linux system
    components.
 
 When it finishes, the shell that launched it keeps its **old** PATH, so a bare
@@ -90,13 +92,15 @@ exec ~/.nix-profile/bin/zsh -l
 | `--network CN`    | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
 | `--system <list>` | Install opt-in Linux system components (`all` = every one). |
 | `--host NAME`     | Force a named flake host instead of auto-detecting.         |
-| `--no-claude`     | Skip writing the Claude/Lark/MCP post-setup.                |
+| `--agents <list>` | Which coding agents to provision: `claude,codex,pi` / `all` (default) / `none`. |
+| `--no-claude`     | Deprecated alias for `--agents none`.                       |
 
 | Env var                     | Effect                                                                                                                                                                                                                                                                                                                                                               |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DF_ASSUME_YES=1`           | Skip the interactive clearance (same as `--yes`); exported automatically once you have cleared the plan, so the nested steps never re-ask.                                                                                                                                                                                                                             |
 | `DOTFILE_NETWORK_ENV=CN`    | Same as `--network CN` (also read by the zsh env for pypi/rustup).                                                                                                                                                                                                                                                                                                   |
 | `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins.                                                                                                                                                                                                                                                                                                                 |
+| `DOTFILE_AGENTS`            | Fallback for `--agents` (e.g. `claude` or `none`); the flag wins.                                                                                                                                                                                                                                                                                                     |
 | `DOTFILE_FLAKE_CACHE`       | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI).                                                                                                                                                                                                                                                                                                 |
 
 ## Trying it on a new machine (and how to recover)
@@ -210,8 +214,12 @@ and brew all no-op when already done. Four things to know:
   stale `.backup`, or re-run with `HOME_MANAGER_BACKUP_OVERWRITE=1`.
 - **The post-login script comes back.** `setup.py` rewrites
   `post-login-setup.sh` unconditionally, so `dotfiles-postsetup` is offered again
-  even after you ran it; `codegraph upgrade` also runs every time. `--no-claude`
+  even after you ran it; `codegraph upgrade` also runs every time. `--agents none`
   skips both.
+- **Removing a manifest entry does not uninstall it.** Agent projection is
+  add-only: drop a marketplace, plugin, MCP server or pi package from
+  `platform/installers/agents.py` and the machines that already applied it keep
+  it. Uninstall there by hand, once.
 - **Disk is what accumulates, not installs.** Each changed `flake.lock` leaves a
   generation behind, and `*.backup` files are never
   removed — prune with `expire-generations` + `nix-collect-garbage` (above).
@@ -468,21 +476,42 @@ Verify a package landed with `home-manager packages | grep hyperfine`. Or let th
 bootstrap drive it — it detects the host and re-runs the post-HM steps too
 (`./bootstrap.sh --dry-run --verbose`, then `./bootstrap.sh --yes`).
 
+## Coding agents
+
+Three agents — **Claude Code**, **Codex CLI** and **pi** — are provisioned from one
+in-repo manifest (`platform/installers/agents.py`) and applied with each agent's own
+CLI. What the agents *have* (marketplaces, plugins, MCP servers, pi extensions) is
+a reviewed table there; what each agent *is* (model, theme, approval policy) stays
+in its own config, which the agents rewrite at runtime and nothing here touches.
+Cross-agent instructions live once, in `~/.agents/AGENTS.md`, which Codex reads
+directly and Claude imports from its thin `~/.claude/CLAUDE.md` shell. Design
+record:
+[ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md).
+
+```bash
+python3 platform/installers/agents.py    # what the agents have, and who gets what
+./bootstrap.sh --agents claude,codex     # provision a subset (default: all three)
+```
+
+Adding a capability is an edit to that manifest plus a commit — never a per-machine
+command, which is the drift the ADR exists to stop.
+
 ## Post-login interactive setup
 
-The Claude/Smithery/Lark setup (plugins, MCP servers, Lark CLI auth) is
-_interactive_, so it is **not** auto-run. `setup.py` writes it to
-`~/.local/share/dotfiles/post-login-setup.sh`; the zsh prints a reminder while
-it's pending. Run it once when you're ready to authorize:
+Only the two steps that genuinely need you — Smithery auth and the Lark CLI's own
+installer — are deferred. `setup.py` writes them to
+`~/.local/share/dotfiles/post-login-setup.sh`; the zsh prints a reminder while it's
+pending. Run it once when you're ready to authorize:
 
 ```bash
 dotfiles-postsetup    # needs a TTY; self-removes on success
 ```
 
-It installs the Claude plugin marketplaces, offers to authenticate
-[Smithery](https://smithery.ai/) and add your namespace's MCP endpoint to Claude,
-and installs the Lark CLI — each step skippable, nothing fatal. Details of what it
-asks and why: [platform/README.md](platform/README.md#post-login-setup-smithery--lark).
+It offers to authenticate [Smithery](https://smithery.ai/) and add your namespace's
+MCP endpoint to Claude, then installs the Lark CLI — each step skippable, nothing
+fatal. Marketplaces, plugins, MCP servers and pi packages are *not* here: they are
+applied unattended during the bootstrap. Details:
+[platform/README.md](platform/README.md#post-login-setup-smithery--lark).
 
 ## China mirrors
 
