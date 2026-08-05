@@ -1,4 +1,8 @@
-{ ... }:
+{
+  pkgs,
+  lib,
+  ...
+}:
 {
   # Runtimes: mise manages node + rust (uv still handles Python, out of band).
   # Tools are declared globally; with the zsh `mise activate` integration, a
@@ -22,7 +26,6 @@
       };
       tools = {
         aws-cli = "latest";
-        docker-cli = "latest";
         go = "latest";
         just = "latest";
         node = "lts";
@@ -42,6 +45,13 @@
         pre-commit = "latest";
         rust = "stable";
         worktrunk = "latest";
+      }
+      # The docker CLI is only the client half; the daemon is a Linux-only
+      # opt-in system component (`--system docker`, see
+      # platform/installers/components.py). On macOS this repo never installs a
+      # daemon, so shipping the client would be dead weight.
+      // lib.optionalAttrs pkgs.stdenv.isLinux {
+        docker-cli = "latest";
       };
     };
   };

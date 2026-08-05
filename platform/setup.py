@@ -227,13 +227,27 @@ REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
 DEFERRED_AGENT_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
 
 
+# Nix platform predicates understood by _mise_tools, evaluated for *this* host.
+_NIX_GUARDS = {
+    "pkgs.stdenv.isLinux": sys.platform == "linux",
+    "pkgs.stdenv.isDarwin": sys.platform == "darwin",
+}
+
+
 def _mise_tools():
-    """Tool names declared in the ``tools = { … }`` block of home/mise.nix, for
+    """Tool names declared in the ``tools = …`` expression of home/mise.nix, for
     the plan's "will install" line. Read from the nix source because mise itself
     is not on PATH until Home Manager has switched — and the plan prints before
     that. Only depth-1 keys count, so a nested entry (``"npm:@smithery/cli" = {
-    version = …; }``) contributes its own name and not its attributes. Returns []
-    if the block cannot be found; the caller then falls back to naming the file.
+    version = …; }``) contributes its own name and not its attributes.
+
+    The expression is one or more ``{ … }`` blocks joined by ``//``; a block
+    guarded by ``lib.optionalAttrs <cond>`` contributes its keys only when
+    ``<cond>`` holds here, so the plan matches what Home Manager will evaluate
+    (e.g. docker-cli is Linux-only). An unrecognised guard counts as applying —
+    over-reporting an install in a clearance plan beats hiding one. Returns []
+    if the expression cannot be found; the caller then falls back to naming the
+    file.
     """
     try:
         text = (REPO_DIR / "home" / "mise.nix").read_text()
@@ -242,16 +256,26 @@ def _mise_tools():
     start = re.search(r"\btools\s*=\s*\{", text)
     if not start:
         return []
-    tools, depth = [], 1
+    tools, depth, applies = [], 1, True
     for raw in text[start.end():].splitlines():
         line = re.sub(r"#.*$", "", raw).strip()
-        if depth == 1:
+        if depth == 0:
+            # Between merged blocks: `// { … }` / `// lib.optionalAttrs <cond> { … }`.
+            # Anything else ends the expression.
+            if not line:
+                continue
+            merge = re.match(r"//\s*(?:lib\.optionalAttrs\s+(\S+)\s+)?\{", line)
+            if not merge:
+                break
+            guard = merge.group(1)
+            applies = _NIX_GUARDS.get(guard, True) if guard else True
+            depth = 1  # the merge line's own `{` — already accounted for here
+            continue
+        if depth == 1 and applies:
             key = re.match(r'"?([A-Za-z0-9:@._/-]+)"?\s*=', line)
             if key:
                 tools.append(key.group(1))
         depth += line.count("{") - line.count("}")
-        if depth <= 0:
-            break
     return tools
 
 
