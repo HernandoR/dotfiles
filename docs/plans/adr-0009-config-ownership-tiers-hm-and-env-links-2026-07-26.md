@@ -134,6 +134,22 @@ suffix, retiring `.pre-dotfiles.bak`.
     `install -m` so content and mode arrive in one dry-run-safe command — a shell
     redirection would have written even under `$DRY_RUN_CMD`, since the redirect
     belongs to the shell rather than to the command.
+  - **A file entry does not stay a link.** Writers that replace rather than
+    update — temp file beside the path, `rename` over the top — turn the symlink
+    into a regular file. Claude Code does this to `~/.claude.json`. The path then
+    stops persisting to `stateRoot`, and the *next* activation aborts the whole
+    bootstrap: it finds an unmanaged file in the way, tries to back it up, and
+    collides with the `.backup` from the previous cycle (reproduced twice).
+    `seedEnvLinkTargets` now folds such a file back into its target and leaves the
+    path free for Home Manager to relink, newer copy winning and saying so.
+    **Residual behaviour, accepted knowingly:** for such a file, persistence is
+    now *switch-time* rather than continuous — the writer keeps replacing the link
+    within a session, and each activation folds the result back. Two ways out if
+    that ever matters: drop the entry (ADR-0005 called `.claude.json` opaque
+    machine state anyway), or create the `$HOME` link directly instead of through
+    HM's `home-files` dir, since a one-hop link *does* survive the rename — which
+    is why the pre-HM hand-made links on the reference host never showed this.
+
   - **`~/.ssh` can lock you out of the machine you are provisioning.** With an
     empty `stateRoot`, the switch moves the host's real `~/.ssh` to
     `.ssh.backup` and points `~/.ssh` at a freshly created empty directory — so

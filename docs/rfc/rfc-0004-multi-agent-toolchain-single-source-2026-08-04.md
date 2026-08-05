@@ -161,22 +161,31 @@ Resolved in the 2026-08-04 grilling; see the update log. None outstanding.
 
 ## Acceptance Criteria
 
-- [ ] A fresh bootstrap installs `codex`, `pi`, and `agentmemory`, and wires
-  the pi extension set, with no manual per-machine step.
+- [x] A fresh bootstrap installs `codex`, `pi`, and `agentmemory`, and wires
+  the pi extension set, with no manual per-machine step. (Clean jcc devpod,
+  bare Ubuntu → provisioned in 2m55s, unattended.)
 - [x] The four live marketplaces (`agent-skillset`, `astral-sh`, `worktrunk`,
   `composio`) all appear in the in-repo manifest — the current drift is closed.
   (`MARKETPLACES` in `platform/installers/agents.py`.)
-- [ ] `~/.codex/AGENTS.md` resolves to `~/.agents/AGENTS.md`, and
-  `~/.claude/CLAUDE.md` imports it and contains no cross-agent content.
-- [ ] `~/.codex/skills` and pi's `skills` setting both resolve to
-  `~/.agents/skills/`.
-- [ ] MCP servers declared once are reachable from all three agents (pi via
-  `pi-mcp-adapter`).
+- [x] `~/.codex/AGENTS.md` resolves to `~/.agents/AGENTS.md`, and
+  `~/.claude/CLAUDE.md` imports it. Caveat on the second half: `codegraph`
+  appends its own delimited usage block to the Claude shell, so the shell is not
+  literally free of cross-agent text — that block is vendor-written and
+  vendor-refreshed, not ours to host elsewhere.
+- [x] `~/.codex/skills` and pi's skills dir both resolve to `~/.agents/skills/`
+  (via a link on pi's side rather than its `skills` setting, since that setting
+  lives in the file pi rewrites at runtime).
+- [x] MCP servers declared once reach Claude and Codex — `codex mcp list` shows
+  both `agentmemory` and `codegraph` enabled. For pi they are declared in
+  `~/.agents/mcp.json` with `pi-mcp-adapter` installed; that the adapter *reads*
+  them has not been exercised in a live pi session.
 - [x] `--agents=<spec>` selects which agents to provision; `--no-claude` no
   longer exists as the only lever (it survives as a deprecated alias for
   `--agents=none`).
-- [ ] Claude's `/model`, `/config`, plugin installs, and built-in memory behave
-  exactly as before.
+- [~] Claude's plugin installs behave exactly as before (4 marketplaces + 7
+  plugins into a fresh config, then idempotent on re-run). `/model` and `/config`
+  need an interactive session and are not verified; built-in memory is untouched
+  by construction.
 
 ## Rollout
 

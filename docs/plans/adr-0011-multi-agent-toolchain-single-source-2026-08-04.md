@@ -218,9 +218,55 @@ the one genuine Tier A addition is the agentmemory service unit.
     it abstaining from plane ①. One more link in `PiAgent.project` would make the
     instruction plane a genuine three-way single point.
 
-  Verified: `nix flake check --no-build`, a Linux `activationPackage` build
-  (unit + wrapper inspected in the store), a Darwin eval of the `launchd` branch,
-  and `setup.py --plan` / `--dry-run` for `--agents` = default / `none` /
-  `claude,pi`. A real bootstrap that installs Codex, pi and agentmemory on a live
-  host has **not** run yet, so the RFC-0004 acceptance criteria that describe
-  machine state stay unticked.
+  Verified statically: `nix flake check --no-build`, a Linux `activationPackage`
+  build (unit + wrapper inspected in the store), a Darwin eval of the `launchd`
+  branch, and `setup.py --plan` / `--dry-run` for `--agents` = default / `none` /
+  `claude,pi`.
+
+- **2026-08-05 — verified end to end on a clean machine**, a 4 CPU / 8 GiB jcc
+  devpod with a pod-local `stateRoot`, so the reference host's live agent state was
+  never touched. Nine runs; the last full one goes from bare Ubuntu 24.04 to
+  everything provisioned in **2m55s**, and a repeat run is idempotent. Confirmed on
+  the machine: claude 2.1.222 · codex 0.146.0 · pi 0.83.0 · agentmemory 0.9.28;
+  4 marketplaces + 7 plugins into a fresh Claude config; `codex mcp list` showing
+  **both** `agentmemory` and `codegraph` enabled (the three-way MCP single point is
+  real, not just declared); all four pi packages recorded in pi's own
+  settings.json; and every instruction/skills link resolving to `~/.agents`.
+
+  Five defects that only a clean machine could surface, four of them introduced by
+  this implementation:
+
+  - **A failing vendor installer aborted the whole run.** Routing the installers
+    through the `scripts` backend inherited its `check=True`, so Claude's installer
+    exiting 1 took the rest of the post-HM phase with it. `Script` now carries
+    `check`.
+  - **`.claude.json` seeded empty reads as corrupt** to Claude Code — an ADR-0009
+    defect, fixed there with the new `seed` option.
+  - **npm was never found.** `shutil.which("npm")` cannot work on a fresh machine:
+    mise's node reaches PATH only through shell integration. It looked fine on the
+    reference host purely because that shell has mise activated. Resolved via
+    `mise which npm`.
+  - **node was not on the *children's* PATH**, so npm's dependency postinstalls
+    and the node-shebang CLIs failed with `node: not found`. `ensure_node_on_path`
+    now prepends the mise node bin dir, as `Ctx._extend_path` already does for
+    `~/.local/bin`.
+  - **codegraph silently un-did plane ①.** It reads `~/.codex/AGENTS.md`, appends
+    its usage block and writes the result back over the path, replacing the symlink
+    with a regular file (measured: shared content + 803 bytes). Ordering alone
+    cannot fix it, so links are re-asserted after every delegated installer
+    (`Agent.relink`) and an appended-to copy is folded back into the shared source
+    (`_link(absorb=True)`).
+
+  Two things remain unexercised, and neither can be tested from here: the
+  agentmemory **service** (no jcc devpod has an init system, so the unit is only
+  ever written, never started), and Claude's `/model` / `/config` runtime writes,
+  which need an interactive session. npm's `allow-scripts` default also skips
+  `protobufjs` / `sharp` postinstalls, so pi and agentmemory are installed with
+  their native pieces unbuilt.
+
+  One finding upgraded from "recorded" to "confirmed, still not acted on": the
+  Codex plugin CLI exists and takes the same shapes as Claude's —
+  `codex plugin marketplace add <SOURCE>` (local path, `owner/repo[@ref]`, HTTPS or
+  SSH git URL) and `codex plugin add PLUGIN@MARKETPLACE`. So closing the
+  `agent-skillset` gap is now a verified one-line-per-entry change rather than a
+  guess, and remains an ADR-level decision.
