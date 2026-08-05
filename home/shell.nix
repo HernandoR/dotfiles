@@ -126,10 +126,11 @@
           [ -r "$f" ] && . "$f"
         done
 
-        # One-line hint while the deferred (interactive) Claude/Lark/MCP setup is
-        # still pending — run it manually with `dotfiles-postsetup` (ADR-0007).
+        # One-line hint while the interactive agent extras (Smithery auth, the Lark
+        # CLI installer) are still pending — run them with `dotfiles-postsetup`.
+        # Everything unattended is already applied by the bootstrap (ADR-0011).
         if [ -f "$HOME/.local/share/dotfiles/post-login-setup.sh" ]; then
-          print -P "%F{yellow}dotfiles:%f Claude/Lark/MCP setup pending — run %F{cyan}dotfiles-postsetup%f"
+          print -P "%F{yellow}dotfiles:%f interactive agent extras pending — run %F{cyan}dotfiles-postsetup%f"
         fi
       '')
     ];

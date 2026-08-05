@@ -103,6 +103,12 @@ in
       # by `pi install` (which records the installed extension set into it).
       ".pi" = { kind = "dir"; mode = "700"; };
 
+      # agentmemory's local SQLite store + its pinned engine binary (ADR-0011).
+      # The whole value of a memory backend is that it accumulates, so this is
+      # the one agent path where losing the state would matter most; 700 because
+      # it holds verbatim conversation content.
+      ".agentmemory" = { kind = "dir"; mode = "700"; };
+
       # --- shell / machine state ---
 
       # SSH material is per-host secret data. SSH checks permissions on the link
