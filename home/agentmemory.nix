@@ -27,20 +27,25 @@ let
   # npm under the mise-managed node (ADR-0011 keeps its version outside git so its
   # own self-update works), so there is no store path to point at.
   #
-  # PATH order matters: the HM profile provides mise, mise's shims provide
-  # node/npm, and `npm prefix -g` then locates the npm global bin dir where
-  # `npm install -g` actually put the CLI. A systemd user service starts with a
-  # near-empty environment, so none of this can be assumed.
+  # PATH order matters, and none of it can be assumed: a user service starts with
+  # a near-empty environment. The HM profile provides mise; mise — not PATH — is
+  # what knows where its node lives (its install dir reaches PATH only through
+  # shell integration, and the shims dir may not exist at all); and `npm prefix
+  # -g` then locates the dir `npm install -g` actually wrote the CLI into.
   serve = pkgs.writeShellScript "agentmemory-serve" ''
     set -eu
-    export PATH="$HOME/.nix-profile/bin:$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH"
-    if command -v npm >/dev/null 2>&1; then
-      # Note the explicit `if`: `[ -d … ] && PATH=…` as a bare statement would be
-      # the script's failing last command under `set -e` whenever the dir is
-      # absent, killing the unit before it ever looked for the binary.
-      npm_prefix="$(npm prefix -g 2>/dev/null || true)"
-      if [ -n "$npm_prefix" ] && [ -d "$npm_prefix/bin" ]; then
-        PATH="$npm_prefix/bin:$PATH"
+    export PATH="$HOME/.nix-profile/bin:$HOME/.local/bin:$PATH"
+    if command -v mise >/dev/null 2>&1; then
+      npm="$(mise which npm 2>/dev/null || true)"
+      # Note the explicit `if`s: `[ … ] && PATH=…` as a bare statement would be
+      # the script's failing last command under `set -e` whenever the test fails,
+      # killing the unit before it ever looked for the binary.
+      if [ -n "$npm" ] && [ -x "$npm" ]; then
+        PATH="$(dirname "$npm"):$PATH"
+        npm_prefix="$("$npm" prefix -g 2>/dev/null || true)"
+        if [ -n "$npm_prefix" ] && [ -d "$npm_prefix/bin" ]; then
+          PATH="$npm_prefix/bin:$PATH"
+        fi
       fi
     fi
     if ! command -v agentmemory >/dev/null 2>&1; then

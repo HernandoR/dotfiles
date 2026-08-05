@@ -251,13 +251,46 @@ def _read(path):
         return ""
 
 
+_NPM = []  # one-slot cache; resolving npm costs a mise call
+
+
 def _npm(ctx):
-    """The npm from the mise-managed node runtime (materialized by
-    ``setup_runtimes`` just before this module runs), or None."""
+    """Path to the npm of the mise-managed node runtime, or None.
+
+    ``shutil.which`` is not enough. ``setup_runtimes`` materializes node under
+    ``~/.local/share/mise/installs/…``, which reaches PATH only through mise's
+    *shell* integration — never in this process. On a machine where the operator's
+    shell has mise activated the plain lookup happens to work; on a fresh one it
+    always misses, which silently skipped pi and agentmemory entirely (found on a
+    clean devpod bootstrap, 2026-08-05). So ask mise where npm is.
+    """
+    if _NPM:
+        return _NPM[0]
     npm = shutil.which("npm")
-    if not npm and not ctx.dry_run:
-        logger.warning("npm not on PATH (mise node?); skipping the npm-installed agents")
+    if not npm:
+        mise = shutil.which("mise")
+        if mise:
+            out = ctx.run_command([mise, "which", "npm"], capture_output=True, check=False)
+            resolved = _stdout(out)
+            if resolved and pathlib.Path(resolved).is_file():
+                npm = resolved
+    if not npm:
+        if ctx.dry_run:
+            # Describe-only run: nothing is installed, so name the command anyway.
+            npm = "npm"
+        else:
+            logger.warning("npm not resolvable via PATH or `mise which npm`; "
+                           "skipping the npm-installed agents (pi, agentmemory)")
+    _NPM.append(npm)
     return npm
+
+
+def _stdout(completed):
+    """Decoded, stripped stdout of a ``run_command(capture_output=True)`` result."""
+    out = getattr(completed, "stdout", b"") or b""
+    if isinstance(out, bytes):
+        out = out.decode("utf-8", "replace")
+    return out.strip()
 
 
 _NPM_GLOBAL_BIN = []  # one-slot cache: `npm prefix -g` is a node start-up per call
@@ -269,14 +302,10 @@ def _npm_global_bin(ctx):
     (`pi install …`), and mise only shims the tools its own config declares."""
     if _NPM_GLOBAL_BIN:
         return _NPM_GLOBAL_BIN[0]
-    npm = shutil.which("npm")
-    if not npm:
+    npm = _npm(ctx)
+    if not npm or npm == "npm":
         return None
-    out = ctx.run_command([npm, "prefix", "-g"], capture_output=True, check=False)
-    prefix = getattr(out, "stdout", b"") or b""
-    if isinstance(prefix, bytes):
-        prefix = prefix.decode("utf-8", "replace")
-    prefix = prefix.strip()
+    prefix = _stdout(ctx.run_command([npm, "prefix", "-g"], capture_output=True, check=False))
     resolved = str(pathlib.Path(prefix) / "bin") if prefix else None
     _NPM_GLOBAL_BIN.append(resolved)
     return resolved
@@ -775,6 +804,15 @@ def provision(ctx, ids, codegraph_installer):
     if _agentmemory_wanted(ids):
         install_agentmemory(ctx)
 
+    # Project BEFORE delegating to codegraph. Its installer writes usage
+    # instructions into the agents' instruction files, so with the links already
+    # in place its Codex write lands *through* ~/.codex/AGENTS.md in the shared
+    # source — where cross-agent content belongs — instead of in a file the link
+    # would then displace. On the first clean-pod run the order was the other way
+    # round and codegraph's text ended up orphaned in AGENTS.md.backup.
+    for agent in agents:
+        agent.project(ctx)
+
     # codegraph installs its own MCP server into the agents it knows, which is
     # why MCP_SERVERS marks it delegated. Only the agents actually selected are
     # named, so a Claude-only run does not configure Codex behind the user's back.
@@ -786,8 +824,6 @@ def provision(ctx, ids, codegraph_installer):
     elif not codegraph and not ctx.dry_run:
         logger.warning("codegraph not found after install; skipping MCP wiring")
 
-    for agent in agents:
-        agent.project(ctx)
     if _agentmemory_wanted(ids):
         start_agentmemory(ctx)
 
