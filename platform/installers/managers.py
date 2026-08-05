@@ -28,13 +28,20 @@ class Script:
     codegraph needs ``sh``, claude/nvm need ``bash``.
     """
 
-    def __init__(self, url, interpreter="bash", args=(), env=None):
+    def __init__(self, url, interpreter="bash", args=(), env=None, check=True):
         self.url = url
         self.interpreter = interpreter
         self.args = list(args)
         # Optional env overlay for the run step (e.g. nvm honors PROFILE to skip
         # editing shell rc files). Applied only to running the script, not curl.
         self.env = env
+        # Whether a failed download or a non-zero installer exit aborts the whole
+        # run. The vendor installers behind the coding agents (ADR-0011) pass
+        # check=False: one of them having a bad day must not take the rest of the
+        # post-HM phase — system components included — down with it. Verified the
+        # hard way: a fresh pod where Claude's installer exited 1 aborted
+        # everything after it, so codex/pi/agentmemory never ran.
+        self.check = check
 
 
 class Deb:
@@ -140,9 +147,11 @@ class ScriptsManager(PackageManager):
         with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
             tmp_path = pathlib.Path(tmp.name)
         try:
-            ctx.run_command(["curl", "-fsSL", spec.url, "-o", str(tmp_path)])
+            ctx.run_command(["curl", "-fsSL", spec.url, "-o", str(tmp_path)],
+                            check=spec.check)
             ctx.run_command(
-                [spec.interpreter, str(tmp_path), *spec.args], env=spec.env
+                [spec.interpreter, str(tmp_path), *spec.args], env=spec.env,
+                check=spec.check,
             )
         finally:
             tmp_path.unlink(missing_ok=True)

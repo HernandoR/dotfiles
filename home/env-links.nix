@@ -24,8 +24,9 @@
 #      literal (/fsx/foo unquoted) is copied into the read-only store at flake
 #      eval, silently defeating the purpose. Strings are never copied.
 #   2. Say WHY the entry is mutable — the "why" is what keeps the inventory
-#      auditable. `kind`/`mode` are how a missing target gets seeded (below).
-{ config, lib, ... }:
+#      auditable. `kind`/`mode`/`seed` are how a missing target gets created
+#      (below) — applied on creation only, never to a target that exists.
+{ config, lib, pkgs, ... }:
 let
   cfg = config.envLinks;
   target = name: "${cfg.stateRoot}/${name}";
@@ -35,8 +36,17 @@ let
       # -m applies to directories this run creates; existing ones are a no-op.
       ''$DRY_RUN_CMD mkdir -p -m ${e.mode} ${lib.escapeShellArg (target name)}''
     else
-      # Guarded so an existing file keeps its own mode (and content).
-      ''[ -e ${lib.escapeShellArg (target name)} ] || { $DRY_RUN_CMD touch ${lib.escapeShellArg (target name)} && $DRY_RUN_CMD chmod ${e.mode} ${lib.escapeShellArg (target name)}; }'';
+      # Guarded so an existing file keeps its own mode AND its content. `install`
+      # rather than `touch` + `chmod` so the initial content comes from `seed` in
+      # one dry-run-safe command (a shell redirection would write even under
+      # $DRY_RUN_CMD, since the redirect is the shell's, not the command's). An
+      # empty seed reproduces the old `touch` exactly.
+      ''[ -e ${lib.escapeShellArg (target name)} ] || $DRY_RUN_CMD install -m ${e.mode} ${seedFile name e} ${lib.escapeShellArg (target name)}'';
+
+  # Store file holding an entry's initial content. Store path names may not start
+  # with a period, and the entry names all do.
+  seedFile = name: e:
+    pkgs.writeText "env-link-seed-${lib.replaceStrings [ "." "/" ] [ "_" "_" ] name}" e.seed;
 in
 {
   options.envLinks = {
@@ -62,11 +72,22 @@ in
         options = {
           kind = lib.mkOption {
             type = lib.types.enum [ "dir" "file" ];
-            description = "Seed a missing target with mkdir or touch.";
+            description = "Seed a missing target as a directory or as a file.";
           };
           mode = lib.mkOption {
             type = lib.types.str;
             description = "chmod arg, applied ONLY when this run creates the target.";
+          };
+
+          seed = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = ''
+              Initial content for a `file` entry, written ONLY when this run
+              creates the target. Empty (the default) means an empty file, which
+              is what most state files want. Set it for a file whose consumer
+              treats empty as corrupt rather than as "nothing yet".
+            '';
           };
         };
       });
@@ -89,8 +110,12 @@ in
       # new Claude-internal state dirs then persist automatically.
       ".claude" = { kind = "dir"; mode = "755"; };
       # Claude Code runtime state (onboarding, MCP auth cache) — mutable JSON,
-      # and it holds OAuth material, hence 600.
-      ".claude.json" = { kind = "file"; mode = "600"; };
+      # and it holds OAuth material, hence 600. Seeded with `{}` rather than
+      # empty: Claude Code reads this file at startup and an empty one is not
+      # "nothing yet" to it but a parse error — it reports the file as corrupted,
+      # backs it up and exits non-zero, which on a fresh machine takes its own
+      # installer down with it (found on a clean devpod bootstrap, 2026-08-05).
+      ".claude.json" = { kind = "file"; mode = "600"; seed = "{}"; };
 
       # Codex CLI: whole-dir for the same reason as .claude — config.toml is
       # rewritten by /model (openai/codex#14979), /experimental and /statusline,

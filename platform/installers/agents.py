@@ -527,8 +527,10 @@ class ClaudeAgent(Agent):
             logger.info("claude CLI already installed")
             return
         logger.info("installing Claude Code CLI")
+        # check=False: a vendor installer that fails must not abort the rest of
+        # the post-HM phase (the old curl|bash call was non-fatal too).
         ctx.package_manager("scripts").install(
-            ctx, Script("https://claude.ai/install.sh", interpreter="bash")
+            ctx, Script("https://claude.ai/install.sh", interpreter="bash", check=False)
         )
 
     def project(self, ctx):
@@ -621,7 +623,8 @@ class CodexAgent(Agent):
         # or to remove a conflicting npm-managed install mid-bootstrap.
         ctx.package_manager("scripts").install(
             ctx,
-            Script(CODEX_INSTALLER, interpreter="sh", env={"CODEX_NON_INTERACTIVE": "1"}),
+            Script(CODEX_INSTALLER, interpreter="sh",
+                   env={"CODEX_NON_INTERACTIVE": "1"}, check=False),
         )
 
     def project(self, ctx):
