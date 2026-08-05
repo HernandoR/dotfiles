@@ -25,16 +25,17 @@ touches ③:
 not uninstall it from a machine that already applied it. Converging would need a
 recorded previously-applied set plus correct uninstall paths — declined for now.
 
-Two findings that post-date the ADR and are recorded rather than acted on:
+Two premises of the ADR were falsified after it was written, and the owner chose
+to act on both (ADR-0011 update log, 2026-08-05):
 
-- Codex CLI *does* have a plugin marketplace now (``codex plugin marketplace
-  add``, shipped 2026-03-26), so the ADR's accepted "Codex cannot see
-  ``agent-skillset``" gap is closable by adding ``"codex"`` to a marketplace
-  entry's ``agents``. That is an ADR-level trade, so no Codex marketplace
-  projection is implemented here.
-- pi *does* read a global context file (``AGENTS.md`` under its agent dir), where
-  the ADR recorded that it abstains from the instruction plane. Linking it would
-  be one more entry in ``PiAgent.project``; also left for an ADR revisit.
+- **Codex has a plugin marketplace** (`codex plugin marketplace add <SOURCE>` /
+  `codex plugin add PLUGIN@MARKETPLACE`, verified on the machine), so the ADR's
+  accepted "Codex cannot see ``agent-skillset``" gap is closed: marketplace and
+  plugin entries target Codex too. The dual-track skills decision itself is
+  unchanged — marketplaces stay marketplace-managed, loose skills stay in
+  ``~/.agents/skills`` — it is only the *reach* of the marketplace track that grew.
+- **pi reads a global ``AGENTS.md``** under its agent dir, so it no longer abstains
+  from plane ①: ``~/.pi/agent/AGENTS.md`` links to the shared source like Codex's.
 """
 
 import json
@@ -153,31 +154,42 @@ class PiPackage:
         self.note = note
 
 
-# Marketplaces: Claude-only, and all four that the reference host actually has.
-# `worktrunk` and `composio` were installed by hand and existed nowhere in the
-# repo — closing that drift is the whole reason ADR-0011 supersedes ADR-0005, so
-# do not remove them because they look unfamiliar.
+# Marketplaces — all four that the reference host actually has, and both agents
+# that have a marketplace mechanism. `worktrunk` and `composio` were installed by
+# hand and existed nowhere in the repo; closing that drift is the whole reason
+# ADR-0011 supersedes ADR-0005, so do not remove them because they look
+# unfamiliar.
+#
+# Codex joined these after the ADR: it grew a plugin marketplace (2026-03-26) that
+# takes the same source shapes Claude's does, which retires the ADR's accepted
+# "Codex cannot see agent-skillset" gap. Projection is best-effort per entry, so a
+# plugin Codex cannot use fails as one warning rather than as a broken run.
+BOTH_MARKETS = ("claude", "codex")
+
 MARKETPLACES = (
-    Marketplace("agent-skillset", "hernandor/agent-skillset",
+    Marketplace("agent-skillset", "hernandor/agent-skillset", agents=BOTH_MARKETS,
                 note="the owner's own skills: discuss / implement / dev_loop / fetch_external_knowledge"),
-    Marketplace("astral-sh", "astral-sh/claude-code-plugins",
+    Marketplace("astral-sh", "astral-sh/claude-code-plugins", agents=BOTH_MARKETS,
                 note="Astral's Python tooling skills (uv / ruff / ty)"),
-    Marketplace("worktrunk", "max-sixty/worktrunk",
+    Marketplace("worktrunk", "max-sixty/worktrunk", agents=BOTH_MARKETS,
                 note="worktrunk (`wt`) worktree workflow — the CLI itself is a mise tool"),
     Marketplace("composio", "https://github.com/ComposioHQ/composio-plugin-cc.git",
+                agents=BOTH_MARKETS,
                 note="Composio tool bridge; a git URL rather than a GitHub shorthand"),
 )
 
 # Plugins, one per marketplace entry that has one. `agent-skillset` ships four
 # separate plugins and there is still no bulk-install command.
 PLUGINS = (
-    Plugin("discuss", "agent-skillset"),
-    Plugin("implement", "agent-skillset"),
-    Plugin("dev_loop", "agent-skillset"),
-    Plugin("fetch_external_knowledge", "agent-skillset"),
-    Plugin("astral", "astral-sh"),
-    Plugin("worktrunk", "worktrunk"),
-    Plugin("composio", "composio"),
+    Plugin("discuss", "agent-skillset", agents=BOTH_MARKETS),
+    Plugin("implement", "agent-skillset", agents=BOTH_MARKETS),
+    Plugin("dev_loop", "agent-skillset", agents=BOTH_MARKETS,
+           note="its hooks are the only non-skill content in agent-skillset; Codex has a "
+                "hook engine, pi's bridge documents partial support"),
+    Plugin("fetch_external_knowledge", "agent-skillset", agents=BOTH_MARKETS),
+    Plugin("astral", "astral-sh", agents=BOTH_MARKETS),
+    Plugin("worktrunk", "worktrunk", agents=BOTH_MARKETS),
+    Plugin("composio", "composio", agents=BOTH_MARKETS),
 )
 
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
@@ -730,8 +742,17 @@ class CodexAgent(Agent):
         codex = self.cli(ctx)
         if not codex:
             if not ctx.dry_run:
-                logger.warning("codex CLI not resolvable; skipping its MCP projection")
+                logger.warning("codex CLI not resolvable; skipping its projection")
             return
+        # Same manifest, Codex's own commands. `codex plugin marketplace add` takes
+        # the same source shapes as Claude's (path, owner/repo[@ref], HTTPS/SSH git
+        # URL), so one entry really does serve both.
+        for market in self._marketplaces():
+            ctx.run_command([codex, "plugin", "marketplace", "add", market.source],
+                            check=False, stdin_devnull=True)
+        for plugin in self._plugins():
+            ctx.run_command([codex, "plugin", "add", plugin.qualified],
+                            check=False, stdin_devnull=True)
         for server in self._mcp_servers():
             ctx.run_command(self._mcp_add(codex, server), check=False, stdin_devnull=True)
 
@@ -757,6 +778,9 @@ class CodexAgent(Agent):
             add("install", "Codex CLI already present — left as is")
         else:
             add("install", "Codex CLI from chatgpt.com/codex/install.sh (into ~/.local/bin)")
+        add("config", "{} marketplace(s) + {} plugin(s) into Codex: {}".format(
+            len(self._marketplaces()), len(self._plugins()),
+            ", ".join(p.qualified for p in self._plugins())))
         for link, target in ((self.INSTRUCTIONS, SHARED_INSTRUCTIONS), (self.SKILLS, SHARED_SKILLS)):
             if _link_is_current(link, target):
                 continue
@@ -779,6 +803,11 @@ class PiAgent(Agent):
     # was declined because that file is exactly what pi rewrites at runtime
     # (/settings, and `pi install` records packages into it).
     SKILLS = HOME / ".pi" / "agent" / "skills"
+    # pi loads `AGENTS.md` (or CLAUDE.md) from its agent dir at startup — verified
+    # in pi's own README — so it does NOT abstain from plane ① after all, and one
+    # link makes the instruction source a genuine three-way single point. Disabled
+    # per-invocation with `--no-context-files`, which is pi's business, not ours.
+    INSTRUCTIONS = HOME / ".pi" / "agent" / "AGENTS.md"
 
     def install(self, ctx):
         # npm's default prefix (under the mise node), so `pi update --self` keeps
@@ -787,6 +816,7 @@ class PiAgent(Agent):
         _npm_install_global(ctx, PI_NPM_PACKAGE, self.binary)
 
     def project(self, ctx):
+        _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS)
         _link(ctx, self.SKILLS, SHARED_SKILLS)
         write_shared_mcp(ctx)
         pi = self.cli(ctx)
@@ -804,11 +834,13 @@ class PiAgent(Agent):
             add("install", "pi via npm -g ({}), node from mise".format(PI_NPM_PACKAGE))
         add("install", "{} pi package(s): {}".format(
             len(PI_PACKAGES), ", ".join(p.spec for p in PI_PACKAGES)))
-        if not _link_is_current(self.SKILLS, SHARED_SKILLS):
-            add("config", "{} -> {}".format(self.SKILLS, SHARED_SKILLS))
-            if self.SKILLS.exists() and not self.SKILLS.is_symlink():
-                add("backup", "{} -> {}.backup (it is a real dir, not a link)".format(
-                    self.SKILLS, self.SKILLS.name))
+        for link, target in ((self.INSTRUCTIONS, SHARED_INSTRUCTIONS), (self.SKILLS, SHARED_SKILLS)):
+            if _link_is_current(link, target):
+                continue
+            add("config", "{} -> {}".format(link, target))
+            if link.exists() and not link.is_symlink():
+                add("backup", "{} -> {}.backup (it is a real file/dir, not a link)".format(
+                    link, link.name))
         pi_servers = [s.name for s in MCP_SERVERS if "pi" in s.agents]
         add("config", "{} <- MCP server(s) {} (read by pi-mcp-adapter)".format(
             SHARED_MCP, ", ".join(pi_servers)))
