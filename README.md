@@ -164,14 +164,24 @@ in — from upstream or from your own edit:
 
 ```bash
 git pull                     # on an env branch (prod/mewtant): rebase onto the shared branch, never merge
-home-manager switch --flake .#<host> -b backup
+just switch                  # == home-manager switch --flake .#<host> -b backup
 exec zsh -l                  # pick up the new PATH / env / completions
-mise install                 # only if home/mise.nix gained a tool
+just runtimes                # only if home/mise.nix gained a tool (mise install)
 ```
+
+**The `just` recipes.** `Justfile` names the commands in this section, so the
+host, `--impure`, and `-b backup` are not yours to remember. `just` on its own
+lists them; the ones you will actually use are `build`, `diff`, `switch`,
+`check`, `update`, `news`, `packages`, `generations`, `rollback`, `expire`,
+`gc`, and `plan`. Everything below spells out what a recipe runs — reach for the
+raw command when you want a variation, or before the first switch has put `just`
+on PATH (it comes from mise).
 
 **Which host?** Your hostname if `flake.nix` defines it, else the OS/arch default
 (`platform/lib.sh:211`). Any other user — including root — uses the impure
 `generic` fallback: `home-manager switch --flake .#generic -b backup --impure`.
+`just show-host` prints what resolves for you; `just host=<name> switch` (or
+`DF_HOST=<name>`) overrides it.
 
 `-b backup` is what the bootstrap does (`HOME_MANAGER_BACKUP_EXT=backup`);
 without it a switch aborts as soon as it finds a real file where a symlink should
@@ -523,6 +533,7 @@ defaults.
 ## Repository layout
 
 ```text
+Justfile          `just` recipes for the day-to-day Home Manager commands
 bootstrap.sh      Thin entry → platform/bootstrap.sh
 flake.nix         Inputs (nixpkgs + home-manager), hosts, homeConfigurations
 home/             Home Manager modules — the declarative user environment

@@ -26,6 +26,7 @@ Two layers, split around the Home Manager switch:
 ## Layout
 
 ```text
+Justfile              Named recipes for the recurring HM operations (build/diff/switch/…)
 bootstrap.sh          Thin entry → exec platform/bootstrap.sh "$@"
 brew-cask-interactive-install.sh   Manual macOS cask picker (→ platform/brew_cask_install.py); NOT auto-run
 nix-system-interactive-install.sh  Manual system-component picker (→ platform/nix_system_install.py); NOT auto-run
@@ -65,8 +66,27 @@ docs/rfc/             RFCs (0001 = migration discussion log)
 
 ## Commands
 
-No Makefile/justfile and no test framework. Entry is the bootstrap or nix
-directly:
+No test framework. `Justfile` names the recurring Home Manager operations —
+prefer a recipe over the raw command, it already carries the host resolution and
+the `-b backup` policy:
+
+```bash
+just                     # list every recipe
+just show-host           # which flake host resolves here (and pure vs impure)
+just build               # build the activation package, change nothing
+just diff                # build + diff-closures against the live generation
+just switch              # build + activate (HOME_MANAGER_BACKUP_EXT=backup)
+just check               # nix flake check (named hosts; `generic` is invisible)
+just update [input]      # nix flake update
+just rollback            # step back one generation
+just plan                # ./bootstrap.sh --dry-run --verbose
+just host=<name> switch  # force a host (also DF_HOST=…)
+```
+
+The host is resolved by reusing `platform/lib.sh` the way `bootstrap.sh:91-102`
+does — **keep the Justfile's `host :=` block in step with that logic.**
+
+Underneath, or when `just` is not available yet:
 
 ```bash
 ./bootstrap.sh                         # full bootstrap (Lix → nix → HM → post-setup)

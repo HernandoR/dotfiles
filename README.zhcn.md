@@ -154,14 +154,22 @@ nix-collect-garbage -d                        # 然后回收磁盘
 
 ```bash
 git pull                     # 在 env 分支（prod/mewtant）上：rebase 到共享分支，不要 merge
-home-manager switch --flake .#<host> -b backup
+just switch                  # 等价于 home-manager switch --flake .#<host> -b backup
 exec zsh -l                  # 加载新的 PATH / 环境变量 / 补全
-mise install                 # 仅当 home/mise.nix 新增了工具时需要
+just runtimes                # 仅当 home/mise.nix 新增了工具时需要（mise install）
 ```
+
+**`just` 配方。** `Justfile` 给本节的命令起了名字，host、`--impure`、`-b backup`
+都不用你自己记。直接运行 `just` 列出全部；常用的是 `build`、`diff`、`switch`、
+`check`、`update`、`news`、`packages`、`generations`、`rollback`、`expire`、
+`gc`、`plan`。下文仍然写出每个配方底层跑的命令——需要变体时、或首次 switch 之前
+（`just` 由 mise 提供，那时还不在 PATH 上）直接用原始命令。
 
 **用哪个 host？** 如果 `flake.nix` 里定义了你的 hostname 就用它，否则用 OS/架构
 的默认值（`platform/lib.sh:211`）。其他用户——包括 root——走非纯（impure）的
 `generic` 回退 host：`home-manager switch --flake .#generic -b backup --impure`。
+`just show-host` 会打印你这里解析出的 host；`just host=<name> switch`（或
+`DF_HOST=<name>`）可以覆盖它。
 
 `-b backup` 与 bootstrap 的做法一致（`HOME_MANAGER_BACKUP_EXT=backup`）；
 不加它的话，一旦发现该放软链接的位置上是真实文件，switch 就会中止。激活前想先看
@@ -490,6 +498,7 @@ Claude，然后安装 Lark CLI——每一步都可跳过，任一步失败都�
 ## 仓库布局
 
 ```text
+Justfile          日常 Home Manager 命令的 `just` 配方
 bootstrap.sh      精简入口 → platform/bootstrap.sh
 flake.nix         Inputs（nixpkgs + home-manager）、hosts、homeConfigurations
 home/             Home Manager 模块——声明式的用户环境
