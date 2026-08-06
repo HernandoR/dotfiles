@@ -1,11 +1,84 @@
-{ ... }:
+{ pkgs, ... }:
+let
+  # Key lookup for gpg.ssh.defaultKeyCommand. Git only accepts a literal
+  # public key here (never a file path), so prefer whatever the agent offers
+  # (1Password & co. via SSH_AUTH_SOCK) and otherwise emit the first on-disk
+  # ~/.ssh/id_*.pub.
+  sshSigningKeyCommand = pkgs.writeShellScript "git-ssh-signing-key" ''
+    if [ -n "''${SSH_AUTH_SOCK:-}" ]; then
+      key=$(ssh-add -L 2>/dev/null | head -n 1)
+      case "$key" in
+        ssh-* | sk-* | ecdsa-*)
+          printf 'key::%s\n' "$key"
+          exit 0
+          ;;
+      esac
+    fi
+    for pub in "$HOME"/.ssh/id_*.pub; do
+      [ -r "$pub" ] || continue
+      printf 'key::%s\n' "$(cat "$pub")"
+      exit 0
+    done
+    echo "git-ssh-signing-key: no agent key and no ~/.ssh/id_*.pub key pair found" >&2
+    exit 1
+  '';
+
+  # Signer wrapper for gpg.ssh.program. For literal keys Git always passes
+  # -U ("key lives in the agent"), which fails on hosts that only have plain
+  # key files. Try Git's exact invocation first; if agent signing fails and
+  # the literal key matches an on-disk pair, re-sign with that pair instead.
+  sshSignProgram = pkgs.writeShellScript "git-ssh-sign" ''
+    # Git invokes: <program> -Y sign -n git -f <keyfile> [-U] <bufferfile>
+    err=$(ssh-keygen "$@" 2>&1) && exit 0
+
+    keyfile=
+    prev=
+    for a in "$@"; do
+      [ "$prev" = "-f" ] && keyfile=$a
+      prev=$a
+    done
+
+    if [ -n "$keyfile" ] && [ -r "$keyfile" ]; then
+      want=$(awk '{print $1, $2}' "$keyfile" 2>/dev/null)
+      for pub in "$HOME"/.ssh/id_*.pub; do
+        [ -r "$pub" ] || continue
+        if [ -n "$want" ] && [ "$want" = "$(awk '{print $1, $2}' "$pub")" ]; then
+          # Signing needs the private half; the .pub only served for matching.
+          priv=''${pub%.pub}
+          [ -r "$priv" ] || continue
+          args=()
+          skip_next=0
+          for a in "$@"; do
+            if [ "$skip_next" = 1 ]; then
+              skip_next=0
+              args+=("$priv")
+              continue
+            fi
+            case "$a" in
+              -U) ;;
+              -f)
+                args+=(-f)
+                skip_next=1
+                ;;
+              *) args+=("$a") ;;
+            esac
+          done
+          exec ssh-keygen "''${args[@]}"
+        fi
+      done
+    fi
+
+    printf '%s\n' "$err" >&2
+    exit 1
+  '';
+in
 {
   programs.git = {
     enable = true;
     lfs.enable = true;
 
-    # SSH commit signing: ask ssh-agent for the available signing keys and let
-    # Git skip signing when no agent key is currently available.
+    # SSH commit signing, working both with an external agent (1Password et
+    # al. via SSH_AUTH_SOCK) and with plain ~/.ssh/id_* key files.
     signing = {
       format = "ssh";
       signByDefault = true;
@@ -80,9 +153,11 @@
 
       init.defaultBranch = "main";
 
-      # Let Git discover the signing key from the active ssh-agent; if the
-      # agent has no loaded key, Git will not sign by default.
-      gpg.ssh.defaultKeyCommand = "ssh-add -L";
+      # Agent-first key discovery with an on-disk fallback (scripts above).
+      gpg.ssh = {
+        defaultKeyCommand = "${sshSigningKeyCommand}";
+        program = "${sshSignProgram}";
+      };
 
       # difftastic as the external differ (provides `difft`; see packages.nix).
       diff = {
