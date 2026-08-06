@@ -93,6 +93,12 @@
         export RUSTUP_UPDATE_ROOT="https://mirrors.tuna.tsinghua.edu.cn/rustup/rustup"
         export RUSTUP_DIST_SERVER="https://mirrors.tuna.tsinghua.edu.cn/rustup"
       fi
+      # if $HOME/.config/env.d/* exists, source it (for machine-local env vars).
+      if [ -d "$HOME/.config/env.d" ]; then
+        for f in "$HOME/.config/env.d/"*; do
+          [ -r "$f" ] && . "$f"
+        done
+      fi
     '';
 
     initContent = lib.mkMerge [
