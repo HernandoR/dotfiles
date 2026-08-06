@@ -40,7 +40,7 @@ class Script:
         # check=False: one of them having a bad day must not take the rest of the
         # post-HM phase — system components included — down with it. Verified the
         # hard way: a fresh pod where Claude's installer exited 1 aborted
-        # everything after it, so codex/pi/agentmemory never ran.
+        # everything after it, so codex/omp/agentmemory never ran.
         self.check = check
 
 

@@ -60,7 +60,7 @@ in
 {
   systemd.user.services.agentmemory = lib.mkIf pkgs.stdenv.isLinux {
     Unit = {
-      Description = "agentmemory — local memory backend for pi and Codex (ADR-0011)";
+      Description = "agentmemory — local memory backend for omp and Codex (ADR-0011)";
       Documentation = "https://github.com/rohitg00/agentmemory";
     };
     Service = {

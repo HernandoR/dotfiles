@@ -170,33 +170,35 @@ components). The last three run only when at least one agent is selected.
 
 One manifest, three agents, projected by each agent's own CLI:
 
-- **Manifest** — `MARKETPLACES`, `PLUGINS`, `MCP_SERVERS`, `PI_PACKAGES`. Every
+- **Manifest** — `MARKETPLACES`, `PLUGINS`, `MCP_SERVERS`. Every
   entry names the agents it targets and why. This is the single reviewed source
   for what the agents *have*; adding one is a commit, not a per-machine command.
-- **Projection** — one `Agent` subclass per agent (`claude`/`codex`/`pi`) owning
+- **Projection** — one `Agent` subclass per agent (`claude`/`codex`/`omp`) owning
   that agent's install channel and its own commands (`claude plugin install`,
-  `claude mcp add`, `codex mcp add`, `pi install`). Nothing here writes an agent's
-  config file: all three rewrite their own config at runtime, which is also why
-  none of it is Home-Manager-managed (ADR-0009 Tier A is excluded by
-  construction). **Projection is add-only** — removing a manifest entry does not
-  uninstall it.
+  `claude mcp add`, `codex mcp add`, omp's native `~/.omp/agent/mcp.json`).
+  Nothing here writes an agent's config file: all three rewrite their own config
+  at runtime, which is also why none of it is Home-Manager-managed (ADR-0009
+  Tier A is excluded by construction). **Projection is add-only** — removing a
+  manifest entry does not uninstall it.
 - **Instruction plane** — `~/.agents/AGENTS.md` is the only source, and all three
-  agents reach it: `~/.codex/AGENTS.md` and `~/.pi/agent/AGENTS.md` symlink to it,
-  and `~/.claude/CLAUDE.md` is a thin shell that `@~/.agents/AGENTS.md`-imports it
-  and holds Claude-only lines. Nothing cross-agent may go in the shell (`setup.py`
-  warns when it grows past 40 lines). Delegated installers that append to a linked
-  file and write it back (codegraph does) are handled by re-asserting the links
-  afterwards and folding the addition into the shared source.
+  agents reach it: `~/.codex/AGENTS.md` and `~/.omp/agent/AGENTS.md` symlink to
+  it, and `~/.claude/CLAUDE.md` is a thin shell that `@~/.agents/AGENTS.md`-imports
+  it and holds Claude-only lines. Nothing cross-agent may go in the shell
+  (`setup.py` warns when it grows past 40 lines). Delegated installers that append
+  to a linked file and write it back (codegraph does) are handled by re-asserting
+  the links afterwards and folding the addition into the shared source.
 - **Skills** — dual track. Marketplaces stay marketplace-managed and now reach
   **both** Claude and Codex (Codex grew a plugin marketplace after ADR-0011 was
   written; the ADR's "Codex cannot see agent-skillset" gap is closed and its
-  closure is verified). Loose skills live in `~/.agents/skills`, which Codex reads
-  natively and to which `~/.codex/skills` and `~/.pi/agent/skills` are linked.
-- **Selection** — `--agents=<spec>` (`claude,codex,pi` / `all` / `none`; unset =
+  closure is verified). Loose skills live in `~/.agents/skills`, which Codex and
+  omp read natively and to which `~/.codex/skills` and `~/.omp/agent/skills` are
+  linked.
+- **Selection** — `--agents=<spec>` (`claude,codex,omp` / `all` / `none`; unset =
   all). `--no-claude` is a deprecated alias for `none`.
-- **Memory** — agentmemory is wired to pi + Codex only; Claude keeps its built-in
-  file memory. Its daemon is the HM unit in `home/agentmemory.nix`, started by
-  `agents.start_agentmemory` once the binary exists (the HM switch runs first).
+- **Memory** — agentmemory is wired to omp + Codex only; Claude keeps its
+  built-in file memory. Its daemon is the HM unit in `home/agentmemory.nix`,
+  started by `agents.start_agentmemory` once the binary exists (the HM switch
+  runs first).
 
 ## The component model
 
@@ -238,9 +240,9 @@ One manifest, three agents, projected by each agent's own CLI:
 Only what genuinely blocks on a human — Smithery auth and the Lark CLI installer
 — is deferred to `~/.local/share/dotfiles/post-login-setup.sh`; the HM zsh prints
 a reminder and the user runs it once via the `dotfiles-postsetup` shell function
-(self-removes on success). Marketplaces, plugins, MCP servers and pi packages are
-**not** deferred: the manifest is only a single source if applying it needs no
-human, so they run unattended with stdin on `/dev/null`.
+(self-removes on success). Marketplaces, plugins, MCP servers and omp's native
+MCP config are **not** deferred: the manifest is only a single source if applying
+it needs no human, so they run unattended with stdin on `/dev/null`.
 
 ## Conventions
 
@@ -277,9 +279,11 @@ human, so they run unattended with stdin on `/dev/null`.
   file sourced from `initContent`.
 - **A new machine** → add a `hosts` entry in `flake.nix` (name = hostname for
   auto-detection), or rely on the `generic` impure fallback.
-- **A marketplace / plugin / MCP server / pi extension** → one entry in the
+- **A marketplace / plugin / MCP server / agent extension** → one entry in the
   matching table in `platform/installers/agents.py`, stating which agents it
-  targets and why. Verify with `python3 platform/installers/agents.py` and
+  targets and why (omp's extension set is deliberately empty — its native MCP
+  client, sub-agents, browser and Claude-plugin skills discovery cover the
+  retired pi packages). Verify with `python3 platform/installers/agents.py` and
   `platform/setup.py --plan`. Never install it by hand on a machine — that is the
   drift ADR-0011 exists to stop.
 - **A cross-agent instruction/rule** → `~/.agents/AGENTS.md` (the machine's
@@ -308,9 +312,10 @@ human, so they run unattended with stdin on `/dev/null`.
   `~/.agents/AGENTS.md`; nothing mechanically enforces this, which is why
   ADR-0011 makes it a standing rule.
 - **Agent config files** (`~/.claude/settings.json`, `~/.codex/config.toml`,
-  `~/.pi/agent/settings.json`) — all three are rewritten by the agents at runtime.
-  Never manage them with Home Manager and never patch them from `platform/`;
-  project capabilities through the agents' own CLIs instead.
+  `~/.omp/agent/config.yml` + `~/.omp/agent/mcp.json`) — all three are rewritten
+  by the agents at runtime. Never manage them with Home Manager and never patch
+  them from `platform/`; project capabilities through the agents' own CLIs (or
+  omp's native MCP file) instead.
 - **Legacy ADRs 0001–0006** — describe the retired Python pipeline; ADR-0007
   governs. Don't cite them as current design.
 

@@ -15,7 +15,7 @@ system-level software.
 ./platform/bootstrap.sh --network CN            # enable China mirrors
 ./platform/bootstrap.sh --host dotfiles-debian  # pick a flake host explicitly
 ./platform/bootstrap.sh --system docker,cuda    # + Linux system components
-./platform/bootstrap.sh --agents claude         # only Claude Code (default: claude,codex,pi)
+./platform/bootstrap.sh --agents claude         # only Claude Code (default: claude,codex,omp)
 ./platform/bootstrap.sh --agents none           # no agent tooling (was --no-claude)
 ```
 
@@ -56,7 +56,7 @@ components.
 | `lib.sh` | shared helpers (OS/host detection, Lix install, plan + clearance) |
 | `nix-cn.sh` | flakes + CN mirror gating (system nix.conf, sudo) + persist `~/.config/dotfiles/network-env` |
 | `setup.py` | post-HM half: `chsh` → mise runtimes → coding agents → system components |
-| `installers/agents.py` | ADR-0011: the capability manifest (marketplaces, plugins, MCP servers, pi packages) + one `Agent` class per agent that projects it with that agent's own CLI |
+| `installers/agents.py` | ADR-0011: the capability manifest (marketplaces, plugins, MCP servers) + one `Agent` class per agent that projects it with that agent's own CLI (omp reads MCP natively from `~/.omp/agent/mcp.json`) |
 | `installers/components.py` | the `OptionalComponent` registry (docker, cuda, nvidia, llvm, brew) + CodeGraph |
 | `installers/managers.py` | install backends (`apt`, `brew`, `scripts`) and their specs |
 | `installers/context.py` | `Ctx`: privilege detection, `run_command`, dry-run, clearance |
@@ -66,21 +66,27 @@ components.
 `setup_agents` installs the selected agents and projects the manifest in
 `installers/agents.py` onto each with that agent's own CLI. All of it is
 non-interactive and runs on every bootstrap — a single source that needs a human to
-apply is not a single source. What lands where:
+apply is not a single source. Install channels: claude and codex keep their own
+official installers; omp's *binary* is declarative (the `llm-agents-nix` flake
+input's `omp` package, in `home/packages.nix`), while its config is not —
+`~/.omp` is a Tier-B out-of-store staging link and every capability is either
+projected here or written by omp itself, never by an HM-generated config file.
+What lands where:
 
 | Plane | Where it lives | How it is applied |
 |---|---|---|
-| instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` + `~/.pi/agent/AGENTS.md` symlinks; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
-| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` / `PI_PACKAGES` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add`, `codex mcp add`, `pi install`, and `~/.agents/mcp.json` for pi's MCP (it has no MCP CLI) |
+| instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` + `~/.omp/agent/AGENTS.md` symlinks; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
+| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add`, `codex mcp add`, and an add-only merge into `~/.omp/agent/mcp.json` (omp is a first-class MCP client; the pi extension set retired — omp covers MCP, sub-agents, browser and Claude-plugin skills natively) |
 | preference | each agent's own config | **never touched** — all three rewrite it at runtime |
 
-Loose skills live in `~/.agents/skills` (Codex reads it natively; `~/.codex/skills`
-and `~/.pi/agent/skills` link to it). Links are re-asserted after any delegated
-installer (`codegraph`) that appends to a linked file and writes it back. agentmemory is wired to pi + Codex only and
-its daemon is the Home Manager unit in `home/agentmemory.nix`, started here once
-the binary exists. Select agents with `--agents` (`claude,codex,pi` / `all` /
-`none`) or `DOTFILE_AGENTS`. Projection is **add-only**: dropping an entry from the
-manifest does not uninstall it from a machine that already applied it.
+Loose skills live in `~/.agents/skills` (Codex and omp read it natively;
+`~/.codex/skills` and `~/.omp/agent/skills` link to it). Links are re-asserted
+after any delegated installer (`codegraph`) that appends to a linked file and
+writes it back. agentmemory is wired to omp + Codex only and its daemon is the
+Home Manager unit in `home/agentmemory.nix`, started here once the binary exists.
+Select agents with `--agents` (`claude,codex,omp` / `all` / `none`) or
+`DOTFILE_AGENTS`. Projection is **add-only**: dropping an entry from the manifest
+does not uninstall it from a machine that already applied it.
 
 ## Post-login setup (Smithery + Lark)
 

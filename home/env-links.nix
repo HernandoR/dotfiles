@@ -141,7 +141,7 @@ in
       # none of these can be an HM store link) ---
 
       # Cross-agent instruction + loose-skills root (ADR-0011 plane ①):
-      # ~/.agents/AGENTS.md is the single instruction source both Codex and pi
+      # ~/.agents/AGENTS.md is the single instruction source both Codex and omp
       # read, and ~/.agents/skills the shared loose-skills dir. Mutable: skills
       # are added and edited in place.
       ".agents" = { kind = "dir"; mode = "755"; };
@@ -165,9 +165,11 @@ in
       # they are part of the persistent volume rather than HM-managed.
       ".codex" = { kind = "dir"; mode = "700"; };
 
-      # pi: whole-dir. ~/.pi/agent/settings.json is rewritten by /settings and
-      # by `pi install` (which records the installed extension set into it).
-      ".pi" = { kind = "dir"; mode = "700"; };
+      # oh-my-pi (omp): whole-dir, replacing pi (ADR-0011 update log 2026-08-06).
+      # ~/.omp/agent/config.yml is rewritten by /settings and by omp's config
+      # writer, and ~/.omp/agent/mcp.json by its /mcp commands; the dir also
+      # holds sessions and the auth store (agent.db) — 700 for the latter.
+      ".omp" = { kind = "dir"; mode = "700"; };
 
       # agentmemory's local SQLite store + its pinned engine binary (ADR-0011).
       # The whole value of a memory backend is that it accumulates, so this is
@@ -199,7 +201,7 @@ in
     # tool that owns the path cannot repair it, because mkdir/create_dir_all on
     # a dangling symlink fails with EEXIST instead of following it. And the
     # tools cannot win the race anyway — the HM switch runs before
-    # platform/setup.py installs codex/pi, so the link is always there first.
+    # platform/setup.py installs the agent CLIs, so the link is always there first.
     #
     # This is the `home.activation` escape hatch ADR-0009 reserved: the entries
     # stay the single declarative inventory, and this only makes what they

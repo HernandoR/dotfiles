@@ -289,3 +289,64 @@ the one genuine Tier A addition is the agentmemory service unit.
   SSH git URL) and `codex plugin add PLUGIN@MARKETPLACE`. So closing the
   `agent-skillset` gap is now a verified one-line-per-entry change rather than a
   guess, and remains an ADR-level decision.
+
+- **2026-08-06 — pi is replaced by oh-my-pi (`omp`, can1357/oh-my-pi) in the
+  third slot, on the owner's call; the pi extension set retires.** omp is pi's
+  fork and ships everything the four pi packages existed for as native features,
+  so the replacement is mostly a deletion plus a re-point:
+
+  - **Install channel changes from npm to the `omp` Nix package.** The binary
+    comes from the `llm-agents-nix` flake input (numtide/llm-agents.nix,
+    `packages/omp` — package-only, no HM module) as `home/packages.nix`'s
+    `inputs.llm-agents-nix.packages.${pkgs.system}.omp`, and the HM switch
+    places it in `~/.nix-profile/bin`. numtide's daily CI builds are pulled from
+    `cache.numtide.com` (declared in flake.nix's `nixConfig`), so a switch does
+    not compile the bun+rust source tree. This is the deliberate exception to
+    "agent CLI versions stay outside git" — the version is pinned via the flake
+    input instead, because the owner asked for a Nix install. pi's npm install
+    (`@earendil-works/pi-coding-agent`) and the pi half of the npm machinery are
+    gone; the remaining npm path serves agentmemory only.
+  - **Config stays out of Home Manager, by construction.** The standing rule
+    for all three agents holds for omp unchanged: HM owns only the *binary*.
+    `~/.omp` remains an ADR-0009 Tier-B out-of-store staging link
+    (home/env-links.nix), the shared-source links and the MCP merge are
+    projected by `OmpAgent` at bootstrap, and plugins are installed through
+    omp's own interface (`omp install <npm-spec>`) — never by an HM-generated
+    config file. `llm-agents.nix` exposes packages only, which is what keeps
+    this clean: there is no `programs.omp` module to accidentally adopt.
+  - **The four-package extension set is deleted, not migrated.** The mapping:
+    `pi-claude-marketplace` → omp's `claude` / `claude-plugins` discovery
+    providers read installed Claude marketplaces and plugins for skills, slash
+    commands and MCP servers; `pi-mcp-adapter` → omp is a first-class MCP client
+    that reads `~/.omp/agent/mcp.json` (the manifest merges its `omp`-targeting
+    servers there, add-only — omp's `/mcp` commands rewrite the file itself, so
+    this is the same merge contract the adapter had, minus the adapter);
+    `pi-tinyfish` → omp ships a native browser tool (no provider credential,
+    which was tinyfish's original rationale); `pi-subagents` → omp has native
+    sub-agents/custom agents. If a real gap shows up, the manifest grows an
+    `omp install <npm-spec>` extension entry (omp preserves pi's extension API) —
+    never a per-machine command.
+  - **Plane ① moves with the agent dir.** `~/.pi/agent/AGENTS.md` becomes
+    `~/.omp/agent/AGENTS.md` (omp's native user-level context file, discovery
+    priority 100), still a symlink to `~/.agents/AGENTS.md`; `~/.pi/agent/skills`
+    becomes `~/.omp/agent/skills`, and omp also reads `~/.agents/skills` directly
+    through its `agents` discovery provider, so that link is a belt, not the
+    mechanism. The `~/.pi` env link (home/env-links.nix) becomes `~/.omp`
+    (whole-dir, 700 — sessions and the auth store live there too).
+  - **agentmemory is unchanged**, still wired to the third slot + Codex via MCP
+    (`~/.omp/agent/mcp.json` for omp). omp's own memory backends
+    (off/local/hindsight) are recorded as a possible future replacement, not the
+    current wiring.
+  - **Retirement on already-provisioned machines is manual** — projection is
+    add-only, so a machine that got pi keeps it until the owner uninstalls it
+    (`npm uninstall -g @earendil-works/pi-coding-agent`). Verified statically on
+    the reference host: `python3 platform/installers/agents.py` prints the
+    three-agent manifest with omp; `setup.py --plan --agents omp` /
+    `--plan-items --agents all` and `./bootstrap.sh --dry-run --verbose` describe
+    the nix package, the two shared-source links and the MCP merge;
+    `nix flake check --no-build` passes and a targeted eval confirms the `omp`
+    derivation from `llm-agents-nix` in `home.packages` (and its absence from
+    the mise tools), plus the `.omp` (700) env link. Not yet exercised: a real
+    build/substitution of the omp derivation and an omp session (needs network +
+    the owner's machine switch), so the runtime claims about omp's native
+    surface are taken from its docs, not from a clean-pod run.

@@ -92,7 +92,7 @@ exec ~/.nix-profile/bin/zsh -l
 | `--network CN`    | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
 | `--system <list>` | Install opt-in Linux system components (`all` = every one). |
 | `--host NAME`     | Force a named flake host instead of auto-detecting.         |
-| `--agents <list>` | Which coding agents to provision: `claude,codex,pi` / `all` (default) / `none`. |
+| `--agents <list>` | Which coding agents to provision: `claude,codex,omp` / `all` (default) / `none`. |
 | `--no-claude`     | Deprecated alias for `--agents none`.                       |
 
 | Env var                     | Effect                                                                                                                                                                                                                                                                                                                                                               |
@@ -227,7 +227,7 @@ and brew all no-op when already done. Four things to know:
   even after you ran it; `codegraph upgrade` also runs every time. `--agents none`
   skips both.
 - **Removing a manifest entry does not uninstall it.** Agent projection is
-  add-only: drop a marketplace, plugin, MCP server or pi package from
+  add-only: drop a marketplace, plugin, MCP server or agent extension from
   `platform/installers/agents.py` and the machines that already applied it keep
   it. Uninstall there by hand, once.
 - **Disk is what accumulates, not installs.** Each changed `flake.lock` leaves a
@@ -488,14 +488,18 @@ bootstrap drive it — it detects the host and re-runs the post-HM steps too
 
 ## Coding agents
 
-Three agents — **Claude Code**, **Codex CLI** and **pi** — are provisioned from one
-in-repo manifest (`platform/installers/agents.py`) and applied with each agent's own
-CLI. What the agents *have* (marketplaces, plugins, MCP servers, pi extensions) is
-a reviewed table there; what each agent *is* (model, theme, approval policy) stays
-in its own config, which the agents rewrite at runtime and nothing here touches.
-Cross-agent instructions live once, in `~/.agents/AGENTS.md`, which Codex reads
-directly and Claude imports from its thin `~/.claude/CLAUDE.md` shell. Design
-record:
+Three agents — **Claude Code**, **Codex CLI** and **omp** (oh-my-pi) — are
+provisioned from one in-repo manifest (`platform/installers/agents.py`) and applied
+with each agent's own CLI. What the agents *have* (marketplaces, plugins, MCP
+servers) is a reviewed table there; what each agent *is* (model, theme, approval
+policy) stays in its own config, which the agents rewrite at runtime and nothing
+here touches. Cross-agent instructions live once, in `~/.agents/AGENTS.md`, which
+Codex and omp read directly and Claude imports from its thin `~/.claude/CLAUDE.md`
+shell. omp replaces the pi agent (ADR-0011 update log, 2026-08-06) and is
+installed as a Nix package from the `llm-agents-nix` flake input
+(`home/packages.nix`); its config is deliberately not Home-Manager-managed —
+`~/.omp` is a symlinked staging root and plugins go through omp's own interface.
+Design record:
 [ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md).
 
 ```bash
@@ -519,8 +523,8 @@ dotfiles-postsetup    # needs a TTY; self-removes on success
 
 It offers to authenticate [Smithery](https://smithery.ai/) and add your namespace's
 MCP endpoint to Claude, then installs the Lark CLI — each step skippable, nothing
-fatal. Marketplaces, plugins, MCP servers and pi packages are *not* here: they are
-applied unattended during the bootstrap. Details:
+fatal. Marketplaces, plugins, MCP servers and omp's native MCP config are *not*
+here: they are applied unattended during the bootstrap. Details:
 [platform/README.md](platform/README.md#post-login-setup-smithery--lark).
 
 ## China mirrors

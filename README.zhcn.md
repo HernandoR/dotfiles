@@ -86,7 +86,7 @@ exec ~/.nix-profile/bin/zsh -l
 | `--network CN`    | 为 Nix、pypi/uv 和 rustup 启用中国（CERNET）镜像。 |
 | `--system <list>` | 安装可选的 Linux 系统组件（`all` = 全部）。        |
 | `--host NAME`     | 强制使用指定的 flake host，而非自动检测。          |
-| `--agents <list>` | 要装哪些 coding agent：`claude,codex,pi` / `all`（默认）/ `none`。 |
+| `--agents <list>` | 要装哪些 coding agent：`claude,codex,omp` / `all`（默认）/ `none`。 |
 | `--no-claude`     | 已废弃，等价于 `--agents none`。                   |
 
 | 环境变量                    | 效果                                                                                                                                                                                                                                                                                                                            |
@@ -212,7 +212,7 @@ mise up                              # mise 工具，在声明的范围内升级
   你已经跑过，`dotfiles-postsetup` 还是会再次出现；`codegraph upgrade` 也每次都跑。
   `--agents none` 可跳过这两者。
 - **从清单里删掉条目不会卸载它。** agent 投影是只增不减的：把某个 marketplace、
-  插件、MCP 服务器或 pi 包从 `platform/installers/agents.py` 删掉，已经应用过的
+  插件、MCP 服务器或 agent 扩展从 `platform/installers/agents.py` 删掉，已经应用过的
   机器仍然留着它——需要在那台机器上手工卸载一次。
 - **累积的是磁盘占用，而不是重复安装。** 每次 `flake.lock` 变动都会留下一代
   generation，`*.backup` 也从不自动删除——用上面的
@@ -458,12 +458,15 @@ host，并把 post-HM 的步骤也重跑一遍（`./bootstrap.sh --dry-run --ver
 
 ## Coding agents
 
-三个 agent——**Claude Code**、**Codex CLI** 和 **pi**——都由仓库里的同一份清单
-（`platform/installers/agents.py`）provision，并用各自的 CLI 应用。agent *拥有什么*
-（marketplace、插件、MCP 服务器、pi 扩展）是那份可评审的表；agent *是什么*
+三个 agent——**Claude Code**、**Codex CLI** 和 **omp**（oh-my-pi）——都由仓库里的
+同一份清单（`platform/installers/agents.py`）provision，并用各自的 CLI 应用。agent
+*拥有什么*（marketplace、插件、MCP 服务器）是那份可评审的表；agent *是什么*
 （模型、主题、审批策略）留在它自己的配置里——那些文件由 agent 在运行时自行重写，
-这里绝不去碰。跨 agent 的指令只有一份，放在 `~/.agents/AGENTS.md`：Codex 直接读它，
-Claude 通过薄壳 `~/.claude/CLAUDE.md` 导入。设计记录：
+这里绝不去碰。跨 agent 的指令只有一份，放在 `~/.agents/AGENTS.md`：Codex 和 omp
+直接读它，Claude 通过薄壳 `~/.claude/CLAUDE.md` 导入。omp 取代了 pi
+（ADR-0011 update log，2026-08-06），并以 Nix 包形式来自 `llm-agents-nix`
+flake input（`home/packages.nix`）；它的配置刻意不由 Home Manager 管理——
+`~/.omp` 只是符号链接的 staging 根，插件通过 omp 自己的接口安装。设计记录：
 [ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)。
 
 ```bash
@@ -486,7 +489,8 @@ dotfiles-postsetup    # 需要 TTY；成功后自删除
 
 它会询问是否认证 [Smithery](https://smithery.ai/) 并把你的 namespace MCP 端点加到
 Claude，然后安装 Lark CLI——每一步都可跳过，任一步失败都不影响其余。marketplace、
-插件、MCP 服务器和 pi 包**不在**这里：它们在 bootstrap 期间就已无人值守地应用完了。
+插件、MCP 服务器和 omp 的原生 MCP 配置**不在**这里：它们在 bootstrap 期间就已
+无人值守地应用完了。
 细节：[platform/README.md](platform/README.md#post-login-setup-smithery--lark)。
 
 ## 中国镜像

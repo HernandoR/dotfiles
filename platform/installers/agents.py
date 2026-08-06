@@ -1,7 +1,8 @@
 """The multi-agent capability manifest and its per-agent projection (ADR-0011).
 
 Three coding agents are provisioned from this one file: **Claude Code**, **Codex
-CLI** and **pi**. ADR-0011 partitions their configuration into three planes and
+CLI** and **omp** (oh-my-pi, the pi fork). ADR-0011 partitions their configuration
+into three planes and
 treats each differently — this module implements ① and ②, and deliberately never
 touches ③:
 
@@ -10,15 +11,16 @@ touches ③:
   is a thin shell that imports it (Claude Code does not read ``AGENTS.md``).
   Standing rule: nothing cross-agent may be written into the Claude shell.
 - **② capability — one manifest, projected by each agent's own CLI.** The
-  ``MARKETPLACES`` / ``PLUGINS`` / ``MCP_SERVERS`` / ``PI_PACKAGES`` tables below
+  ``MARKETPLACES`` / ``PLUGINS`` / ``MCP_SERVERS`` tables below
   are the single reviewed source for what the agents *have*; they are applied with
-  ``claude plugin install``, ``claude mcp add``, ``codex mcp add``, ``pi install``.
-  Letting each tool write its own file is what keeps this projection from fighting
-  the runtime writes below.
+  ``claude plugin install``, ``claude mcp add``, ``codex mcp add``, and — for
+  omp, which is a first-class MCP client — an add-only merge into
+  ``~/.omp/agent/mcp.json``. Letting each tool write its own file is what keeps
+  this projection from fighting the runtime writes below.
 - **③ preference — not unified.** Model, theme, approval policy and sandbox stay
   per-agent and are never written from here. All three agents rewrite their own
   config at runtime (Claude ``/model``+``/config``, Codex ``/model``,
-  pi ``/settings``), which is also why none of these files can be a Home Manager
+  omp ``/settings``), which is also why none of these files can be a Home Manager
   store link (ADR-0009 Tier A is excluded by construction, not by preference).
 
 **Projection is add-only** (ADR-0011, Consequences): deleting an entry here does
@@ -34,8 +36,18 @@ to act on both (ADR-0011 update log, 2026-08-05):
   plugin entries target Codex too. The dual-track skills decision itself is
   unchanged — marketplaces stay marketplace-managed, loose skills stay in
   ``~/.agents/skills`` — it is only the *reach* of the marketplace track that grew.
-- **pi reads a global ``AGENTS.md``** under its agent dir, so it no longer abstains
-  from plane ①: ``~/.pi/agent/AGENTS.md`` links to the shared source like Codex's.
+- **omp replaced pi in the third slot, on the owner's call (2026-08-06; ADR-0011
+  update log).** omp is pi's fork with MCP, sub-agents, a browser tool and
+  Claude-plugin skills discovery built in, so the whole pi extension set
+  (``pi-claude-marketplace`` / ``pi-mcp-adapter`` / ``pi-tinyfish`` /
+  ``pi-subagents``) retired: the projection shrank to the shared-source links and
+  an MCP merge into ``~/.omp/agent/mcp.json``. omp's *binary* is declarative —
+  the ``omp`` package from the ``llm-agents-nix`` flake input (home/packages.nix;
+  the HM switch places it in ``~/.nix-profile/bin``) — but its *config* is not:
+  ``~/.omp`` is an ADR-0009 Tier-B out-of-store staging link and everything
+  inside it is either projected from here or written by omp itself. It reads a
+  user-level ``AGENTS.md`` from its agent dir natively (priority 100), so
+  ``~/.omp/agent/AGENTS.md`` links to the shared source like Codex's.
 """
 
 import json
@@ -62,10 +74,14 @@ HOME = pathlib.Path.home()
 AGENTS_DIR = HOME / ".agents"
 SHARED_INSTRUCTIONS = AGENTS_DIR / "AGENTS.md"
 SHARED_SKILLS = AGENTS_DIR / "skills"
-# Tool-agnostic MCP config. Read by pi through `pi-mcp-adapter` (precedence 2 of
-# its 6 sources); see PiAgent.project for why this file, and not pi's own config,
-# is where pi's half of MCP_SERVERS lands.
-SHARED_MCP = AGENTS_DIR / "mcp.json"
+# omp's user-level MCP config. omp is a first-class MCP client and reads this
+# file natively (native provider, user scope) — the pi-mcp-adapter that used to
+# stand between the manifest and pi's MCP is gone with pi. OMP itself rewrites
+# this file via its `/mcp` slash commands, so the projection here is an add-only
+# merge (see write_omp_mcp).
+OMP_MCP = HOME / ".omp" / "agent" / "mcp.json"
+OMP_MCP_SCHEMA = ("https://raw.githubusercontent.com/can1357/oh-my-pi/main/"
+                  "packages/coding-agent/src/config/mcp-schema.json")
 
 SHARED_INSTRUCTIONS_SEED = """\
 # AGENTS.md — shared agent instructions
@@ -136,22 +152,13 @@ class McpServer:
 
     def block(self):
         """The server as the standard ``mcpServers`` JSON block (what
-        SHARED_MCP holds, and the shape every MCP host but Codex uses)."""
+        OMP_MCP holds, and the shape every MCP host but Codex uses)."""
         if self.url:
             return {"url": self.url}
         block = {"command": self.command, "args": self.args}
         if self.env:
             block["env"] = self.env
         return block
-
-
-class PiPackage:
-    """A pi package (``pi install <spec>``); recorded by pi into its own
-    settings.json, which is exactly why it is projected by command."""
-
-    def __init__(self, spec, note=""):
-        self.spec = spec
-        self.note = note
 
 
 # Marketplaces — all four that the reference host actually has, and both agents
@@ -185,7 +192,8 @@ PLUGINS = (
     Plugin("implement", "agent-skillset", agents=BOTH_MARKETS),
     Plugin("dev_loop", "agent-skillset", agents=BOTH_MARKETS,
            note="its hooks are the only non-skill content in agent-skillset; Codex has a "
-                "hook engine, pi's bridge documents partial support"),
+                "hook engine, omp surfaces the skills through its Claude-plugin "
+                "discovery and hook support is best-effort"),
     Plugin("fetch_external_knowledge", "agent-skillset", agents=BOTH_MARKETS),
     Plugin("astral", "astral-sh", agents=BOTH_MARKETS),
     Plugin("worktrunk", "worktrunk", agents=BOTH_MARKETS),
@@ -193,20 +201,20 @@ PLUGINS = (
 )
 
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
-# Claude via `claude mcp add`, Codex via `codex mcp add`, and pi via SHARED_MCP
-# (which is what makes pi-mcp-adapter worth installing).
+# Claude via `claude mcp add`, Codex via `codex mcp add`, and omp via OMP_MCP
+# (it is a first-class MCP client, so no adapter is needed).
 MCP_SERVERS = (
     McpServer(
-        "codegraph", agents=("claude", "codex", "pi"),
+        "codegraph", agents=("claude", "codex", "omp"),
         command="codegraph", args=["serve", "--mcp"], delegated=True,
         note="code-intelligence graph; `codegraph install` wires Claude + Codex itself "
-             "(and writes Claude's auto-allow list), so only pi is projected from here",
+             "(and writes Claude's auto-allow list), so only omp is projected from here",
     ),
     McpServer(
-        "agentmemory", agents=("codex", "pi"),
+        "agentmemory", agents=("codex", "omp"),
         command="npx", args=["-y", "@agentmemory/mcp"],
         env={"AGENTMEMORY_URL": "http://localhost:3111"},
-        note="ADR-0011 wires the memory backend to pi + Codex ONLY — Claude keeps its "
+        note="ADR-0011 wires the memory backend to omp + Codex ONLY — Claude keeps its "
              "built-in file memory until this backend proves itself in real use. The shim "
              "exposes the full tool surface only when it can reach the local daemon, hence "
              "the explicit URL (the daemon is home/agentmemory.nix)",
@@ -217,31 +225,33 @@ MCP_SERVERS = (
     # ask `smithery namespace show`.
 )
 
-# pi extensions. pi has no marketplaces and no MCP of its own, so its whole
-# capability surface is packages (ADR-0011, "pi extension set").
-PI_PACKAGES = (
-    PiPackage("npm:pi-claude-marketplace",
-              note="skills bridge: lets pi read the Claude marketplaces above. dev_loop's "
-                   "hooks fall under its documented partial hook support and are expected "
-                   "to degrade — not a defect to chase"),
-    PiPackage("npm:pi-mcp-adapter",
-              note="MCP for pi; without it pi would be the one agent unable to reach any "
-                   "declared MCP server, and MCP_SERVERS would not be a three-way single "
-                   "point. Reads SHARED_MCP"),
-    PiPackage("npm:pi-tinyfish",
-              note="web search — chosen over pi-websearch to avoid a provider credential "
-                   "on intranet hosts"),
-    PiPackage("npm:pi-subagents",
-              note="sub-agent delegation, pi's equivalent of Claude's native agents"),
-)
+# --- omp capability surface (the retired pi extension set) -------------------
+# omp supersedes every pi package natively, so there is no package tuple to
+# project (ADR-0011 update log, 2026-08-06):
+#
+# - pi-claude-marketplace  -> omp's `claude` / `claude-plugins` discovery
+#                             providers read installed Claude marketplaces and
+#                             plugins for skills, slash commands and MCP servers.
+# - pi-mcp-adapter         -> omp is a first-class MCP client; the manifest's
+#                             servers land in ~/.omp/agent/mcp.json (OMP_MCP).
+# - pi-tinyfish            -> omp ships a native browser tool (no provider
+#                             credential, which was the original rationale for
+#                             choosing tinyfish over a keyed search extension).
+# - pi-subagents           -> omp has native sub-agents/custom agents
+#                             (~/.omp/agent/agents/ and .omp/agents/).
+#
+# If a capability is genuinely missing later, add it here as an `omp install
+# <npm-spec>` extension (omp preserves pi's extension API), not as a per-machine
+# command.
 
 # --- install channels --------------------------------------------------------
-# All three CLIs use their official installers (ADR-0011, "Install channels"):
-# versions stay outside git so each tool's self-update keeps working, and
-# home/mise.nix is untouched. This is the deliberate inverse of the mise-managed
-# choice made for larksuite/smithery.
+# claude and codex use their official installers (ADR-0011, "Install channels"):
+# versions stay outside git so each tool's self-update keeps working. omp is the
+# deliberate exception — the owner asked for a Nix install, so its binary is the
+# `omp` package from the `llm-agents-nix` flake input (home/packages.nix), built
+# by numtide and substitutable from cache.numtide.com (flake.nix nixConfig).
+# Binary declarative, config not — see OmpAgent.
 CODEX_INSTALLER = "https://chatgpt.com/codex/install.sh"
-PI_NPM_PACKAGE = "@earendil-works/pi-coding-agent"
 AGENTMEMORY_NPM_PACKAGE = "@agentmemory/agentmemory"
 # launchd label / systemd unit name of the memory daemon declared in
 # home/agentmemory.nix. Home Manager owns the unit (a service file is never
@@ -249,7 +259,7 @@ AGENTMEMORY_NPM_PACKAGE = "@agentmemory/agentmemory"
 # once the binary exists is this layer's job, because the HM switch runs first.
 AGENTMEMORY_SERVICE = "agentmemory"
 # Agent ids that `codegraph install --target` accepts (a bad id makes it print the
-# list). pi is not one of them — it gets codegraph through SHARED_MCP instead.
+# list). omp is not one of them — it gets codegraph through OMP_MCP instead.
 CODEGRAPH_TARGETS = ("claude", "codex")
 
 
@@ -273,8 +283,8 @@ def _npm(ctx):
     ``~/.local/share/mise/installs/…``, which reaches PATH only through mise's
     *shell* integration — never in this process. On a machine where the operator's
     shell has mise activated the plain lookup happens to work; on a fresh one it
-    always misses, which silently skipped pi and agentmemory entirely (found on a
-    clean devpod bootstrap, 2026-08-05). So ask mise where npm is.
+    always misses, which silently skipped agentmemory entirely (found on a clean
+    devpod bootstrap, 2026-08-05). So ask mise where npm is.
     """
     if _NPM:
         return _NPM[0]
@@ -292,7 +302,7 @@ def _npm(ctx):
             npm = "npm"
         else:
             logger.warning("npm not resolvable via PATH or `mise which npm`; "
-                           "skipping the npm-installed agents (pi, agentmemory)")
+                           "skipping the npm-installed agent (agentmemory)")
     _NPM.append(npm)
     return npm
 
@@ -310,8 +320,8 @@ _NPM_GLOBAL_BIN = []  # one-slot cache: `npm prefix -g` is a node start-up per c
 
 def _npm_global_bin(ctx):
     """``<npm global prefix>/bin`` — where ``npm install -g`` puts binaries under
-    the mise node. Needed because this process installs a tool and then *uses* it
-    (`pi install …`), and mise only shims the tools its own config declares."""
+    the mise node. Needed because this process installs agentmemory and then
+    *uses* it, and mise only shims the tools its own config declares."""
     if _NPM_GLOBAL_BIN:
         return _NPM_GLOBAL_BIN[0]
     npm = _npm(ctx)
@@ -328,14 +338,14 @@ def ensure_node_on_path(ctx):
 
     Resolving npm by absolute path is not enough, because the *children* need
     node too: npm runs a dependency's ``postinstall`` as ``sh -c node …``, and the
-    CLIs installed here (``pi``, ``agentmemory``) are node scripts behind a
-    ``#!/usr/bin/env node`` shebang. On a clean pod both failed with
+    CLI installed here (``agentmemory``) is a node script behind a
+    ``#!/usr/bin/env node`` shebang. On a clean pod it failed with
     ``node: not found`` until this existed.
 
     Same idea as ``Ctx._extend_path`` for ~/.local/bin: this process installs
     tools and then uses them, so it needs the PATH the login shell would have. It
     also means npm's global bin (the mise node's own bin dir) is on PATH, so a
-    freshly installed ``pi`` resolves by name.
+    freshly installed ``agentmemory`` resolves by name.
     """
     npm = _npm(ctx)
     if not npm or npm == "npm":
@@ -348,8 +358,10 @@ def ensure_node_on_path(ctx):
 
 
 def _resolve_bin(ctx, name):
-    """Find a freshly npm-installed binary. ``shutil.which`` first (the usual
-    case), then the npm global bin dir, which is not on this process' PATH."""
+    """Find a freshly installed binary. ``shutil.which`` first (the usual case),
+    then the npm global bin dir (not on this process' PATH), then a
+    mise-managed tool via ``mise which`` (omp only as a migration belt — its
+    binary is a home.packages nix package now, so the HM switch is the channel)."""
     found = shutil.which(name)
     if found:
         return found
@@ -358,6 +370,27 @@ def _resolve_bin(ctx, name):
         candidate = pathlib.Path(bin_dir) / name
         if candidate.is_file():
             return str(candidate)
+    mise_resolved = _mise_which(ctx, name)
+    if mise_resolved:
+        return mise_resolved
+    return None
+
+
+def _mise_which(ctx, name):
+    """Resolve a mise-managed binary (``mise which <name>``), or None.
+
+    Same reachability problem as ``_npm``: mise's shims only land on PATH through
+    the *shell* integration, never in this process. `mise which` resolves the
+    installed binary even when its dir is off this process' PATH, and is a cheap
+    non-zero exit for tools mise does not manage (claude, codex).
+    """
+    mise = shutil.which("mise")
+    if not mise:
+        return None
+    out = ctx.run_command([mise, "which", name], capture_output=True, check=False)
+    resolved = _stdout(out)
+    if resolved and pathlib.Path(resolved).is_file():
+        return resolved
     return None
 
 
@@ -440,13 +473,13 @@ def _absorb_into_target(link, target):
     return True
 
 
-def _shared_mcp_is_usable():
-    """Read-only: can ``write_shared_mcp`` merge into the existing file, or would
+def _omp_mcp_is_usable():
+    """Read-only: can ``write_omp_mcp`` merge into the existing file, or would
     it have to move it aside? The plan has to say so before anything runs."""
-    if not SHARED_MCP.exists():
+    if not OMP_MCP.exists():
         return True
     try:
-        return isinstance(json.loads(SHARED_MCP.read_text()), dict)
+        return isinstance(json.loads(OMP_MCP.read_text()), dict)
     except (OSError, ValueError):
         return False
 
@@ -473,46 +506,45 @@ def ensure_shared_root(ctx):
         logger.info("seeded the shared instruction source -> %s", SHARED_INSTRUCTIONS)
 
 
-def write_shared_mcp(ctx):
-    """Project every ``pi``-targeting MCP server into ``~/.agents/mcp.json``.
+def write_omp_mcp(ctx):
+    """Project every ``omp``-targeting MCP server into ``~/.omp/agent/mcp.json``.
 
-    Why a file and not a command: pi has no MCP CLI of its own, and
-    ``pi-mcp-adapter``'s ``init`` only *discovers host configs* — it would import
-    whatever Claude/Codex happen to have, i.e. re-import drift instead of
-    projecting the manifest. This file is the adapter's documented tool-agnostic
-    source, no agent ever rewrites it (the adapter persists its own overrides in
-    ``~/.pi/agent/mcp.json`` and explicitly never writes back here), so writing it
-    is not the config merge-patching ADR-0011 declined.
-
-    Servers we do not declare are preserved: this stays add-only, like the rest
-    of the projection.
+    omp is a first-class MCP client and reads this file natively (native
+    provider, user scope), so no adapter stands between the manifest and omp —
+    the pi-mcp-adapter bridge retired with pi. omp itself rewrites this file via
+    its ``/mcp`` slash commands (its config writer adds the ``$schema``), which
+    is exactly why the projection is an add-only merge: declared servers are
+    updated, everything else omp (or the owner) added is kept, and an unparseable
+    file is moved aside (``.backup``) rather than discarded. Servers we do not
+    declare are preserved — this stays add-only, like the rest of the projection.
     """
-    wanted = {s.name: s.block() for s in MCP_SERVERS if "pi" in s.agents}
+    wanted = {s.name: s.block() for s in MCP_SERVERS if "omp" in s.agents}
     if ctx.dry_run:
-        logger.info("[DRY-RUN] would declare %s in %s", ", ".join(wanted) or "nothing", SHARED_MCP)
+        logger.info("[DRY-RUN] would declare %s in %s", ", ".join(wanted) or "nothing", OMP_MCP)
         return
     data = {}
-    if SHARED_MCP.exists():
+    if OMP_MCP.exists():
         try:
-            data = json.loads(SHARED_MCP.read_text())
+            data = json.loads(OMP_MCP.read_text())
         except ValueError:
             data = None
         if not isinstance(data, dict):
             # Unparseable or the wrong shape. Move it aside rather than discard it
             # — it is not ours to delete, and .backup is the one backup suffix a
             # bootstrap uses (ADR-0009).
-            backup = SHARED_MCP.with_name(SHARED_MCP.name + ".backup")
-            logger.warning("%s is not a JSON object; moving it to %s", SHARED_MCP, backup)
-            shutil.move(str(SHARED_MCP), str(backup))
+            backup = OMP_MCP.with_name(OMP_MCP.name + ".backup")
+            logger.warning("%s is not a JSON object; moving it to %s", OMP_MCP, backup)
+            shutil.move(str(OMP_MCP), str(backup))
             data = {}
     servers = data.get("mcpServers")
     if not isinstance(servers, dict):
         servers = {}
     servers.update(wanted)
     data["mcpServers"] = servers
-    SHARED_MCP.parent.mkdir(parents=True, exist_ok=True)
-    SHARED_MCP.write_text(json.dumps(data, indent=2) + "\n")
-    logger.info("declared %s in %s", ", ".join(sorted(wanted)), SHARED_MCP)
+    data.setdefault("$schema", OMP_MCP_SCHEMA)
+    OMP_MCP.parent.mkdir(parents=True, exist_ok=True)
+    OMP_MCP.write_text(json.dumps(data, indent=2) + "\n")
+    logger.info("declared %s in %s", ", ".join(sorted(wanted)), OMP_MCP)
 
 
 # --- the agents --------------------------------------------------------------
@@ -792,48 +824,73 @@ class CodexAgent(Agent):
             add("config", "MCP server '{}' -> codex mcp add".format(server.name))
 
 
-class PiAgent(Agent):
-    id = "pi"
-    binary = "pi"
-    description = "pi coding agent"
-    config_dir = "~/.pi"
+class OmpAgent(Agent):
+    """oh-my-pi (``omp``, can1357/oh-my-pi) — the pi fork that took pi's place
+    in the ADR-0011 toolchain (update log, 2026-08-06). Its *binary* comes from
+    the ``llm-agents-nix`` flake input (``omp`` in home/packages.nix) — the HM
+    switch places it in ``~/.nix-profile/bin`` before setup.py runs, so the
+    "install" step only checks reachability. Its *config* is deliberately NOT
+    Home-Manager-managed: ``~/.omp`` is an ADR-0009 Tier-B out-of-store staging
+    link (home/env-links.nix), plugins go through omp's own interface, and
+    nothing here generates a config file for omp.
 
-    # pi's global skills dir. Pointing it at the shared root is the same trick as
-    # Codex's; the alternative — a "skills" entry in ~/.pi/agent/settings.json —
-    # was declined because that file is exactly what pi rewrites at runtime
-    # (/settings, and `pi install` records packages into it).
-    SKILLS = HOME / ".pi" / "agent" / "skills"
-    # pi loads `AGENTS.md` (or CLAUDE.md) from its agent dir at startup — verified
-    # in pi's own README — so it does NOT abstain from plane ① after all, and one
-    # link makes the instruction source a genuine three-way single point. Disabled
-    # per-invocation with `--no-context-files`, which is pi's business, not ours.
-    INSTRUCTIONS = HOME / ".pi" / "agent" / "AGENTS.md"
+    omp supersedes the whole retired pi extension set natively (see the comment
+    above MCP_SERVERS), so the projection here is only the two shared-source
+    links and the OMP_MCP merge:
+
+    - ``~/.omp/agent/AGENTS.md`` is omp's native user-level context file
+      (native provider, priority 100), so it links to the shared instruction
+      source like Codex's.
+    - ``~/.omp/agent/skills`` is omp's native user skills dir (same priority);
+      omp also reads ``~/.agents/skills`` directly through its ``agents``
+      discovery provider, so the link is a belt, not the mechanism.
+    - MCP servers land in ``~/.omp/agent/mcp.json``, which omp reads natively
+      (and rewrites itself via ``/mcp`` — hence the add-only merge).
+    """
+
+    id = "omp"
+    binary = "omp"
+    description = "oh-my-pi (omp)"
+    config_dir = "~/.omp"
+
+    # omp's native user-level paths. Its settings live in ~/.omp/agent/config.yml
+    # (rewritten by /settings and the config writer) — never managed from here.
+    SKILLS = HOME / ".omp" / "agent" / "skills"
+    INSTRUCTIONS = HOME / ".omp" / "agent" / "AGENTS.md"
 
     def install(self, ctx):
-        # npm's default prefix (under the mise node), so `pi update --self` keeps
-        # working — the breakage in earendil-works/pi#3942 is specific to custom
-        # prefixes, which is what mise's own npm backend would have produced.
-        _npm_install_global(ctx, PI_NPM_PACKAGE, self.binary)
+        # After the HM switch, `~/.nix-profile/bin` is on PATH (platform/lib.sh
+        # adds the generation's home-path/bin) and omp resolves like any other
+        # home.packages entry. `_mise_which` is only a migration belt for
+        # machines that briefly had the mise-managed omp.
+        found = shutil.which(self.binary) or _mise_which(ctx, self.binary)
+        if found:
+            logger.info("omp already on PATH from home.packages (%s)", found)
+            return
+        if ctx.dry_run:
+            logger.info("[DRY-RUN] would rely on the HM switch having placed omp "
+                        "in ~/.nix-profile/bin (home/packages.nix, llm-agents-nix input)")
+            return
+        logger.warning("omp not resolvable — is 'omp' in home/packages.nix via the "
+                       "llm-agents-nix flake input, and did the HM switch run first?")
 
     def project(self, ctx):
         _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS)
         _link(ctx, self.SKILLS, SHARED_SKILLS)
-        write_shared_mcp(ctx)
-        pi = self.cli(ctx)
-        if not pi:
-            if not ctx.dry_run:
-                logger.warning("pi CLI not resolvable; skipping its package projection")
-            return
-        for package in PI_PACKAGES:
-            ctx.run_command([pi, "install", package.spec], check=False, stdin_devnull=True)
+        write_omp_mcp(ctx)
+        # No extension packages: omp covers the retired pi extension set natively
+        # (MCP client, sub-agents, browser, Claude-plugin skills discovery).
 
     def plan(self, ctx, add):
-        if shutil.which(self.binary):
-            add("install", "pi already present — left as is")
+        if shutil.which(self.binary) or _mise_which(ctx, self.binary):
+            add("install", "omp (oh-my-pi) already on PATH from home.packages — left as is")
         else:
-            add("install", "pi via npm -g ({}), node from mise".format(PI_NPM_PACKAGE))
-        add("install", "{} pi package(s): {}".format(
-            len(PI_PACKAGES), ", ".join(p.spec for p in PI_PACKAGES)))
+            add("install", "omp (oh-my-pi) via nix — the llm-agents-nix flake input's "
+                           "'omp' package in home/packages.nix, placed in ~/.nix-profile/bin "
+                           "by the HM switch (config not HM-managed)")
+        add("config", "no omp extension packages projected — native MCP client, native "
+                      "sub-agents, native browser, and Claude-plugin skills discovery "
+                      "cover the retired pi extension set")
         for link, target in ((self.INSTRUCTIONS, SHARED_INSTRUCTIONS), (self.SKILLS, SHARED_SKILLS)):
             if _link_is_current(link, target):
                 continue
@@ -841,21 +898,23 @@ class PiAgent(Agent):
             if link.exists() and not link.is_symlink():
                 add("backup", "{} -> {}.backup (it is a real file/dir, not a link)".format(
                     link, link.name))
-        pi_servers = [s.name for s in MCP_SERVERS if "pi" in s.agents]
-        add("config", "{} <- MCP server(s) {} (read by pi-mcp-adapter)".format(
-            SHARED_MCP, ", ".join(pi_servers)))
-        if not _shared_mcp_is_usable():
+        omp_servers = [s.name for s in MCP_SERVERS if "omp" in s.agents]
+        add("config", "{} <- MCP server(s) {} (omp reads it natively)".format(
+            OMP_MCP, ", ".join(omp_servers)))
+        if not _omp_mcp_is_usable():
             add("backup", "{} -> {}.backup (it is not a JSON object, so it cannot be "
-                          "merged into)".format(SHARED_MCP, SHARED_MCP.name))
+                          "merged into)".format(OMP_MCP, OMP_MCP.name))
 
 
 # --- agentmemory (a capability, not an agent) --------------------------------
 
 
 def _agentmemory_wanted(ids):
-    """agentmemory is wired to pi and Codex only (ADR-0011); Claude keeps its
-    built-in file memory, so a Claude-only run installs nothing."""
-    return bool({"codex", "pi"} & set(ids))
+    """agentmemory is wired to omp and Codex only (ADR-0011); Claude keeps its
+    built-in file memory, so a Claude-only run installs nothing. (omp's own
+    memory backends — off/local/hindsight — are a possible future replacement,
+    not the current wiring.)"""
+    return bool({"codex", "omp"} & set(ids))
 
 
 def install_agentmemory(ctx):
@@ -964,7 +1023,7 @@ def plan_items(ctx, ids, add):
         if shutil.which("agentmemory"):
             add("install", "agentmemory already present — left as is")
         else:
-            add("install", "agentmemory via npm -g ({}) — local SQLite memory for pi + Codex"
+            add("install", "agentmemory via npm -g ({}) — local SQLite memory for omp + Codex"
                 .format(AGENTMEMORY_NPM_PACKAGE))
         add("config", "start the '{}' user service on :3111 (unit declared by home/agentmemory.nix)"
             .format(AGENTMEMORY_SERVICE))
@@ -989,9 +1048,10 @@ def main():
         print("  {:14} {:34} -> {} ({})".format(
             server.name, server.url or " ".join([server.command] + server.args),
             ",".join(server.agents), where))
-    print("\npi packages")
-    for package in PI_PACKAGES:
-        print("  {}".format(package.spec))
+    print("\nomp (oh-my-pi)")
+    print("  extension packages: none projected — native MCP client, native sub-agents,")
+    print("  native browser, and Claude-plugin skills discovery cover the retired pi set")
+    print("  MCP servers -> {} (read natively; omp rewrites it via /mcp)".format(OMP_MCP))
 
 
 if __name__ == "__main__":
