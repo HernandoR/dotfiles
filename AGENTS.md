@@ -79,6 +79,7 @@ just show-host           # which flake host resolves here (and pure vs impure)
 just build               # build the activation package, change nothing
 just diff                # build + diff-closures against the live generation
 just switch              # build + activate (HOME_MANAGER_BACKUP_EXT=backup)
+just reset-hard          # move managed $HOME paths to ~/dotfiles_backup/<stamp>/, then activate
 just check               # nix flake check (named hosts; `generic` is invisible)
 just update [input]      # nix flake update
 just rollback            # step back one generation

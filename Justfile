@@ -50,6 +50,87 @@ switch:
     HOME_MANAGER_BACKUP_EXT=backup "$out"/activate
     echo "activated: $out — run 'exec zsh -l' to pick up the new PATH/env"
 
+# Start over from the repo: move every $HOME path this generation would own into
+# one timestamped backup, then activate onto the cleared ground.
+#
+# `switch` renames a file in the way to <name>.backup, which scatters backups
+# through $HOME and — worse — collides with the .backup left by a previous cycle,
+# aborting the whole activation (ADR-0009 update log). Moving the paths away
+# first means HM finds nothing in the way at all, so nothing is renamed and
+# nothing can collide.
+#
+# Recoverable by construction: everything is MOVED, never deleted, into
+# ~/dotfiles_backup/<stamp>/ under its original $HOME-relative name. Note it does
+# not sweep pre-existing *.backup files — those are a previous cycle's business.
+#
+# An env-linked path (~/.claude, ~/.ssh, …) is a symlink, so moving it takes the
+# link and leaves the data in envLinks.stateRoot untouched; the activation just
+# relinks it.
+[doc('Back up every managed $HOME path to ~/dotfiles_backup/<stamp>/, then activate.')]
+reset-hard:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$(just host='{{ host }}' build)"
+    dest="$HOME/dotfiles_backup/$(date +%Y_%m_%d_%H%M%S)"
+
+    # What HM will own: every leaf of the generation's home-files tree. Leaves are
+    # files and symlinks — a whole-dir env link is itself a symlink, so this never
+    # descends into one. `-print` + stripping "./" rather than GNU's `-printf`,
+    # which BSD/macOS find does not have.
+    present=()
+    while IFS= read -r p; do
+      rel="${p#./}"
+      if [ -e "$HOME/$rel" ] || [ -L "$HOME/$rel" ]; then present+=("$rel"); fi
+    done < <(cd "$out/home-files" && find . -mindepth 1 \( -type f -o -type l \) -print | sort)
+
+    # ADR-0009 recorded this hazard for a first bootstrap; this recipe is the other
+    # way to reach it. If ~/.ssh is still a REAL dir holding authorized_keys while
+    # the persistent target has none, moving it aside and linking to the empty
+    # target severs inbound SSH to the machine you are provisioning.
+    state="$(nix eval --raw {{ impure }} '.#homeConfigurations."{{ host }}".config.envLinks.stateRoot' 2>/dev/null || true)"
+    if [ -d "$HOME/.ssh" ] && [ ! -L "$HOME/.ssh" ] && [ -e "$HOME/.ssh/authorized_keys" ] \
+       && [ -n "$state" ] && [ ! -e "$state/.ssh/authorized_keys" ]; then
+      echo "refusing: ~/.ssh has authorized_keys but $state/.ssh does not." >&2
+      echo "seed the target first — mkdir -p '$state/.ssh' && cp -a ~/.ssh/. '$state/.ssh/' — or" >&2
+      echo "run this from a session that does not depend on SSH to this host." >&2
+      exit 1
+    fi
+
+    # One plan, one clearance (ADR-0010) — this is the only recipe that moves your
+    # files, so it says exactly which ones before touching any.
+    echo "==> reset-hard — nothing has moved yet"
+    echo "  host      {{ host }}"
+    echo "  activate  $out"
+    echo "  backup    $dest"
+    echo
+    if [ "${#present[@]}" -eq 0 ]; then
+      echo "  nothing to move — no managed path exists in \$HOME yet"
+    else
+      echo "  will move aside (${#present[@]}, renamed under the backup dir, never deleted):"
+      printf '    - ~/%s\n' "${present[@]}"
+    fi
+    echo
+    # Deliberately NOT bootstrap.sh's "no terminal -> proceed" rule. This is the
+    # one recipe that moves your files, and a non-interactive caller (script, CI,
+    # an agent) has no way to answer — so silence must mean stop, not yes. Say
+    # DF_ASSUME_YES=1 to mean it.
+    if [ "${DF_ASSUME_YES:-}" != "1" ]; then
+      if [ ! -t 0 ]; then
+        echo "refusing: not a terminal and DF_ASSUME_YES is unset — re-run with DF_ASSUME_YES=1 to proceed" >&2
+        exit 1
+      fi
+      read -r -p "? Move these and activate? [y/N] " ans
+      case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "aborted — nothing moved"; exit 1 ;; esac
+    fi
+
+    for rel in ${present[@]+"${present[@]}"}; do
+      mkdir -p "$dest/$(dirname "$rel")"
+      mv "$HOME/$rel" "$dest/$rel"
+    done
+    HOME_MANAGER_BACKUP_EXT=backup "$out"/activate
+    echo "activated: $out"
+    echo "previous state: $dest — run 'exec zsh -l' to pick up the new PATH/env"
+
 # What would change: build, then diff the closure against the live generation.
 diff:
     #!/usr/bin/env bash

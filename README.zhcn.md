@@ -162,8 +162,8 @@ mise use -g <tool>@<ver>     # 仅当 home/mise.nix 新增了工具时需要—�
 
 **`just` 配方。** `Justfile` 给本节的命令起了名字，host、`--impure`、`-b backup`
 都不用你自己记。直接运行 `just` 列出全部；常用的是 `build`、`diff`、`switch`、
-`check`、`update`、`news`、`packages`、`generations`、`rollback`、`expire`、
-`gc`、`plan`。下文仍然写出每个配方底层跑的命令——需要变体时、或首次 switch 之前
+`reset-hard`、`check`、`update`、`news`、`packages`、`generations`、`rollback`、
+`expire`、`gc`、`plan`。下文仍然写出每个配方底层跑的命令——需要变体时、或首次 switch 之前
 （`just` 由 mise 提供，那时还不在 PATH 上）直接用原始命令。
 
 **用哪个 host？** 如果 `flake.nix` 里定义了你的 hostname 就用它，否则用 OS/架构
@@ -183,6 +183,27 @@ nix store diff-closures /nix/var/nix/profiles/per-user/"$USER"/home-manager <上
 
 如果结果不对：`home-manager switch --rollback`——见
 [在新机器上试用（以及如何恢复）](#在新机器上试用以及如何恢复)。
+
+**从仓库状态重来一遍**——当 `$HOME` 已经跑偏，或者 switch 总是因为上一轮遗留的
+`.backup` 文件而中止时：
+
+```bash
+just reset-hard              # 把所有被管理的路径挪走，然后激活
+```
+
+它会把这一代 generation 将要拥有的每个 `$HOME` 路径，按各自相对 `$HOME` 的原名
+收进同一个 `~/dotfiles_backup/YYYY_MM_DD_HHMMSS/`，然后才激活。因为路径上已经
+什么都不剩，Home Manager 不会重命名任何东西，那个会让普通 `switch` 中止的
+`.backup` 冲突（ADR-0009）也就无从发生。
+
+所有文件都是**移动，绝不删除**——想恢复哪个，从那个带时间戳的目录里拷回来即可。
+它会先打印完整清单并只问一次（`DF_ASSUME_YES=1` 可跳过；非交互运行必须显式传这个
+变量——沉默视为拒绝而不是同意）。它不会清理已经存在的 `*.backup` 文件。
+
+被 env-link 管理的路径（`~/.claude`、`~/.ssh` 等）本身是软链接，所以挪走的是链接，
+`envLinks.stateRoot` 里的数据原封不动，激活时会重新链回去。有一条保护：如果
+`~/.ssh` 还是**真实目录**且里面有 `authorized_keys`，而持久化目标里没有，配方会
+直接拒绝，以免切断到这台机器的 SSH 登录。
 
 **升级版本**（区别于应用配置）：
 

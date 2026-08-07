@@ -173,10 +173,10 @@ mise use -g <tool>@<ver>     # only if home/mise.nix gained a tool — see below
 **The `just` recipes.** `Justfile` names the commands in this section, so the
 host, `--impure`, and `-b backup` are not yours to remember. `just` on its own
 lists them; the ones you will actually use are `build`, `diff`, `switch`,
-`check`, `update`, `news`, `packages`, `generations`, `rollback`, `expire`,
-`gc`, and `plan`. Everything below spells out what a recipe runs — reach for the
-raw command when you want a variation, or before the first switch has put `just`
-on PATH (it comes from mise).
+`reset-hard`, `check`, `update`, `news`, `packages`, `generations`, `rollback`,
+`expire`, `gc`, and `plan`. Everything below spells out what a recipe runs —
+reach for the raw command when you want a variation, or before the first switch
+has put `just` on PATH (it comes from mise).
 
 **Which host?** Your hostname if `flake.nix` defines it, else the OS/arch default
 (`platform/lib.sh:211`). Any other user — including root — uses the impure
@@ -195,6 +195,31 @@ nix store diff-closures /nix/var/nix/profiles/per-user/"$USER"/home-manager <the
 
 If the result is wrong, `home-manager switch --rollback` — see
 [Trying it on a new machine](#trying-it-on-a-new-machine-and-how-to-recover).
+
+**Starting over from the repo** — when `$HOME` has drifted, or a switch keeps
+aborting on `.backup` files left by an earlier cycle:
+
+```bash
+just reset-hard              # move every managed path aside, then activate
+```
+
+It collects every `$HOME` path the generation would own into a single
+`~/dotfiles_backup/YYYY_MM_DD_HHMMSS/`, keeping each file's `$HOME`-relative
+name, and only then activates. Because nothing is left in the way, Home Manager
+renames nothing and the `.backup` collision that aborts a plain `switch`
+(ADR-0009) cannot happen.
+
+Everything is **moved, never deleted** — recover any file by copying it back out
+of the timestamped directory. It prints the full list and asks once before
+touching anything (`DF_ASSUME_YES=1` to skip, which a non-interactive run must
+pass explicitly — silence is refusal, not consent). It does not sweep
+pre-existing `*.backup` files.
+
+An env-linked path (`~/.claude`, `~/.ssh`, …) is a symlink, so what moves is the
+link; the data in `envLinks.stateRoot` is untouched and the activation relinks
+it. One guard: if `~/.ssh` is still a **real** directory holding
+`authorized_keys` while the persistent target has none, the recipe refuses
+rather than severing inbound SSH to the machine.
 
 **Updating versions** (as opposed to applying config):
 
