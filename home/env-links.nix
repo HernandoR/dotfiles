@@ -12,6 +12,12 @@
 #   every environment wants it       -> here, in `envLinks.entries` below
 #   only this environment wants it,
 #   or the volume path differs       -> home/env-branch.nix, on the env branch
+#   it belongs to one tool's module,
+#   which also generates its seed    -> that module (home/mise.nix does this)
+#
+# `entries` merges across files, so the third case costs nothing structurally;
+# a grep for `envLinks.entries` still finds it. Prefer it only when the entry and
+# its seed content would otherwise be split apart.
 #
 # home/env-branch.nix is empty on shared branches and is the only file an env
 # branch touches, so rebasing an env branch over `main` never conflicts (see its
@@ -40,13 +46,22 @@ let
       # rather than `touch` + `chmod` so the initial content comes from `seed` in
       # one dry-run-safe command (a shell redirection would write even under
       # $DRY_RUN_CMD, since the redirect is the shell's, not the command's). An
-      # empty seed reproduces the old `touch` exactly.
-      ''[ -e ${lib.escapeShellArg (target name)} ] || $DRY_RUN_CMD install -m ${e.mode} ${seedFile name e} ${lib.escapeShellArg (target name)}'';
+      # empty seed reproduces the old `touch` exactly. `-D` creates the target's
+      # parent dirs, which a nested entry name (".config/mise/config.toml") needs
+      # and a top-level one already has; it is a GNU-ism, available on macOS too
+      # because HM puts nixpkgs coreutils on the activation PATH (the `mkdir -m`
+      # above already depends on that).
+      ''[ -e ${lib.escapeShellArg (target name)} ] || $DRY_RUN_CMD install -D -m ${e.mode} ${seedFile name e} ${lib.escapeShellArg (target name)}'';
 
-  # Store file holding an entry's initial content. Store path names may not start
-  # with a period, and the entry names all do.
+  # Store file holding an entry's initial content: either the entry's own
+  # `seedSource` (a file some other module generated) or a store file written
+  # from its `seed` string. Store path names may not start with a period, and the
+  # entry names all do.
   seedFile = name: e:
-    pkgs.writeText "env-link-seed-${lib.replaceStrings [ "." "/" ] [ "_" "_" ] name}" e.seed;
+    if e.seedSource != null then
+      e.seedSource
+    else
+      pkgs.writeText "env-link-seed-${lib.replaceStrings [ "." "/" ] [ "_" "_" ] name}" e.seed;
 
   # Repair a $HOME path that is a REGULAR FILE where a link belongs.
   #
@@ -128,6 +143,21 @@ in
               creates the target. Empty (the default) means an empty file, which
               is what most state files want. Set it for a file whose consumer
               treats empty as corrupt rather than as "nothing yet".
+            '';
+          };
+
+          seedSource = lib.mkOption {
+            type = lib.types.nullOr lib.types.path;
+            default = null;
+            description = ''
+              Same as `seed`, but taking the initial content from a file instead
+              of a string, and winning over `seed` when both are set. For content
+              another module generates — home/mise.nix hands over a TOML file
+              built from its tool list, so the tools stay a reviewed Nix attrset
+              while the config file itself is mise's to rewrite. Reading such a
+              file into `seed` with builtins.readFile would work but forces the
+              generator to be built during flake evaluation (import-from-
+              derivation); a path does not.
             '';
           };
         };

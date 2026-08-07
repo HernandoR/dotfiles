@@ -166,7 +166,8 @@ in — from upstream or from your own edit:
 git pull                     # on an env branch (prod/mewtant): rebase onto the shared branch, never merge
 just switch                  # == home-manager switch --flake .#<host> -b backup
 exec zsh -l                  # pick up the new PATH / env / completions
-just runtimes                # only if home/mise.nix gained a tool (mise install)
+mise use -g <tool>@<ver>     # only if home/mise.nix gained a tool — see below, a
+                             # switch does not push it to a machine you already set up
 ```
 
 **The `just` recipes.** `Justfile` names the commands in this section, so the
@@ -291,7 +292,7 @@ Where a new tool is written down depends on which layer owns it:
 | What you want                                                   | Write it in                                                              | Scope                                     |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------- |
 | A CLI tool that exists in nixpkgs                               | `home/packages.nix`                                                      | every host, on every switch               |
-| A runtime, or a tool that only ships via npm/cargo/go/gh-release | `home/mise.nix` (`programs.mise.globalConfig.tools`)                     | every host, after `mise install`          |
+| A runtime, or a tool that only ships via npm/cargo/go/gh-release | `home/mise.nix` (the `tools` attrset)                                    | new hosts on bootstrap; existing ones need `mise use -g` |
 | Something only one project needs                                | that project's `mise.toml`, **or** its own `flake.nix` devShell          | that directory tree                       |
 | A daemon/driver/apt-level thing (docker, cuda, llvm, …)          | `platform/installers/components.py` + `--system`                         | see [Component classification](#component-classification) |
 | A one-off experiment                                            | nothing — `nix shell nixpkgs#<pkg>`                                      | the current shell only                    |
@@ -404,13 +405,31 @@ Short names resolve through mise's registry (core/aqua/ubi); other backends are
 named explicitly: `npm:<pkg>`, `cargo:<crate>`, `go:<module>`, `pipx:<pkg>`,
 `ubi:<owner>/<repo>`.
 
-### mise — global (persist in `home/mise.nix`)
+### mise — global (two files, two owners)
 
-`~/.config/mise/config.toml` is **generated**: Home Manager symlinks it into the
-nix store, so `mise use --global …` cannot persist there (the write hits a
-read-only store path; as root it edits the store copy and the next switch
-reverts it). The global tool list lives in
-[`home/mise.nix`](home/mise.nix):
+mise's global config is **split**, because its two halves want opposite
+ownership ([ADR-0009](docs/plans/adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md)
+tiers):
+
+| File | Holds | Owner |
+| --- | --- | --- |
+| `~/.config/mise/config.toml` | the tool list | **mise.** Seeded from `home/mise.nix` the first time the target does not exist, then yours to rewrite |
+| `~/.config/mise/conf.d/zz-dotfiles.toml` | `[settings]` | Home Manager. Read-only store link, re-applied on every switch |
+
+So `mise use -g`, `mise up --bump` and `mise unuse` all work and persist — the
+real `config.toml` lives under `envLinks.stateRoot`, so those versions also
+survive container recreation.
+
+The split is what makes both true at once: within the global config, a `conf.d`
+file always **overrides** `config.toml` (mise will tell you so: `X is defined in
+conf.d/… which overrides the global config`). That is what settings want and
+exactly what tools must not have, so only `[settings]` goes there.
+
+**A tool added to `home/mise.nix` does not reach a machine that already
+bootstrapped** — the seed applies on creation only, and a switch will not touch
+your `config.toml`. Add it there with `mise use -g <tool>@<version>`; the repo
+list stays the source of truth for the *next* fresh machine, which is why new
+tools still belong in [`home/mise.nix`](home/mise.nix):
 
 ```nix
         just = "latest";
@@ -420,9 +439,10 @@ reverts it). The global tool list lives in
 ```
 
 npm-backed tools are installed with **pnpm** (`npm.package_manager = "pnpm"`,
-`home/mise.nix:21`), and pnpm blocks dependency lifecycle scripts by default. If
-a package genuinely needs its `postinstall`, approve exactly that package the way
-`@smithery/cli` does (`home/mise.nix:38`):
+`home/mise.nix:88` — a setting, hence the `conf.d` half), and pnpm blocks
+dependency lifecycle scripts by default. If a package genuinely needs its
+`postinstall`, approve exactly that package the way `@smithery/cli` does
+(`home/mise.nix:29`):
 
 ```nix
         "npm:@smithery/cli" = {
@@ -431,19 +451,27 @@ a package genuinely needs its `postinstall`, approve exactly that package the wa
         };
 ```
 
-Then switch and materialize — a declared-but-not-installed tool is not on `PATH`
-until `mise install` has run (`home/mise.nix:3-8`):
+Then, **on this machine**, add it and materialize — a declared-but-not-installed
+tool is not on `PATH` until it is installed (`home/mise.nix:60-64`):
 
 ```bash
-home-manager switch --flake .#dotfiles-debian -b backup
-mise install                     # install everything the global config declares
+mise use -g terraform@latest     # writes ~/.config/mise/config.toml and installs
 mise ls                          # what is installed / active
+just runtimes                    # == mise install: catch up anything still missing
 ```
 
-**Escape hatch for one machine only:** mise also reads
-`~/.config/mise/conf.d/*.toml`, which Home Manager does not own — a file there
-survives switches and is a legitimate place for host-local tools. The trade-off
-is the usual one: it is outside git, so no other machine gets it.
+To check the two halves are landing where they should:
+
+```bash
+mise config ls                   # both files, and which tools each contributes
+mise settings                    # resolved settings (from the conf.d half)
+```
+
+**Host-local escape hatch:** a second `~/.config/mise/conf.d/*.toml` still
+overrides everything, including the repo's settings — `conf.d` resolves
+**lexically first-wins**, and the Home-Manager-owned file is named `zz-` precisely
+so any name you pick beats it. Prefer plain `mise use -g` for host-local *tools*
+now that `config.toml` is yours; keep `conf.d` for overriding a setting.
 
 ### mise — per project
 
@@ -456,9 +484,10 @@ mise which node                # which shim/binary resolves
 ```
 
 Commit `mise.toml` in that project; project config is independent of Home
-Manager. `mise up` upgrades within the declared range (global config included,
-since it rewrites nothing); `mise up --bump` *would* rewrite the config file, so
-for global tools make that version change in `home/mise.nix` instead.
+Manager. `mise up` upgrades within the declared range, and `mise up --bump` —
+which rewrites the config file — now works on the global config too. Mirror a
+bump you want to keep into `home/mise.nix`, or the next fresh machine seeds the
+old version.
 
 ### Editing the Home Manager config
 
@@ -469,7 +498,7 @@ for global tools make that version change in `home/mise.nix` instead.
 | the prompt                                      | `home/starship.toml` (read by `home/starship.nix`)                          |
 | git settings                                    | `home/git.nix`; aliases in `home/git-aliases.conf`                          |
 | tmux                                            | `home/tmux.conf` (+ `home/tmux.nix`)                                       |
-| mise tools/settings                             | `home/mise.nix`                                                            |
+| mise settings (live), mise tool seed             | `home/mise.nix`                                                            |
 | links to writable, out-of-store paths           | `home/env-links.nix` (ADR-0009 Tier B — the set every environment wants)  |
 | the same, for one environment only              | `home/env-branch.nix` (empty on shared branches; the only file an env branch edits, so its rebases never conflict)  |
 | a new machine                                   | the `hosts` attrset in `flake.nix:17`                                       |

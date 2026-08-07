@@ -212,3 +212,59 @@ suffix, retiring `.pre-dotfiles.bak`.
   conflicts on the same history. A target outside `stateRoot` (a distributed
   binary) stays a plain `home.file` line there, deliberately outside the
   auto-seeded inventory.
+- **2026-08-07 — mise's global config is split across the tiers: settings stay
+  Tier A, the tool list becomes Tier B.** "What already lives there (shell, git,
+  tmux, starship, mise, packages) stays there" (Tier A, above) is hereby
+  **amended for mise only**: a read-only `config.toml` store link makes
+  `mise use -g`, `mise up --bump` and `mise unuse` all unusable — the same
+  runtime-writes-vs-store-link tension this ADR already recognised for Claude,
+  and the owner asked for the mise half to be resolved the other way. The
+  deferral for Claude is untouched.
+
+  mise happens to have exactly the seam this needs, and the split follows it
+  (all four facts measured against mise 2026.7.0, not read off the docs):
+
+  - mise reads **both** `~/.config/mise/config.toml` and
+    `~/.config/mise/conf.d/*.toml` as global config, and `mise use -g` writes
+    **only** `config.toml`. So `conf.d` is a place Home Manager can own without
+    taking the file mise wants to rewrite.
+  - within the global config, a `conf.d` file **always overrides**
+    `config.toml`, whatever it is named (`00-` and `zz-` behave identically);
+    mise even says so — `X is defined in conf.d/… which overrides the global
+    config`. That is right for settings and disqualifying for tools, which is
+    what forces the split rather than merely permitting it: policy
+    (`experimental`, `npm.package_manager`) goes to `conf.d` and keeps flowing
+    on every switch; the tool list goes to `config.toml` and is seeded once.
+  - *within* `conf.d`, the lexically **first** filename wins. The HM-owned file
+    is therefore named `zz-dotfiles.toml`, so the host-local `conf.d` escape
+    hatch the READMEs document still beats it.
+  - the HM module writes `config.toml` only when `programs.mise.globalConfig` is
+    non-empty (home-manager `modules/programs/mise.nix`), so leaving that option
+    unset — rather than any override or force — is what hands the file over.
+
+  Mechanically this needed no new escape hatch: the tool list is a Tier B entry
+  (`.config/mise/config.toml`) reusing `seedEnvLinkTargets`, so runtime pins also
+  persist to `stateRoot`. Note this entry does **not** hit the residual behaviour
+  recorded above for `.claude.json`: mise rewrites the file **in place**, so both
+  link hops and the inode survive `mise use -g` and `mise unuse` (measured), and
+  persistence stays continuous rather than switch-time — the regular-file repair
+  is there for it but should never fire. Two small extensions to the mechanism:
+  `install -D`, because this is the first entry whose name is *nested* rather
+  than a top-level dotfile; and a `seedSource` option taking the seed from a
+  generated file instead of a string, so `home/mise.nix` keeps its tools as a
+  reviewed Nix attrset (`pkgs.formats.toml` generates the seed) —
+  `builtins.readFile` on that derivation would have worked but pulls
+  import-from-derivation into flake eval. The entry is declared in
+  `home/mise.nix` beside the content it seeds, the third "where to add an entry"
+  case now documented in `home/env-links.nix`.
+
+  **Accepted cost, stated plainly:** a tool added to `home/mise.nix` no longer
+  reaches a host that has already bootstrapped — seeding is creation-only, so the
+  repo is that host's *initial* tool list, not its live one. Both READMEs, the
+  `just runtimes` recipe comment and the `setup.py` plan wording say so rather
+  than implying the old "every host, after `mise install`". **Future work if that
+  stops being acceptable:** have `setup_runtimes` reconcile *additions* only —
+  `mise use -g` for a declared tool absent from `config.toml`, never touching a
+  version already there — which would restore propagation without taking back
+  ownership. Not built now; it needs the declared versions, and `_mise_tools()`
+  deliberately extracts only names.

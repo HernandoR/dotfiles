@@ -74,14 +74,20 @@ def set_login_shell(ctx):
 
 def setup_runtimes(ctx):
     """Materialize every mise-managed runtime (node, rust, the npm-backed smithery
-    CLI, …) declared in home/mise.nix.
+    CLI, …) that ~/.config/mise/config.toml declares.
 
     With the zsh `mise activate` integration a tool's bin only reaches PATH once it
     is actually installed — the "auto-install on first use" fires only for
     interactive commands, never for the non-interactive bash post-login script
     (which probes with `command -v`). So drive the global config to completion here
     (as ADR-0002 did for nvm), the way the first `mise install` would. No
-    privilege."""
+    privilege.
+
+    config.toml is mise's own file, seeded from home/mise.nix on the first switch
+    and mise's to rewrite afterwards (`mise use -g`), so on a host that has
+    bootstrapped before this installs the tool list *that host* now holds — which
+    may have drifted from the repo's on purpose. Only the seed and the `[settings]`
+    half (conf.d) come from home/mise.nix."""
     mise = shutil.which("mise")
     if not mise:
         logger.warning("mise not on PATH; skipping runtime install")
@@ -241,6 +247,11 @@ def _mise_tools():
     that. Only depth-1 keys count, so a nested entry (``"npm:@smithery/cli" = {
     version = …; }``) contributes its own name and not its attributes.
 
+    That expression is the *seed* for ~/.config/mise/config.toml, which mise owns
+    afterwards, so on a host that has bootstrapped before this is the repo's list
+    rather than a promise about what `mise install` will do there — hence the
+    caller's "seeded on a first switch" wording.
+
     The expression is one or more ``{ … }`` blocks joined by ``//``; a block
     guarded by ``lib.optionalAttrs <cond>`` contributes its keys only when
     ``<cond>`` holds here, so the plan matches what Home Manager will evaluate
@@ -308,7 +319,11 @@ def build_plan(ctx, system_spec, agent_ids):
 
     if agent_ids:
         tools = _mise_tools()
-        add("install", "mise runtimes: " + (", ".join(tools) if tools else "as declared in home/mise.nix"))
+        add(
+            "install",
+            "mise runtimes from ~/.config/mise/config.toml, seeded on a first switch with: "
+            + (", ".join(tools) if tools else "the tools declared in home/mise.nix"),
+        )
     # The agent half describes itself (installers/agents.py owns the manifest, so
     # it also owns the wording) — the same reason nix-cn.sh and this script each
     # emit their own plan rows instead of one place guessing about the others.

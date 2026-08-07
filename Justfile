@@ -75,7 +75,12 @@ update *INPUTS:
 upgrade: update switch
     mise up
 
-# Install the runtimes declared in home/mise.nix (after mise.nix gains a tool).
+# Install whatever ~/.config/mise/config.toml declares but has not materialized.
+#
+# NOT how a tool added to home/mise.nix reaches this machine: that file is only
+# the seed for config.toml, which mise owns once it exists (ADR-0009). Add it
+# here with `mise use -g <tool>@<version>` — which installs it too — and this
+# recipe stays what it says, a catch-up for anything declared-but-missing.
 runtimes:
     mise install
 

@@ -17,7 +17,10 @@ Two layers, split around the Home Manager switch:
 - **Declarative (Home Manager)** owns the user environment: CLI tools, zsh +
   starship + fzf-tab, git, tmux, mise. Files are symlinked from the nix store —
   there is **no** rsync/staging/link pipeline anymore (the old ADR-0001..0006
-  machinery is retired).
+  machinery is retired). Config a tool rewrites at runtime is the exception, and
+  ADR-0009 says where it goes instead: `home/env-links.nix` entries link it to a
+  writable target and seed it on creation (the agents' dirs, and mise's tool list
+  — `home/mise.nix` keeps only mise's `[settings]` as a store link).
 - **Imperative (`platform/`)** handles what HM can't: install Lix, configure nix
   (+ optional CERNET mirror), run the HM switch, set the login shell, deploy SSH
   keys, write the deferred Claude setup, and install opt-in Linux system

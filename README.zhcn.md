@@ -156,7 +156,8 @@ nix-collect-garbage -d                        # 然后回收磁盘
 git pull                     # 在 env 分支（prod/mewtant）上：rebase 到共享分支，不要 merge
 just switch                  # 等价于 home-manager switch --flake .#<host> -b backup
 exec zsh -l                  # 加载新的 PATH / 环境变量 / 补全
-just runtimes                # 仅当 home/mise.nix 新增了工具时需要（mise install）
+mise use -g <tool>@<ver>     # 仅当 home/mise.nix 新增了工具时需要——见下文，switch
+                             # 不会把它推到你已经装好的机器上
 ```
 
 **`just` 配方。** `Justfile` 给本节的命令起了名字，host、`--impure`、`-b backup`
@@ -272,7 +273,7 @@ uv run platform/installers/components.py   # 列出全部可选组件
 | 你想要的                                          | 写进哪里                                                        | 作用范围                                       |
 | ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
 | nixpkgs 里已有的 CLI 工具                         | `home/packages.nix`                                             | 所有主机，每次 switch 都应用                   |
-| 运行时，或只在 npm/cargo/go/gh-release 发布的工具 | `home/mise.nix`（`programs.mise.globalConfig.tools`）           | 所有主机，`mise install` 之后生效              |
+| 运行时，或只在 npm/cargo/go/gh-release 发布的工具 | `home/mise.nix`（`tools` attrset）                              | 新机器 bootstrap 时生效；已有机器要 `mise use -g` |
 | 只有某一个项目需要的东西                          | 该项目自己的 `mise.toml`，**或**该项目自己的 `flake.nix` devShell | 该目录树                                       |
 | 守护进程/驱动/apt 层面的东西（docker、cuda、llvm…）| `platform/installers/components.py` + `--system`                | 见 [组件分类](#组件分类)                       |
 | 只想试一下                                        | 什么都不写 —— `nix shell nixpkgs#<pkg>`                          | 仅当前 shell                                   |
@@ -378,12 +379,28 @@ mise ls-remote node                 # 某个工具可用的版本
 短名字通过 mise 的 registry 解析（core/aqua/ubi）；其他 backend 要显式写出：
 `npm:<pkg>`、`cargo:<crate>`、`go:<module>`、`pipx:<pkg>`、`ubi:<owner>/<repo>`。
 
-### mise —— 全局（持久化到 `home/mise.nix`）
+### mise —— 全局（两个文件，两个归属）
 
-`~/.config/mise/config.toml` 是**生成的**：Home Manager 把它软链接到 nix store，
-因此 `mise use --global …` 无法在那里持久化（写入会碰到只读的 store 路径；
-以 root 运行则会改到 store 里的副本，下一次 switch 就被还原）。全局工具列表在
-[`home/mise.nix`](home/mise.nix)：
+mise 的全局配置是**拆开的**，因为它的两半想要相反的归属（[ADR-0009](docs/plans/adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md)
+的 tier 划分）：
+
+| 文件 | 装什么 | 谁拥有 |
+| --- | --- | --- |
+| `~/.config/mise/config.toml` | 工具列表 | **mise。** 目标不存在时才用 `home/mise.nix` 播种一次，之后归你改 |
+| `~/.config/mise/conf.d/zz-dotfiles.toml` | `[settings]` | Home Manager。只读 store 链接，每次 switch 重新应用 |
+
+所以 `mise use -g`、`mise up --bump`、`mise unuse` 都能用、都能持久化——真正的
+`config.toml` 落在 `envLinks.stateRoot` 下，因此这些版本也能在容器重建后存活。
+
+这个拆分正是让两件事同时成立的原因：在全局配置里，`conf.d` 的文件永远**覆盖**
+`config.toml`（mise 自己会这么说：`X is defined in conf.d/… which overrides the
+global config`）。settings 要的就是这个，tools 恰恰不能有，所以只有 `[settings]`
+放进去。
+
+**往 `home/mise.nix` 里加的工具不会到达已经 bootstrap 过的机器**——播种只在文件
+不存在时发生，switch 也不会碰你的 `config.toml`。在那台机器上用
+`mise use -g <tool>@<version>` 加；而仓库里的列表仍是*下一台*新机器的来源，所以
+新工具照样该写进 [`home/mise.nix`](home/mise.nix)：
 
 ```nix
         just = "latest";
@@ -393,8 +410,9 @@ mise ls-remote node                 # 某个工具可用的版本
 ```
 
 npm 系的工具用 **pnpm** 安装（`npm.package_manager = "pnpm"`，
-`home/mise.nix:21`），而 pnpm 默认阻止依赖的生命周期脚本。如果某个包确实需要它的
-`postinstall`，就像 `@smithery/cli` 那样精确放行这一个包（`home/mise.nix:38`）：
+`home/mise.nix:88`——属于 setting，所以在 `conf.d` 那一半），而 pnpm 默认阻止依赖的
+生命周期脚本。如果某个包确实需要它的 `postinstall`，就像 `@smithery/cli` 那样精确
+放行这一个包（`home/mise.nix:29`）：
 
 ```nix
         "npm:@smithery/cli" = {
@@ -403,18 +421,26 @@ npm 系的工具用 **pnpm** 安装（`npm.package_manager = "pnpm"`，
         };
 ```
 
-然后切换并实体化——只是声明、尚未安装的工具不会进 `PATH`，要跑过
-`mise install` 才行（`home/mise.nix:3-8`）：
+然后**在这台机器上**加上并实体化——只是声明、尚未安装的工具不会进 `PATH`
+（`home/mise.nix:60-64`）：
 
 ```bash
-home-manager switch --flake .#dotfiles-debian -b backup
-mise install                     # 安装全局配置声明的全部工具
+mise use -g terraform@latest     # 写入 ~/.config/mise/config.toml 并安装
 mise ls                          # 查看已安装 / 生效的版本
+just runtimes                    # == mise install：补齐仍然缺失的部分
 ```
 
-**只针对单台机器的逃生口：** mise 也会读 `~/.config/mise/conf.d/*.toml`，
-这个目录不由 Home Manager 拥有——放在那里的文件能在 switch 后存活，
-适合放本机专属的工具。代价一如往常：它在 git 之外，别的机器不会有。
+想确认两半各自落在该落的地方：
+
+```bash
+mise config ls                   # 两个文件，以及各自贡献了哪些工具
+mise settings                    # 解析后的 settings（来自 conf.d 那一半）
+```
+
+**本机逃生口：** 再放一个 `~/.config/mise/conf.d/*.toml` 依然能覆盖一切，包括仓库
+的 settings——`conf.d` 内部是**按文件名字典序、靠前者胜**，而 Home Manager 拥有的
+那份特意叫 `zz-`，好让你起的任何名字都赢过它。既然 `config.toml` 现在归你了，本机
+专属的*工具*直接用 `mise use -g`；`conf.d` 留给覆盖某个 setting。
 
 ### mise —— 项目内
 
@@ -427,9 +453,9 @@ mise which node                # 实际解析到哪个 shim/二进制
 ```
 
 把 `mise.toml` 提交到那个项目里；项目配置与 Home Manager 互不相干。
-`mise up` 在声明的范围内升级（也适用于全局配置，因为它不改写配置文件）；
-`mise up --bump` *会*改写配置文件，所以全局工具的版本变更请改
-`home/mise.nix`。
+`mise up` 在声明的范围内升级；会改写配置文件的 `mise up --bump` 现在对全局配置也
+能用了。想长期保留的 bump 记得同步回 `home/mise.nix`，否则下一台新机器播种的还是
+旧版本。
 
 ### 修改 Home Manager 配置
 
