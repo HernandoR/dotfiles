@@ -110,6 +110,9 @@
       # After plugins (default order): fzf-tab styling + interactive extras.
       (lib.mkOrder 1000 ''
         source ${./zsh/fzf-tab.zsh}
+        # Must come after `zoxide init zsh` (HM emits it right after compinit) —
+        # it overrides the compdef that init installs. See the file's header.
+        source ${./zsh/zoxide.zsh}
         source ${./zsh/functions.zsh}
 
         ZSH_AUTOSUGGEST_STRATEGY=(history)
