@@ -187,6 +187,10 @@ fi
 # when PRIV=none, but still persists the network-env marker for the HM shell)
 "$PLATFORM_DIR/nix-cn.sh"
 
+# Container images occasionally create Nix's reserved unsandboxed-build HOME.
+# Repair the safe (empty-directory) case before the first build.
+repair_nix_build_home
+
 # Optional: seed flake input sources from a local cache (CN / offline / CI) so
 # nixpkgs + home-manager are not fetched from github. Point DOTFILE_FLAKE_CACHE
 # at a `nix copy --to file://…` cache dir that contains a seed-paths.txt.

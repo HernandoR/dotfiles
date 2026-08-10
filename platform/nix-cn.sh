@@ -52,6 +52,11 @@ missing_lines() {
   if ! grep -rhq 'experimental-features.*flakes' /etc/nix/ 2>/dev/null; then
     echo "experimental-features = nix-command flakes"
   fi
+  # llm-agents.nix declares Numtide's binary cache in flake.nix.  Accept
+  # flake-provided cache settings up front so bootstrap stays non-interactive
+  # (including under --yes) and can use that cache for omp.
+  grep -qxF 'accept-flake-config = true' "$target" 2>/dev/null \
+    || echo "accept-flake-config = true"
   if [ "$NETWORK_ENV" = "CN" ]; then
     for line in "extra-substituters = $CERNET" \
                 "extra-trusted-substituters = $CERNET" \

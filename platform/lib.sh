@@ -281,12 +281,47 @@ append_conf() {
 # interrupted before the config was written self-heals on the next run.
 configure_single_user_nix() {
   if [ "${DF_DRY_RUN:-0}" = 1 ]; then
-    printf '\033[2m[dry-run]\033[0m ensure ~/.config/nix/nix.conf: flakes + empty build-users-group\n'
+    printf '\033[2m[dry-run]\033[0m ensure ~/.config/nix/nix.conf: flakes + accept-flake-config + empty build-users-group\n'
     return
   fi
   mkdir -p "$HOME/.config/nix"
   append_conf "$HOME/.config/nix/nix.conf" 'experimental-features = nix-command flakes'
+  append_conf "$HOME/.config/nix/nix.conf" 'accept-flake-config = true'
   append_conf "$HOME/.config/nix/nix.conf" 'build-users-group ='
+}
+
+# Nix deliberately assigns /homeless-shelter as HOME to unsandboxed builds.
+# It must be absent: some container images create it, which makes every build
+# fail before evaluation.  A common accidental inhabitant is Cargo's home;
+# relocate that intact to the actual user's home, but never merge or delete
+# unknown contents.
+repair_nix_build_home() {
+  local build_home="/homeless-shelter" cargo_home="$HOME/.cargo"
+  [ -e "$build_home" ] || return 0
+  have_priv || die "$build_home exists; root or sudo is required to remove the empty Nix build-home directory"
+  if [ ! -d "$build_home" ] || [ -L "$build_home" ]; then
+    die "$build_home exists but is not a removable empty directory; remove or rename it, then rerun bootstrap"
+  fi
+  # Preserve a Cargo installation that was created with HOME incorrectly set
+  # to Nix's build sentinel.  Require .cargo to be the sole entry and do not
+  # risk an automatic merge with an existing real Cargo home.
+  if [ -d "$build_home/.cargo" ] && [ ! -L "$build_home/.cargo" ] \
+    && [ -z "$(find "$build_home" -mindepth 1 -maxdepth 1 ! -name .cargo -print -quit)" ]; then
+    [ ! -e "$cargo_home" ] && [ ! -L "$cargo_home" ] \
+      || die "$build_home/.cargo is misplaced but $cargo_home already exists; merge them manually, then remove $build_home"
+    log "moving misplaced Cargo home $build_home/.cargo -> $cargo_home"
+    run "$SUDO mv \"$build_home/.cargo\" \"$cargo_home\""
+    if [ "${DF_DRY_RUN:-0}" = 1 ]; then
+      log "removing empty $build_home (Nix requires it to be absent for unsandboxed builds)"
+      run "$SUDO rmdir $build_home"
+      return
+    fi
+  fi
+  if [ -n "$(find "$build_home" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+    die "$build_home exists and has contents other than a movable lone .cargo directory; refusing to delete it. Move its contents elsewhere, remove the directory, then rerun bootstrap"
+  fi
+  log "removing empty $build_home (Nix requires it to be absent for unsandboxed builds)"
+  run "$SUDO rmdir $build_home"
 }
 
 # install_lix — install nix if absent (needs root/sudo; caller guards).
@@ -305,7 +340,21 @@ plan_nix() {
   else
     plan_install "nix (single-user, --no-daemon) — fetch nixos.org/nix/install, create /nix (no daemon: this host has no init system)" 1
   fi
-  has_init_system || plan_config "$HOME/.config/nix/nix.conf <- experimental-features = nix-command flakes; build-users-group = (single-user)"
+  has_init_system || plan_config "$HOME/.config/nix/nix.conf <- experimental-features = nix-command flakes; accept-flake-config = true; build-users-group = (single-user)"
+  if [ -e /homeless-shelter ]; then
+    if [ -d /homeless-shelter ] && [ ! -L /homeless-shelter ] && [ -z "$(find /homeless-shelter -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+      plan_config "/homeless-shelter removed if empty — required by Nix for unsandboxed builds" 1
+    elif [ -d /homeless-shelter/.cargo ] && [ ! -L /homeless-shelter/.cargo ] \
+      && [ -z "$(find /homeless-shelter -mindepth 1 -maxdepth 1 ! -name .cargo -print -quit 2>/dev/null)" ]; then
+      if [ -e "$HOME/.cargo" ] || [ -L "$HOME/.cargo" ]; then
+        plan_fact "nix build home" "/homeless-shelter/.cargo and $HOME/.cargo both exist; bootstrap will stop without merging them"
+      else
+        plan_config "$HOME/.cargo <- move /homeless-shelter/.cargo intact; then remove /homeless-shelter for Nix builds" 1
+      fi
+    else
+      plan_fact "nix build home" "/homeless-shelter exists and is not an empty directory; bootstrap will stop without deleting it"
+    fi
+  fi
 }
 
 install_lix() {

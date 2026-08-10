@@ -38,7 +38,7 @@
       # future plugins go through `omp install` — never through a generated
       # config file. Available on every host this repo targets
       # (aarch64-darwin, x86_64-linux, aarch64-linux).
-      inputs.llm-agents-nix.packages.${pkgs.system}.omp
+      inputs.llm-agents-nix.packages.${pkgs.stdenv.hostPlatform.system}.omp
 
       # pnpm: mise installs npm-backed tools (home/mise.nix) with pnpm rather
       # than npm, and mise requires the chosen package manager to already be on
