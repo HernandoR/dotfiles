@@ -295,15 +295,11 @@ the one genuine Tier A addition is the agentmemory service unit.
   fork and ships everything the four pi packages existed for as native features,
   so the replacement is mostly a deletion plus a re-point:
 
-  - **Install channel changes from npm to the `omp` Nix package.** The binary
-    comes from the `llm-agents-nix` flake input (numtide/llm-agents.nix,
-    `packages/omp` — package-only, no HM module) as `home/packages.nix`'s
-    `inputs.llm-agents-nix.packages.${pkgs.system}.omp`, and the HM switch
-    places it in `~/.nix-profile/bin`. numtide's daily CI builds are pulled from
-    `cache.numtide.com` (declared in flake.nix's `nixConfig`), so a switch does
-    not compile the bun+rust source tree. This is the deliberate exception to
-    "agent CLI versions stay outside git" — the version is pinned via the flake
-    input instead, because the owner asked for a Nix install. pi's npm install
+  - **Install channel changes from npm to mise's GitHub backend.** The binary is
+    declared in `home/mise.nix` as `github:can1357/oh-my-pi` and materialized by
+    `mise use -g`/`mise install`. This avoids the long compile time of the Nix
+    source build. The version remains outside the flake and Home Manager, so
+    mise can update it independently; pi's npm install
     (`@earendil-works/pi-coding-agent`) and the pi half of the npm machinery are
     gone; the remaining npm path serves agentmemory only.
   - **Config stays out of Home Manager, by construction.** The standing rule
@@ -312,8 +308,8 @@ the one genuine Tier A addition is the agentmemory service unit.
     (home/env-links.nix), the shared-source links and the MCP merge are
     projected by `OmpAgent` at bootstrap, and plugins are installed through
     omp's own interface (`omp install <npm-spec>`) — never by an HM-generated
-    config file. `llm-agents.nix` exposes packages only, which is what keeps
-    this clean: there is no `programs.omp` module to accidentally adopt.
+    config file. mise exposes the runtime tool without introducing a
+    `programs.omp` module, so this remains clean.
   - **The four-package extension set is deleted, not migrated.** The mapping:
     `pi-claude-marketplace` → omp's `claude` / `claude-plugins` discovery
     providers read installed Claude marketplaces and plugins for skills, slash
@@ -343,10 +339,16 @@ the one genuine Tier A addition is the agentmemory service unit.
     the reference host: `python3 platform/installers/agents.py` prints the
     three-agent manifest with omp; `setup.py --plan --agents omp` /
     `--plan-items --agents all` and `./bootstrap.sh --dry-run --verbose` describe
-    the nix package, the two shared-source links and the MCP merge;
+    the mise tool, the two shared-source links and the MCP merge;
     `nix flake check --no-build` passes and a targeted eval confirms the `omp`
-    derivation from `llm-agents-nix` in `home.packages` (and its absence from
-    the mise tools), plus the `.omp` (700) env link. Not yet exercised: a real
-    build/substitution of the omp derivation and an omp session (needs network +
-    the owner's machine switch), so the runtime claims about omp's native
-    surface are taken from its docs, not from a clean-pod run.
+    mise tool seed and its absence from `home.packages`, plus the `.omp` (700)
+    env link. Not yet exercised: a real mise install and an omp session (needs
+    network + the owner's machine switch), so the runtime claims about omp's
+    native surface are taken from its docs, not from a clean-pod run.
+
+- **2026-08-10 — OMP moves from Nix to mise.** The owner reported that building
+  OMP through the Nix source derivation took too long. The package was removed
+  from `home/packages.nix` (and the now-unused `llm-agents-nix` flake input and
+  cache configuration were removed); `home/mise.nix` now seeds
+  `github:can1357/oh-my-pi` for `mise use -g`/`mise install`. OMP's mutable
+  configuration and capability projection remain unchanged.

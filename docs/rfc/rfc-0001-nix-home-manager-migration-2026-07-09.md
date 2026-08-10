@@ -586,3 +586,11 @@ checks out. Also spot-checked the `DOTFILE_NETWORK_ENV` /
 table and the `dotfiles-postsetup` function against the actual code
 (`platform/*.py`, `platform/*.sh`, `home/zsh/functions.zsh`, `home/shell.nix`) —
 all present and consistent with AGENTS.md/RFC/ADR-0007.
+
+### 2026-08-10 — Move OMP from Nix to mise
+
+The OMP Nix source build took too long during the migration. **Decision:** remove
+the OMP package and its now-unused `llm-agents-nix` flake/cache configuration,
+and declare `github:can1357/oh-my-pi` in `home/mise.nix`. mise now owns the OMP
+binary via `mise use -g`/`mise install`; OMP's mutable configuration and the
+ADR-0011 capability projection remain unchanged.

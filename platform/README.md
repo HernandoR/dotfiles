@@ -67,9 +67,10 @@ components.
 `installers/agents.py` onto each with that agent's own CLI. All of it is
 non-interactive and runs on every bootstrap — a single source that needs a human to
 apply is not a single source. Install channels: claude and codex keep their own
-official installers; omp's *binary* is declarative (the `llm-agents-nix` flake
-input's `omp` package, in `home/packages.nix`), while its config is not —
-`~/.omp` is a Tier-B out-of-store staging link and every capability is either
+official installers; omp is managed by mise from
+`github:can1357/oh-my-pi` (declared in `home/mise.nix`) because compiling the
+Nix source build takes too long, while its config is not — `~/.omp` is a
+Tier-B out-of-store staging link and every capability is either
 projected here or written by omp itself, never by an HM-generated config file.
 What lands where:
 

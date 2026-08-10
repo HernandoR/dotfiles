@@ -511,9 +511,10 @@ host，并把 post-HM 的步骤也重跑一遍（`./bootstrap.sh --dry-run --ver
 （模型、主题、审批策略）留在它自己的配置里——那些文件由 agent 在运行时自行重写，
 这里绝不去碰。跨 agent 的指令只有一份，放在 `~/.agents/AGENTS.md`：Codex 和 omp
 直接读它，Claude 通过薄壳 `~/.claude/CLAUDE.md` 导入。omp 取代了 pi
-（ADR-0011 update log，2026-08-06），并以 Nix 包形式来自 `llm-agents-nix`
-flake input（`home/packages.nix`）；它的配置刻意不由 Home Manager 管理——
-`~/.omp` 只是符号链接的 staging 根，插件通过 omp 自己的接口安装。设计记录：
+（ADR-0011 update log，2026-08-06），并由 mise 从
+`github:can1357/oh-my-pi` 安装（声明在 `home/mise.nix`）。这样可以避免 Nix
+源码构建耗时过长；它的配置刻意不由 Home Manager 管理——`~/.omp` 只是符号链接的
+staging 根，插件通过 omp 自己的接口安装。设计记录：
 [ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)。
 
 ```bash

@@ -1,24 +1,10 @@
 {
   description = "lz's dotfiles — standalone Home Manager on Lix (see docs/plans/adr-0007)";
 
-  # omp (oh-my-pi) comes from numtide/llm-agents.nix as a *binary package*
-  # (home/packages.nix). Its flake exposes packages only — no HM module — which
-  # is exactly the constraint ADR-0011 wants: the agent's config is never
-  # Home-Manager-managed, only its binary is. Their cache carries the daily CI
-  # builds, so a switch pulls omp instead of compiling the bun+rust source tree.
-  nixConfig = {
-    extra-substituters = [ "https://cache.numtide.com" ];
-    extra-trusted-public-keys = [ "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=" ];
-  };
-
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     home-manager = {
       url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    llm-agents-nix = {
-      url = "github:numtide/llm-agents.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

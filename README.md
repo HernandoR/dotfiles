@@ -550,9 +550,10 @@ policy) stays in its own config, which the agents rewrite at runtime and nothing
 here touches. Cross-agent instructions live once, in `~/.agents/AGENTS.md`, which
 Codex and omp read directly and Claude imports from its thin `~/.claude/CLAUDE.md`
 shell. omp replaces the pi agent (ADR-0011 update log, 2026-08-06) and is
-installed as a Nix package from the `llm-agents-nix` flake input
-(`home/packages.nix`); its config is deliberately not Home-Manager-managed —
-`~/.omp` is a symlinked staging root and plugins go through omp's own interface.
+installed by mise from `github:can1357/oh-my-pi` (`home/mise.nix`). This avoids
+the long compile time of the Nix source build while keeping its config outside
+Home Manager — `~/.omp` is a symlinked staging root and plugins go through
+omp's own interface.
 Design record:
 [ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md).
 

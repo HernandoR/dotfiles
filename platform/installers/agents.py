@@ -41,9 +41,8 @@ to act on both (ADR-0011 update log, 2026-08-05):
   Claude-plugin skills discovery built in, so the whole pi extension set
   (``pi-claude-marketplace`` / ``pi-mcp-adapter`` / ``pi-tinyfish`` /
   ``pi-subagents``) retired: the projection shrank to the shared-source links and
-  an MCP merge into ``~/.omp/agent/mcp.json``. omp's *binary* is declarative —
-  the ``omp`` package from the ``llm-agents-nix`` flake input (home/packages.nix;
-  the HM switch places it in ``~/.nix-profile/bin``) — but its *config* is not:
+  an MCP merge into ``~/.omp/agent/mcp.json``. omp's *binary* is mise-managed
+  from ``github:can1357/oh-my-pi`` (home/mise.nix) — but its *config* is not:
   ``~/.omp`` is an ADR-0009 Tier-B out-of-store staging link and everything
   inside it is either projected from here or written by omp itself. It reads a
   user-level ``AGENTS.md`` from its agent dir natively (priority 100), so
@@ -247,10 +246,10 @@ MCP_SERVERS = (
 # --- install channels --------------------------------------------------------
 # claude and codex use their official installers (ADR-0011, "Install channels"):
 # versions stay outside git so each tool's self-update keeps working. omp is the
-# deliberate exception — the owner asked for a Nix install, so its binary is the
-# `omp` package from the `llm-agents-nix` flake input (home/packages.nix), built
-# by numtide and substitutable from cache.numtide.com (flake.nix nixConfig).
-# Binary declarative, config not — see OmpAgent.
+# mise-managed exception: the owner chose `mise use -g
+# github:can1357/oh-my-pi` because compiling the Nix source build takes too long.
+# Binary installation is mutable with mise, while config remains outside Home
+# Manager — see OmpAgent.
 CODEX_INSTALLER = "https://chatgpt.com/codex/install.sh"
 AGENTMEMORY_NPM_PACKAGE = "@agentmemory/agentmemory"
 # launchd label / systemd unit name of the memory daemon declared in
@@ -827,8 +826,8 @@ class CodexAgent(Agent):
 class OmpAgent(Agent):
     """oh-my-pi (``omp``, can1357/oh-my-pi) — the pi fork that took pi's place
     in the ADR-0011 toolchain (update log, 2026-08-06). Its *binary* comes from
-    the ``llm-agents-nix`` flake input (``omp`` in home/packages.nix) — the HM
-    switch places it in ``~/.nix-profile/bin`` before setup.py runs, so the
+    mise's ``github:can1357/oh-my-pi`` tool (home/mise.nix) before setup.py runs,
+    so the
     "install" step only checks reachability. Its *config* is deliberately NOT
     Home-Manager-managed: ``~/.omp`` is an ADR-0009 Tier-B out-of-store staging
     link (home/env-links.nix), plugins go through omp's own interface, and
@@ -859,20 +858,19 @@ class OmpAgent(Agent):
     INSTRUCTIONS = HOME / ".omp" / "agent" / "AGENTS.md"
 
     def install(self, ctx):
-        # After the HM switch, `~/.nix-profile/bin` is on PATH (platform/lib.sh
-        # adds the generation's home-path/bin) and omp resolves like any other
-        # home.packages entry. `_mise_which` is only a migration belt for
-        # machines that briefly had the mise-managed omp.
+        # setup_runtimes materializes the mise seed before agent projection;
+        # `_mise_which` resolves it even though mise's shell shims are not on
+        # this process' PATH.
         found = shutil.which(self.binary) or _mise_which(ctx, self.binary)
         if found:
-            logger.info("omp already on PATH from home.packages (%s)", found)
+            logger.info("omp already available from mise (%s)", found)
             return
         if ctx.dry_run:
-            logger.info("[DRY-RUN] would rely on the HM switch having placed omp "
-                        "in ~/.nix-profile/bin (home/packages.nix, llm-agents-nix input)")
+            logger.info("[DRY-RUN] would rely on mise having installed "
+                        "github:can1357/oh-my-pi from home/mise.nix")
             return
-        logger.warning("omp not resolvable — is 'omp' in home/packages.nix via the "
-                       "llm-agents-nix flake input, and did the HM switch run first?")
+        logger.warning("omp not resolvable — did mise install "
+                       "github:can1357/oh-my-pi run after the HM switch?")
 
     def project(self, ctx):
         _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS)
@@ -883,11 +881,11 @@ class OmpAgent(Agent):
 
     def plan(self, ctx, add):
         if shutil.which(self.binary) or _mise_which(ctx, self.binary):
-            add("install", "omp (oh-my-pi) already on PATH from home.packages — left as is")
+            add("install", "omp (oh-my-pi) already available from mise — left as is")
         else:
-            add("install", "omp (oh-my-pi) via nix — the llm-agents-nix flake input's "
-                           "'omp' package in home/packages.nix, placed in ~/.nix-profile/bin "
-                           "by the HM switch (config not HM-managed)")
+            add("install", "omp (oh-my-pi) via mise — github:can1357/oh-my-pi "
+                           "(compiling the Nix source build takes too long; config not "
+                           "HM-managed)")
         add("config", "no omp extension packages projected — native MCP client, native "
                       "sub-agents, native browser, and Claude-plugin skills discovery "
                       "cover the retired pi extension set")
