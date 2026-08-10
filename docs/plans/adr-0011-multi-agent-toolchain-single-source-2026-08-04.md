@@ -101,10 +101,10 @@ adapter is what makes the MCP list a genuine three-way single point; without it
 pi would be the one agent unable to reach any declared MCP server.
 
 Note, from reading `~/.claude/plugins/cache/`: `agent-skillset` and
-`astral-sh/astral` are **pure skills** (hooks only in `dev_loop`; no agents, no
+`astral-sh/astral` are **pure skills** (hooks only in `dev-loop`; no agents, no
 `.mcp.json`). So the marketplace bridge needs neither `pi-subagents` nor
 `pi-mcp-adapter` as a dependency — both are included for their own sake.
-`dev_loop`'s hooks fall under `pi-claude-marketplace`'s documented partial hook
+`dev-loop`'s hooks fall under `pi-claude-marketplace`'s documented partial hook
 support and are expected to degrade under pi.
 
 ### Install channels and the selection flag
@@ -140,7 +140,7 @@ the one genuine Tier A addition is the agentmemory service unit.
   recording the previously applied set plus correct uninstall paths — declined
   for now, so this is a standing gap to reopen if it bites.
 - The capability surface is **deliberately uneven**: Codex gets no marketplace
-  skills, Claude gets no agentmemory, pi gets degraded `dev_loop` hooks. Each
+  skills, Claude gets no agentmemory, pi gets degraded `dev-loop` hooks. Each
   is a recorded trade, and each has a named cause rather than being an accident
   of implementation order.
 - Claude's ergonomics are untouched — `/model`, `/config`, plugin installs and

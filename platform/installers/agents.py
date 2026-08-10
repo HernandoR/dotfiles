@@ -174,7 +174,7 @@ BOTH_MARKETS = ("claude", "codex")
 
 MARKETPLACES = (
     Marketplace("agent-skillset", "hernandor/agent-skillset", agents=BOTH_MARKETS,
-                note="the owner's own skills: discuss / implement / dev_loop / fetch_external_knowledge"),
+                note="the owner's own skills: discuss / implement / dev-loop / fetch-external-knowledge"),
     Marketplace("astral-sh", "astral-sh/claude-code-plugins", agents=BOTH_MARKETS,
                 note="Astral's Python tooling skills (uv / ruff / ty)"),
     Marketplace("worktrunk", "max-sixty/worktrunk", agents=BOTH_MARKETS,
@@ -189,11 +189,11 @@ MARKETPLACES = (
 PLUGINS = (
     Plugin("discuss", "agent-skillset", agents=BOTH_MARKETS),
     Plugin("implement", "agent-skillset", agents=BOTH_MARKETS),
-    Plugin("dev_loop", "agent-skillset", agents=BOTH_MARKETS,
+    Plugin("dev-loop", "agent-skillset", agents=BOTH_MARKETS,
            note="its hooks are the only non-skill content in agent-skillset; Codex has a "
                 "hook engine, omp surfaces the skills through its Claude-plugin "
                 "discovery and hook support is best-effort"),
-    Plugin("fetch_external_knowledge", "agent-skillset", agents=BOTH_MARKETS),
+    Plugin("fetch-external-knowledge", "agent-skillset", agents=BOTH_MARKETS),
     Plugin("astral", "astral-sh", agents=BOTH_MARKETS),
     Plugin("worktrunk", "worktrunk", agents=BOTH_MARKETS),
     Plugin("composio", "composio", agents=BOTH_MARKETS),

@@ -79,12 +79,12 @@ So the instruction plane is a two-party problem (Claude + Codex); pi abstains.
 | Sub-agents | native | — | `pi-subagents` |
 
 Local inventory of the four installed marketplaces (read from
-`~/.claude/plugins/cache/`): `agent-skillset` (discuss / implement / dev_loop /
-fetch_external_knowledge) and `astral-sh/astral` are **pure skills**, with
-hooks only in `dev_loop`; **no agents, no `.mcp.json`, no commands**.
+`~/.claude/plugins/cache/`): `agent-skillset` (discuss / implement / dev-loop /
+fetch-external-knowledge) and `astral-sh/astral` are **pure skills**, with
+hooks only in `dev-loop`; **no agents, no `.mcp.json`, no commands**.
 `worktrunk` and `composio` carry hooks/commands. Consequence: bridging
 marketplaces into pi needs neither `pi-subagents` (nothing to run) nor
-`pi-mcp-adapter` (no MCP declared); only `dev_loop`'s hooks land in
+`pi-mcp-adapter` (no MCP declared); only `dev-loop`'s hooks land in
 `pi-claude-marketplace`'s documented "partial support".
 
 ### Install channels
@@ -150,7 +150,7 @@ a second one.
   `AGENTS.md`; only the ADR's discipline does.
 - **Codex has no marketplace**, so `agent-skillset` skills never reach it. The
   capability surface is intentionally uneven across the three agents.
-- **`dev_loop`'s hooks degrade under pi** (`pi-claude-marketplace` documents
+- **`dev-loop`'s hooks degrade under pi** (`pi-claude-marketplace` documents
   partial hook support). Expected behaviour, not a defect to chase.
 - **Three new imperative drift surfaces** — the new CLIs' versions live outside
   git, by the same choice that keeps their self-update working.
