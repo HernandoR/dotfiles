@@ -1,41 +1,51 @@
-# The env branch's file — and the ONLY file an env branch is allowed to edit.
+# The env branch's file — mewtant intranet hosts (branch prod/mewtant).
 #
-# Why it exists: `home/env-links.nix` carries the mechanism plus the entries
-# every environment wants, so it keeps changing on the shared branches. If an
-# env branch also edited it, every rebase over `main` would conflict there. This
-# file stays EMPTY on the shared branches, so the env branch's commit to it
-# always replays cleanly — no conflict by construction, which is what
-# .gitattributes cannot give us (a `merge=ours` driver resolves backwards under
-# rebase: "ours" is the upstream being replayed onto, so it would silently
-# discard the env branch's entries).
+# This is the ONLY file this branch is allowed to edit. `home/env-links.nix`
+# carries the mechanism plus the entries every environment wants and keeps
+# changing on the shared branches; keeping this branch's delta in a file the
+# shared branches never touch is what makes rebasing over them conflict-free.
+# Restating a shared entry here would reintroduce exactly the two-inventories
+# drift ADR-0009 exists to catch — so don't.
 #
-# What goes here:
-#
-#   - `envLinks.stateRoot`, when this environment's persistent volume differs.
-#   - `envLinks.entries`, for links only this environment wants. Merged with the
-#     shared set, so never restate a shared entry — that is the drift ADR-0009
-#     exists to catch.
-#   - A plain `home.file` + `mkOutOfStoreSymlink` line for anything whose target
-#     is NOT under `stateRoot` and must not be auto-seeded (a distributed binary,
-#     say: seeding it as an empty file would be worse than a dangling link,
-#     which at least fails loudly).
-#
-# Live example, from the prod/mewtant branch:
-#
-#   {
-#     envLinks.entries = {
-#       # jcc: intranet-only. Config holds a bearer token + internal endpoint.
-#       ".jcc.yaml" = { kind = "file"; mode = "600"; };
-#       # lark-cli: intranet Lark tooling — auth tokens, cache, logs.
-#       ".lark-cli" = { kind = "dir"; mode = "700"; };
-#     };
-#     # The jcc binary is distributed on /fsx, not via nixpkgs, and lives outside
-#     # stateRoot — deliberately not seeded, so a missing build is visible.
-#     home.file.".local/bin/jcc".source =
-#       config.lib.file.mkOutOfStoreSymlink "/fsx/hernando/local/bin/jcc";
-#   }
-#
-{ ... }:
+# `envLinks.stateRoot` IS overridden. The shared default now roots the inventory
+# under $HOME, which on these hosts is container-local and does not survive a
+# restart; the persistent volume is /fsx. Overriding the root moves the whole
+# inventory at once, so this one line is all it takes.
+{ config, ... }:
 {
-  # Intentionally empty on the shared branches.
+  envLinks.stateRoot = "/fsx/hernando/dotfile_home_link_src";
+
+  envLinks.entries = {
+    # jcc: intranet-only tool. Its config holds a bearer token and an internal
+    # endpoint, so it can neither live in the store nor on shared history.
+    ".jcc.yaml" = { kind = "file"; mode = "600"; };
+
+    # lark-cli: intranet Lark tooling — auth tokens, cache and logs, all mutable.
+    ".lark-cli" = { kind = "dir"; mode = "700"; };
+
+    # Remote-IDE server trees. These hosts are only ever reached over SSH from a
+    # local editor, so every container recreation re-downloads and re-installs
+    # the server over the intranet. Both are entirely tool-owned and replaced
+    # wholesale on each version bump, so neither can be a store link.
+
+    # VS Code Remote: ~760MB of server, extensions and user-data. 700 because
+    # `data/` holds the connection token and per-extension credential caches
+    # next to the binaries (the tool itself creates this dir 750).
+    ".vscode-server" = { kind = "dir"; mode = "700"; };
+
+    # Zed Remote — note the UNDERSCORE: Zed's own path is ~/.zed_server, and a
+    # ".zed-server" entry would persist a directory nothing ever reads. Holds
+    # only the ~110MB remote-server binary, no credentials, hence 755 as Zed
+    # creates it. Zed's *state* (LSP servers, logs — 1.4GB) lives in
+    # ~/.local/share/zed and is deliberately not covered here: it is not a
+    # top-level $HOME path, so persisting it is a separate decision.
+    ".zed_server" = { kind = "dir"; mode = "755"; };
+  };
+
+  # The jcc binary is distributed on /fsx rather than through nixpkgs, so its
+  # target sits outside stateRoot and is deliberately left out of the seeded
+  # inventory: creating it as an empty file would be worse than a dangling link,
+  # which at least fails loudly when the binary is missing.
+  home.file.".local/bin/jcc".source =
+    config.lib.file.mkOutOfStoreSymlink "/fsx/hernando/local/bin/jcc";
 }
