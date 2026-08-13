@@ -199,10 +199,23 @@ One manifest, three agents, projected by each agent's own CLI:
   linked.
 - **Selection** — `--agents=<spec>` (`claude,codex,omp` / `all` / `none`; unset =
   all). `--no-claude` is a deprecated alias for `none`.
-- **Memory** — agentmemory is wired to omp + Codex only; Claude keeps its
-  built-in file memory. Its daemon is the HM unit in `home/agentmemory.nix`,
-  started by `agents.start_agentmemory` once the binary exists (the HM switch
-  runs first).
+- **Memory** — **all memory goes through agentmemory**, for all three agents
+  (ADR-0011's revisit trigger fired; see its update log for 2026-08-13). Claude's
+  built-in file memory is switched off rather than run alongside it, so there is
+  one store instead of two. That switch — `autoMemoryEnabled: false` in
+  `~/.claude/settings.json` — is **preference plane**, which the manifest never
+  touches, so it is applied per machine and is not projected by a bootstrap. The
+  daemon is the HM unit in `home/agentmemory.nix`, started by
+  `agents.start_agentmemory` once the binary exists (the HM switch runs first).
+  **Only where no service manager exists at all** — the jcc devpods have no init
+  system, so the unit is declared and unrunnable — the bootstrap instead starts
+  the daemon as a detached process, once per run, with nothing supervising it.
+  That is deliberate rather than a lesser systemd: `$HOME` there is
+  container-local, so a machine that goes away takes the process with it and the
+  next bootstrap is what brings it back. Hosts with systemd or launchd are
+  untouched by that path. Until something answers on :3111 the MCP shim exposes
+  only a degraded surface, so `agents.plan_items` says which of the two ways
+  this host will start it.
 
 ## The component model
 

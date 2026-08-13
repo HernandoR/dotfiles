@@ -258,3 +258,13 @@ agents it targets and why it is where it is.
   Implementation notes, four deviations, and two findings that reverse premises of
   this RFC (Codex *does* have a plugin marketplace; pi *does* read a global
   `AGENTS.md`) are recorded in the ADR-0011 update log.
+
+- **2026-08-13 — Q5 reversed.** The alternative this RFC rejected ("Connect
+  Claude to agentmemory in the same step") is now the decision, and the reason it
+  was rejected — Claude's built-in file memory being in active use, so a second
+  store would compete with it — is answered by switching that store off rather
+  than by keeping the agents apart. The revisit trigger recorded in Q5 fired on
+  the owner's judgement rather than on the "proven in real use" evidence it named;
+  the ADR-0011 update log for the same date carries the reasoning, what the repo
+  projects, what stays per-machine, and the finding that the daemon has never
+  actually run on the reference host.

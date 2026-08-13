@@ -352,3 +352,69 @@ the one genuine Tier A addition is the agentmemory service unit.
   cache configuration were removed); `home/mise.nix` now seeds
   `github:can1357/oh-my-pi` for `mise use -g`/`mise install`. OMP's mutable
   configuration and capability projection remain unchanged.
+
+- **2026-08-13 — all memory goes through agentmemory; Claude's built-in memory
+  is switched off.** The Memory section above scoped agentmemory to two agents
+  and left Claude on `~/.claude/projects/<proj>/memory/`, with "the backend
+  proving itself across a period of real use" as the revisit trigger. The owner
+  fired that trigger and chose the opposite of the split: **one store for all
+  three agents**, not two stores side by side.
+
+  What changed in the repo, both in `platform/installers/agents.py`:
+
+  - the `agentmemory` `McpServer` entry gains `claude`, so `claude mcp add`
+    projects it exactly the way `codex mcp add` and the `~/.omp/agent/mcp.json`
+    merge already did;
+  - `_agentmemory_wanted` becomes "any agent selected" rather than "codex or
+    omp", so a Claude-only run now installs the backend instead of nothing.
+
+  What deliberately did **not** change: the switch that turns Claude's built-in
+  memory off is `autoMemoryEnabled: false` in `~/.claude/settings.json`, and
+  that file is the **preference plane** — the one plane this ADR states is never
+  touched, because all three agents rewrite it at runtime. Projecting it would
+  buy reproducibility at the cost of the invariant that keeps `/model`,
+  `/config` and plugin installs working, which is a worse trade than applying
+  one key per machine. So the capability half is projected and the preference
+  half is manual, and this entry is where that split is recorded rather than
+  being rediscovered as drift.
+
+  Honest note on the trigger: it fired on the owner's judgement, not on
+  evidence, because there is no evidence either way. Inspecting the reference
+  host on this date found the binary installed and the MCP entry present in both
+  `~/.codex/config.toml` and `~/.omp/agent/mcp.json`, but `~/.agentmemory`
+  holding **no SQLite store at all** — only `.env`, the pinned `bin/iii` engine,
+  `engine-state.json` and a stale `iii.pid` whose process is gone, all frozen at
+  2026-08-10. The daemon has never successfully run here: these hosts have no
+  init system (`/run/systemd/system` does not exist, no D-Bus), so
+  `agents.start_agentmemory` takes its documented "no systemd user session"
+  branch and returns. Nothing was listening on :3111, which meant the MCP shim
+  exposed only its degraded surface to all three agents. With the built-in store
+  now off, that would have left Claude with no working memory at all — so the
+  same round closes it rather than filing it.
+
+  **The init-less host starts the daemon from the bootstrap itself.** On the
+  owner's call: start it once per bootstrap and let a machine that goes away take
+  the process with it, since `$HOME` on these hosts is container-local and the
+  next bootstrap is what brings it back anyway. `agents.start_agentmemory` now
+  has three cases in descending order of supervision — launchd, systemd, and a
+  detached `subprocess.Popen` (`start_new_session=True`, so it outlives the
+  bootstrap shell) — and the third is reachable **only** when neither supervisor
+  exists. Hosts with systemd or launchd keep the HM unit and are not touched by
+  this path; it is a floor for hosts that cannot have a supervisor, not a
+  replacement for one. Nothing restarts the process, which is the accepted trade:
+  a crash mid-session stays down until the next bootstrap.
+
+  Three details that keep it honest rather than merely started: the fallback
+  probes :3111 first, so re-running a bootstrap cannot stack a second daemon on
+  a port the first still holds (the `iii.pid` file is useless for this — it
+  outlives the container that wrote it); it then polls the port for up to 15s and
+  *reports* whether the daemon actually answered, because a process that exits on
+  a bad config looks identical to a healthy one at `Popen` time, and reporting a
+  start that did not happen is precisely how this plane stayed dead unnoticed;
+  and `plan_items` branches on the same `_has_service_manager` predicate as the
+  start path, so the ADR-0010 plan names which of the two ways *this* host will
+  start it. Output goes to `~/.agentmemory/bootstrap.log`, truncated per run,
+  next to the launchd log paths the unit already uses.
+
+  The `~/.agentmemory` env link (`home/env-links.nix`) was already correct and
+  was only ever waiting for a store to persist.

@@ -83,8 +83,14 @@ What lands where:
 Loose skills live in `~/.agents/skills` (Codex and omp read it natively;
 `~/.codex/skills` and `~/.omp/agent/skills` link to it). Links are re-asserted
 after any delegated installer (`codegraph`) that appends to a linked file and
-writes it back. agentmemory is wired to omp + Codex only and its daemon is the
-Home Manager unit in `home/agentmemory.nix`, started here once the binary exists.
+writes it back. agentmemory is the memory backend for all three agents — Claude's
+built-in file memory is switched off in its own settings instead, which is
+preference plane and therefore per machine, not projected from here. Its daemon
+is the Home Manager unit in `home/agentmemory.nix`, started here once the binary
+exists — except on a host with no service manager at all, where that unit can
+never run and the bootstrap starts the daemon as a detached process instead, once
+per run and unsupervised. The plan says which of the two applies to the host it
+is describing.
 Select agents with `--agents` (`claude,codex,omp` / `all` / `none`) or
 `DOTFILE_AGENTS`. Projection is **add-only**: dropping an entry from the manifest
 does not uninstall it from a machine that already applied it.

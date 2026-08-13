@@ -54,7 +54,10 @@ import logging
 import os
 import pathlib
 import shutil
+import socket
+import subprocess
 import sys
+import time
 
 if __package__ in (None, ""):  # run directly (`python3 platform/installers/agents.py`)
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -199,6 +202,13 @@ PLUGINS = (
     Plugin("composio", "composio", agents=BOTH_MARKETS),
 )
 
+# The memory daemon's local endpoint, named once because four separate things
+# have to agree on it: the MCP shim's env below, the daemon's own REST port
+# (documented in home/agentmemory.nix), the liveness probe that decides whether
+# `start_agentmemory` has anything to do, and the plan text.
+AGENTMEMORY_PORT = 3111
+AGENTMEMORY_URL = "http://localhost:{}".format(AGENTMEMORY_PORT)
+
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
 # Claude via `claude mcp add`, Codex via `codex mcp add`, and omp via OMP_MCP
 # (it is a first-class MCP client, so no adapter is needed).
@@ -210,13 +220,15 @@ MCP_SERVERS = (
              "(and writes Claude's auto-allow list), so only omp is projected from here",
     ),
     McpServer(
-        "agentmemory", agents=("codex", "omp"),
+        "agentmemory", agents=("claude", "codex", "omp"),
         command="npx", args=["-y", "@agentmemory/mcp"],
-        env={"AGENTMEMORY_URL": "http://localhost:3111"},
-        note="ADR-0011 wires the memory backend to omp + Codex ONLY — Claude keeps its "
-             "built-in file memory until this backend proves itself in real use. The shim "
-             "exposes the full tool surface only when it can reach the local daemon, hence "
-             "the explicit URL (the daemon is home/agentmemory.nix)",
+        env={"AGENTMEMORY_URL": AGENTMEMORY_URL},
+        note="the memory backend for ALL THREE agents — ADR-0011's revisit trigger fired "
+             "(update log 2026-08-13), so Claude joins omp + Codex here and its built-in "
+             "file memory is switched off instead. That switch is a preference-plane "
+             "setting this manifest never touches, so it is per-machine. The shim exposes "
+             "the full tool surface only when it can reach the local daemon, hence the "
+             "explicit URL (the daemon is home/agentmemory.nix)",
     ),
     # The Smithery *namespace* endpoint (https://mcp.smithery.run/<namespace>) is
     # deliberately NOT here: its name comes from the logged-in Smithery account,
@@ -257,6 +269,16 @@ AGENTMEMORY_NPM_PACKAGE = "@agentmemory/agentmemory"
 # rewritten at runtime — ADR-0011's one legitimate Tier A citizen); starting it
 # once the binary exists is this layer's job, because the HM switch runs first.
 AGENTMEMORY_SERVICE = "agentmemory"
+# Where the no-service-manager fallback (see start_agentmemory) sends the
+# daemon's output. Next to launchd's own two log files rather than under
+# ~/.local, so every way of starting this daemon leaves its trail in one place.
+# Truncated on each bootstrap: the directory is a persistent env link, but a log
+# from a container that no longer exists is noise, not history.
+AGENTMEMORY_LOG = HOME / ".agentmemory" / "bootstrap.log"
+# How long to wait for the fallback-started daemon to answer on its port before
+# reporting that it did not. Long enough for a cold node start, short enough not
+# to stall a bootstrap behind a daemon that is never coming up.
+AGENTMEMORY_START_TIMEOUT = 15
 # Agent ids that `codegraph install --target` accepts (a bad id makes it print the
 # list). omp is not one of them — it gets codegraph through OMP_MCP instead.
 CODEGRAPH_TARGETS = ("claude", "codex")
@@ -908,15 +930,104 @@ class OmpAgent(Agent):
 
 
 def _agentmemory_wanted(ids):
-    """agentmemory is wired to omp and Codex only (ADR-0011); Claude keeps its
-    built-in file memory, so a Claude-only run installs nothing. (omp's own
-    memory backends — off/local/hindsight — are a possible future replacement,
-    not the current wiring.)"""
-    return bool({"codex", "omp"} & set(ids))
+    """agentmemory is the memory backend for every agent (ADR-0011 update log,
+    2026-08-13), so any non-empty selection wants it — including a Claude-only
+    run, which previously installed nothing here.
+
+    The other half of "all memory goes through agentmemory" — turning Claude's
+    built-in file memory off (`autoMemoryEnabled: false` in
+    ~/.claude/settings.json) — is deliberately NOT done from here: settings.json
+    is the preference plane, which ADR-0011 leaves untouched because all three
+    agents rewrite it at runtime. It is a per-machine setting. (omp's own memory
+    backends — off/local/hindsight — are a possible future replacement, not the
+    current wiring.)"""
+    return bool(ids)
 
 
 def install_agentmemory(ctx):
     return _npm_install_global(ctx, AGENTMEMORY_NPM_PACKAGE, "agentmemory")
+
+
+def _has_service_manager(ctx):
+    """Whether a supervisor can own the daemon: launchd on macOS, a systemd user
+    session on Linux. False on the jcc devpods, which have neither — the plan text
+    and the start path both branch on this, so they cannot disagree.
+    """
+    if ctx.os_type == "darwin":
+        return True
+    return bool(shutil.which("systemctl")) and pathlib.Path("/run/systemd/system").is_dir()
+
+
+def _agentmemory_is_up(timeout=0.5):
+    """True when something accepts a connection on the daemon's REST port.
+
+    Cheaper and more honest than a pidfile: ~/.agentmemory/iii.pid outlives the
+    process that wrote it (a container recreation leaves a pid belonging to
+    nothing), so the port is the only thing that answers "is the backend
+    actually reachable" — which is the question every agent's MCP shim asks.
+    """
+    try:
+        with socket.create_connection(("127.0.0.1", AGENTMEMORY_PORT), timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _start_agentmemory_unsupervised():
+    """Start the daemon as a plain detached process — ONLY for hosts with no
+    service manager at all.
+
+    This path is not an alternative to the Home Manager unit; it is what happens
+    where that unit cannot run. The jcc devpods have no init system
+    (`/run/systemd/system` does not exist and there is no session bus), so the
+    unit is declared and never runnable. This used to warn and return, which left
+    the whole memory plane dead: nothing on :3111, no SQLite store ever created,
+    and every agent's MCP shim silently degraded. Since ADR-0011's update log for
+    2026-08-13 makes agentmemory the memory backend for *all three* agents, "no
+    daemon" is no longer a partial loss, so a bootstrap starts it directly.
+
+    One start per bootstrap is the whole contract, and it is the right one for
+    these hosts specifically: $HOME is container-local, so a machine that goes
+    away takes the process with it and the next bootstrap is what brings it back.
+    Nothing here supervises or restarts — a crash mid-session stays down until
+    then. Hosts that *do* have a supervisor keep getting one, via the unit.
+
+    `start_new_session` is what makes the process outlive the run: without it the
+    daemon shares setup.py's process group and dies with the bootstrap shell.
+    """
+    binary = shutil.which(AGENTMEMORY_SERVICE)
+    if not binary:
+        logger.warning("agentmemory is not on PATH; the memory backend stays down")
+        return
+    log = None
+    try:
+        AGENTMEMORY_LOG.parent.mkdir(parents=True, exist_ok=True)
+        log = open(AGENTMEMORY_LOG, "w")
+    except OSError as e:
+        logger.warning("cannot write %s (%s); starting the daemon without a log",
+                       AGENTMEMORY_LOG, e)
+    try:
+        subprocess.Popen([binary], stdin=subprocess.DEVNULL,
+                         stdout=log if log is not None else subprocess.DEVNULL,
+                         stderr=subprocess.STDOUT, start_new_session=True, cwd=str(HOME))
+    except OSError as e:
+        logger.warning("could not start the memory daemon: %s", e)
+        return
+    finally:
+        if log is not None:
+            log.close()
+    # Say whether it actually came up. A daemon that exits on a bad config is
+    # indistinguishable from a healthy one at Popen time, and reporting a start
+    # that did not happen is exactly how this plane stayed dead unnoticed.
+    deadline = time.monotonic() + AGENTMEMORY_START_TIMEOUT
+    while time.monotonic() < deadline:
+        if _agentmemory_is_up():
+            logger.info("memory daemon is up on :%d (no service manager here; log: %s)",
+                        AGENTMEMORY_PORT, AGENTMEMORY_LOG)
+            return
+        time.sleep(0.5)
+    logger.warning("memory daemon did not answer on :%d within %ds — see %s",
+                   AGENTMEMORY_PORT, AGENTMEMORY_START_TIMEOUT, AGENTMEMORY_LOG)
 
 
 def start_agentmemory(ctx):
@@ -925,18 +1036,31 @@ def start_agentmemory(ctx):
     The unit is written during the HM switch, which runs *before* this script
     installs the binary — so on a first bootstrap the unit exists but has nothing
     to run. Kicking it here is the imperative half of that split, and is
-    non-fatal: a container without a service manager simply has no daemon.
+    non-fatal throughout: no path below aborts a bootstrap.
+
+    Three cases, in descending order of supervision: launchd, systemd, and — for
+    a container with neither — a detached process this bootstrap starts once
+    (see `_start_agentmemory_unsupervised`).
     """
     if ctx.dry_run:
-        logger.info("[DRY-RUN] would start the '%s' user service (:3111)", AGENTMEMORY_SERVICE)
+        logger.info("[DRY-RUN] would start the '%s' user service on :%d "
+                    "(or, with no service manager, as a detached process)",
+                    AGENTMEMORY_SERVICE, AGENTMEMORY_PORT)
         return
     if ctx.os_type == "darwin":
         uid = os.getuid()
         ctx.run_command(["launchctl", "kickstart", "-k",
                          "gui/{}/{}".format(uid, AGENTMEMORY_SERVICE)], check=False)
         return
-    if not shutil.which("systemctl") or not pathlib.Path("/run/systemd/system").is_dir():
-        logger.warning("no systemd user session; start the memory daemon yourself: agentmemory")
+    if not _has_service_manager(ctx):
+        # Idempotent: re-running the bootstrap must not stack a second daemon on
+        # a port the first one already holds. Only this branch needs the guard —
+        # `systemctl enable --now` is idempotent by itself, and must still run
+        # when the unit is up so the enablement is persisted.
+        if _agentmemory_is_up():
+            logger.info("memory daemon already answering on :%d — left as is", AGENTMEMORY_PORT)
+            return
+        _start_agentmemory_unsupervised()
         return
     unit = AGENTMEMORY_SERVICE + ".service"
     ctx.run_command(["systemctl", "--user", "daemon-reload"], check=False)
@@ -1021,10 +1145,19 @@ def plan_items(ctx, ids, add):
         if shutil.which("agentmemory"):
             add("install", "agentmemory already present — left as is")
         else:
-            add("install", "agentmemory via npm -g ({}) — local SQLite memory for omp + Codex"
-                .format(AGENTMEMORY_NPM_PACKAGE))
-        add("config", "start the '{}' user service on :3111 (unit declared by home/agentmemory.nix)"
-            .format(AGENTMEMORY_SERVICE))
+            add("install", "agentmemory via npm -g ({}) — the local SQLite memory backend "
+                           "for every selected agent".format(AGENTMEMORY_NPM_PACKAGE))
+        if _has_service_manager(ctx):
+            add("config", "start the '{}' user service on :{} (unit declared by "
+                          "home/agentmemory.nix)".format(AGENTMEMORY_SERVICE, AGENTMEMORY_PORT))
+        elif _agentmemory_is_up():
+            add("config", "memory daemon already answering on :{} — left as is"
+                .format(AGENTMEMORY_PORT))
+        else:
+            add("config", "start agentmemory on :{} as a DETACHED process — this host has no "
+                          "service manager, so the Home Manager unit cannot run. One start per "
+                          "bootstrap, nothing restarts it; log: {}"
+                .format(AGENTMEMORY_PORT, AGENTMEMORY_LOG))
 
 
 def main():

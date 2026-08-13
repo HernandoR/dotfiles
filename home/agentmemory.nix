@@ -17,6 +17,14 @@
 # "nothing to do", not a fault to restart-loop over. `agents.start_agentmemory`
 # kicks the unit once the install has happened.
 #
+# This unit is the supervised path and stays the only one wherever a supervisor
+# exists. Hosts with NO init system at all (the jcc devpods: no
+# /run/systemd/system, no session bus) can never run it, so there
+# `agents.start_agentmemory` starts the daemon as a detached process once per
+# bootstrap instead — unsupervised by design, since $HOME is container-local and
+# the next bootstrap is the restart. See its docstring and ADR-0011's update log
+# for 2026-08-13.
+#
 # Memory lives in a local SQLite DB under ~/.agentmemory, which is an ADR-0009
 # Tier-B link (home/env-links.nix) so it survives container recreation. The daemon
 # serves REST on :3111 (the viewer on :3113); the MCP shim each agent runs talks to
@@ -60,7 +68,7 @@ in
 {
   systemd.user.services.agentmemory = lib.mkIf pkgs.stdenv.isLinux {
     Unit = {
-      Description = "agentmemory — local memory backend for omp and Codex (ADR-0011)";
+      Description = "agentmemory — local memory backend for Claude, Codex and omp (ADR-0011)";
       Documentation = "https://github.com/rohitg00/agentmemory";
     };
     Service = {
