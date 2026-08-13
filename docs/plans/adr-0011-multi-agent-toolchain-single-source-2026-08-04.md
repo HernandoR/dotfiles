@@ -363,8 +363,13 @@ the one genuine Tier A addition is the agentmemory service unit.
   What changed in the repo, both in `platform/installers/agents.py`:
 
   - the `agentmemory` `McpServer` entry gains `claude`, so `claude mcp add`
-    projects it exactly the way `codex mcp add` and the `~/.omp/agent/mcp.json`
-    merge already did;
+    projects it the way `codex mcp add` and the `~/.omp/agent/mcp.json` merge
+    already did — which took a fix, because Claude's `_mcp_add` built its
+    argument order wrong: `claude mcp add`'s `-e/--env` is variadic, so a server
+    name placed after it is swallowed as another `KEY=VALUE`. The bug was latent
+    for exactly as long as it could be — agentmemory is the first env-carrying
+    server projected to Claude, and codegraph, the only other entry, is
+    delegated to its own installer and never took this path;
   - `_agentmemory_wanted` becomes "any agent selected" rather than "codex or
     omp", so a Claude-only run now installs the backend instead of nothing.
 

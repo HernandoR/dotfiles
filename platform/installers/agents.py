@@ -716,9 +716,20 @@ class ClaudeAgent(Agent):
         cmd = [claude, "mcp", "add", "--scope", "user"]
         if server.url:
             return cmd + ["--transport", "http", server.name, server.url]
+        # The NAME MUST COME BEFORE -e. `claude mcp add`'s env option is variadic
+        # (`-e, --env <env...>`), so a name placed after it is swallowed as one
+        # more KEY=VALUE and the whole command dies with "Invalid environment
+        # variable format: <name>". The CLI's own example puts it this way round:
+        # `claude mcp add my-server -e API_KEY=xxx -- npx my-mcp-server`.
+        #
+        # This was latent until agentmemory reached Claude (2026-08-13): it is the
+        # first env-carrying server projected here, and codegraph — the only other
+        # entry — is delegated, so this path had never run with an env at all.
+        # Codex's _mcp_add already names the server first and was never affected.
+        cmd += [server.name]
         for key, value in server.env.items():
             cmd += ["-e", "{}={}".format(key, value)]
-        return cmd + [server.name, "--", server.command] + server.args
+        return cmd + ["--", server.command] + server.args
 
     def _instruction_shell(self, ctx):
         """Make sure the shell imports the shared source, keeping whatever the
