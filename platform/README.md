@@ -77,20 +77,17 @@ What lands where:
 | Plane | Where it lives | How it is applied |
 |---|---|---|
 | instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` + `~/.omp/agent/AGENTS.md` symlinks; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
-| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add`, `codex mcp add`, and an add-only merge into `~/.omp/agent/mcp.json` (omp is a first-class MCP client; the pi extension set retired — omp covers MCP, sub-agents, browser and Claude-plugin skills natively) |
+| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` + `OMP_MEMORY_BACKEND` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add`, `codex mcp add`, an add-only merge into `~/.omp/agent/mcp.json` (omp is a first-class MCP client; the pi extension set retired — omp covers MCP, sub-agents, browser and Claude-plugin skills natively), and `omp config set memory.backend` |
 | preference | each agent's own config | **never touched** — all three rewrite it at runtime |
 
 Loose skills live in `~/.agents/skills` (Codex and omp read it natively;
 `~/.codex/skills` and `~/.omp/agent/skills` link to it). Links are re-asserted
 after any delegated installer (`codegraph`) that appends to a linked file and
-writes it back. agentmemory is the memory backend for all three agents — Claude's
-built-in file memory is switched off in its own settings instead, which is
-preference plane and therefore per machine, not projected from here. Its daemon
-is the Home Manager unit in `home/agentmemory.nix`, started here once the binary
-exists — except on a host with no service manager at all, where that unit can
-never run and the bootstrap starts the daemon as a detached process instead, once
-per run and unsupervised. The plan says which of the two applies to the host it
-is describing.
+writes it back. Memory is **omp-native**: `memory.backend = mnemopi` is projected
+with `omp config set` (a bundled local SQLite store inside `~/.omp`, no daemon and
+no port), which replaced the agentmemory daemon + MCP shim and its Home Manager
+unit. Claude and Codex keep whatever their own settings say — memory is preference
+plane for them, so it is per machine and not projected from here.
 Select agents with `--agents` (`claude,codex,omp` / `all` / `none`) or
 `DOTFILE_AGENTS`. Projection is **add-only**: dropping an entry from the manifest
 does not uninstall it from a machine that already applied it.

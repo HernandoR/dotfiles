@@ -8,9 +8,6 @@
     ./tmux.nix
     ./mise.nix
     ./direnv.nix
-    # The agentmemory user service (ADR-0011): a unit is never rewritten at
-    # runtime, so it is the one piece of the agent toolchain that is declarative.
-    ./agentmemory.nix
     # Mutable out-of-store $HOME links (ADR-0009 Tier B): mechanism + the set
     # every environment wants…
     ./env-links.nix

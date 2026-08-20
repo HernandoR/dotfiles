@@ -54,10 +54,8 @@ import logging
 import os
 import pathlib
 import shutil
-import socket
 import subprocess
 import sys
-import time
 
 if __package__ in (None, ""):  # run directly (`python3 platform/installers/agents.py`)
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -202,13 +200,6 @@ PLUGINS = (
     Plugin("composio", "composio", agents=BOTH_MARKETS),
 )
 
-# The memory daemon's local endpoint, named once because four separate things
-# have to agree on it: the MCP shim's env below, the daemon's own REST port
-# (documented in home/agentmemory.nix), the liveness probe that decides whether
-# `start_agentmemory` has anything to do, and the plan text.
-AGENTMEMORY_PORT = 3111
-AGENTMEMORY_URL = "http://localhost:{}".format(AGENTMEMORY_PORT)
-
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
 # Claude via `claude mcp add`, Codex via `codex mcp add`, and omp via OMP_MCP
 # (it is a first-class MCP client, so no adapter is needed).
@@ -218,17 +209,6 @@ MCP_SERVERS = (
         command="codegraph", args=["serve", "--mcp"], delegated=True,
         note="code-intelligence graph; `codegraph install` wires Claude + Codex itself "
              "(and writes Claude's auto-allow list), so only omp is projected from here",
-    ),
-    McpServer(
-        "agentmemory", agents=("claude", "codex", "omp"),
-        command="npx", args=["-y", "@agentmemory/mcp"],
-        env={"AGENTMEMORY_URL": AGENTMEMORY_URL},
-        note="the memory backend for ALL THREE agents — ADR-0011's revisit trigger fired "
-             "(update log 2026-08-13), so Claude joins omp + Codex here and its built-in "
-             "file memory is switched off instead. That switch is a preference-plane "
-             "setting this manifest never touches, so it is per-machine. The shim exposes "
-             "the full tool surface only when it can reach the local daemon, hence the "
-             "explicit URL (the daemon is home/agentmemory.nix)",
     ),
     # The Smithery *namespace* endpoint (https://mcp.smithery.run/<namespace>) is
     # deliberately NOT here: its name comes from the logged-in Smithery account,
@@ -263,28 +243,21 @@ MCP_SERVERS = (
 # Binary installation is mutable with mise, while config remains outside Home
 # Manager — see OmpAgent.
 CODEX_INSTALLER = "https://chatgpt.com/codex/install.sh"
-AGENTMEMORY_NPM_PACKAGE = "@agentmemory/agentmemory"
-# launchd label / systemd unit name of the memory daemon declared in
-# home/agentmemory.nix. Home Manager owns the unit (a service file is never
-# rewritten at runtime — ADR-0011's one legitimate Tier A citizen); starting it
-# once the binary exists is this layer's job, because the HM switch runs first.
-AGENTMEMORY_SERVICE = "agentmemory"
-# Where the no-service-manager fallback (see start_agentmemory) sends the
-# daemon's output. Next to launchd's own two log files rather than under
-# ~/.local, so every way of starting this daemon leaves its trail in one place.
-# Truncated on each bootstrap: the directory is a persistent env link, but a log
-# from a container that no longer exists is noise, not history.
-AGENTMEMORY_LOG = HOME / ".agentmemory" / "bootstrap.log"
-# How long to wait for the fallback-started daemon to answer on its port before
-# reporting that it did not. Long enough for a cold node start, short enough not
-# to stall a bootstrap behind a daemon that is never coming up.
-AGENTMEMORY_START_TIMEOUT = 15
+# omp's memory backend, and the setting key it lives under. omp carries a local
+# long-term memory store natively (mnemopi: bundled SQLite under omp's agent
+# memories dir, no daemon and no port), which is what replaced the agentmemory
+# daemon + MCP shim (ADR-0011 update log, 2026-08-20). It is projected the way
+# every other capability is — through the agent's own CLI — because
+# ~/.omp/agent/config.yml is rewritten by omp at runtime and may never be
+# HM-managed or patched from here.
+OMP_MEMORY_BACKEND = "mnemopi"
+OMP_MEMORY_KEY = "memory.backend"
 # Agent ids that `codegraph install --target` accepts (a bad id makes it print the
 # list). omp is not one of them — it gets codegraph through OMP_MCP instead.
 CODEGRAPH_TARGETS = ("claude", "codex")
 
 
-# --- small filesystem / npm helpers -----------------------------------------
+# --- small filesystem / mise helpers ----------------------------------------
 
 
 def _read(path):
@@ -292,40 +265,6 @@ def _read(path):
         return path.read_text()
     except OSError:
         return ""
-
-
-_NPM = []  # one-slot cache; resolving npm costs a mise call
-
-
-def _npm(ctx):
-    """Path to the npm of the mise-managed node runtime, or None.
-
-    ``shutil.which`` is not enough. ``setup_runtimes`` materializes node under
-    ``~/.local/share/mise/installs/…``, which reaches PATH only through mise's
-    *shell* integration — never in this process. On a machine where the operator's
-    shell has mise activated the plain lookup happens to work; on a fresh one it
-    always misses, which silently skipped agentmemory entirely (found on a clean
-    devpod bootstrap, 2026-08-05). So ask mise where npm is.
-    """
-    if _NPM:
-        return _NPM[0]
-    npm = shutil.which("npm")
-    if not npm:
-        mise = shutil.which("mise")
-        if mise:
-            out = ctx.run_command([mise, "which", "npm"], capture_output=True, check=False)
-            resolved = _stdout(out)
-            if resolved and pathlib.Path(resolved).is_file():
-                npm = resolved
-    if not npm:
-        if ctx.dry_run:
-            # Describe-only run: nothing is installed, so name the command anyway.
-            npm = "npm"
-        else:
-            logger.warning("npm not resolvable via PATH or `mise which npm`; "
-                           "skipping the npm-installed agent (agentmemory)")
-    _NPM.append(npm)
-    return npm
 
 
 def _stdout(completed):
@@ -336,74 +275,13 @@ def _stdout(completed):
     return out.strip()
 
 
-_NPM_GLOBAL_BIN = []  # one-slot cache: `npm prefix -g` is a node start-up per call
-
-
-def _npm_global_bin(ctx):
-    """``<npm global prefix>/bin`` — where ``npm install -g`` puts binaries under
-    the mise node. Needed because this process installs agentmemory and then
-    *uses* it, and mise only shims the tools its own config declares."""
-    if _NPM_GLOBAL_BIN:
-        return _NPM_GLOBAL_BIN[0]
-    npm = _npm(ctx)
-    if not npm or npm == "npm":
-        return None
-    prefix = _stdout(ctx.run_command([npm, "prefix", "-g"], capture_output=True, check=False))
-    resolved = str(pathlib.Path(prefix) / "bin") if prefix else None
-    _NPM_GLOBAL_BIN.append(resolved)
-    return resolved
-
-
-def ensure_node_on_path(ctx):
-    """Put the mise node's bin dir on this process' PATH.
-
-    Resolving npm by absolute path is not enough, because the *children* need
-    node too: npm runs a dependency's ``postinstall`` as ``sh -c node …``, and the
-    CLI installed here (``agentmemory``) is a node script behind a
-    ``#!/usr/bin/env node`` shebang. On a clean pod it failed with
-    ``node: not found`` until this existed.
-
-    Same idea as ``Ctx._extend_path`` for ~/.local/bin: this process installs
-    tools and then uses them, so it needs the PATH the login shell would have. It
-    also means npm's global bin (the mise node's own bin dir) is on PATH, so a
-    freshly installed ``agentmemory`` resolves by name.
-    """
-    npm = _npm(ctx)
-    if not npm or npm == "npm":
-        return
-    bin_dir = str(pathlib.Path(npm).parent)
-    path = os.environ.get("PATH", "").split(os.pathsep)
-    if bin_dir not in path:
-        os.environ["PATH"] = os.pathsep.join([bin_dir, *path])
-        logger.info("added the mise node bin dir to PATH: %s", bin_dir)
-
-
-def _resolve_bin(ctx, name):
-    """Find a freshly installed binary. ``shutil.which`` first (the usual case),
-    then the npm global bin dir (not on this process' PATH), then a
-    mise-managed tool via ``mise which`` (omp only as a migration belt — its
-    binary is a home.packages nix package now, so the HM switch is the channel)."""
-    found = shutil.which(name)
-    if found:
-        return found
-    bin_dir = _npm_global_bin(ctx)
-    if bin_dir:
-        candidate = pathlib.Path(bin_dir) / name
-        if candidate.is_file():
-            return str(candidate)
-    mise_resolved = _mise_which(ctx, name)
-    if mise_resolved:
-        return mise_resolved
-    return None
-
-
 def _mise_which(ctx, name):
     """Resolve a mise-managed binary (``mise which <name>``), or None.
 
-    Same reachability problem as ``_npm``: mise's shims only land on PATH through
-    the *shell* integration, never in this process. `mise which` resolves the
-    installed binary even when its dir is off this process' PATH, and is a cheap
-    non-zero exit for tools mise does not manage (claude, codex).
+    mise's shims only land on PATH through the *shell* integration, never in this
+    process. `mise which` resolves the installed binary even when its dir is off
+    this process' PATH, and is a cheap non-zero exit for tools mise does not
+    manage (claude, codex).
     """
     mise = shutil.which("mise")
     if not mise:
@@ -413,21 +291,6 @@ def _mise_which(ctx, name):
     if resolved and pathlib.Path(resolved).is_file():
         return resolved
     return None
-
-
-def _npm_install_global(ctx, package, binary):
-    """``npm install -g <package>`` unless ``binary`` already resolves. Skipping a
-    present tool is what keeps its own self-update authoritative (ADR-0011)."""
-    found = _resolve_bin(ctx, binary)
-    if found:
-        logger.info("%s already installed (%s); leaving its self-update in charge", binary, found)
-        return found
-    npm = _npm(ctx)
-    if not npm:
-        return None
-    logger.info("installing %s (npm -g)", package)
-    ctx.run_command([npm, "install", "-g", package], check=False, stdin_devnull=True)
-    return _resolve_bin(ctx, binary)
 
 
 def _link(ctx, link, target, absorb=False):
@@ -722,10 +585,11 @@ class ClaudeAgent(Agent):
         # variable format: <name>". The CLI's own example puts it this way round:
         # `claude mcp add my-server -e API_KEY=xxx -- npx my-mcp-server`.
         #
-        # This was latent until agentmemory reached Claude (2026-08-13): it is the
-        # first env-carrying server projected here, and codegraph — the only other
-        # entry — is delegated, so this path had never run with an env at all.
-        # Codex's _mcp_add already names the server first and was never affected.
+        # Found when the (since removed) agentmemory shim carried an env — the
+        # only env-carrying entry this path ever had, since codegraph is
+        # delegated. No entry carries an env today, so the order matters for the
+        # next one that does. Codex's _mcp_add already names the server first and
+        # was never affected.
         cmd += [server.name]
         for key, value in server.env.items():
             cmd += ["-e", "{}={}".format(key, value)]
@@ -867,8 +731,8 @@ class OmpAgent(Agent):
     nothing here generates a config file for omp.
 
     omp supersedes the whole retired pi extension set natively (see the comment
-    above MCP_SERVERS), so the projection here is only the two shared-source
-    links and the OMP_MCP merge:
+    above MCP_SERVERS), so the projection here is the two shared-source links,
+    the OMP_MCP merge, and one setting:
 
     - ``~/.omp/agent/AGENTS.md`` is omp's native user-level context file
       (native provider, priority 100), so it links to the shared instruction
@@ -878,6 +742,10 @@ class OmpAgent(Agent):
       discovery provider, so the link is a belt, not the mechanism.
     - MCP servers land in ``~/.omp/agent/mcp.json``, which omp reads natively
       (and rewrites itself via ``/mcp`` — hence the add-only merge).
+    - ``memory.backend = mnemopi`` turns on omp's own local memory store, set
+      with ``omp config set`` (see ``set_memory_backend``). This is the memory
+      plane for the whole toolchain since agentmemory was removed: one bundled
+      SQLite store inside ``~/.omp``, no daemon and no port to keep alive.
     """
 
     id = "omp"
@@ -894,7 +762,7 @@ class OmpAgent(Agent):
         # setup_runtimes materializes the mise seed before agent projection;
         # `_mise_which` resolves it even though mise's shell shims are not on
         # this process' PATH.
-        found = shutil.which(self.binary) or _mise_which(ctx, self.binary)
+        found = self._bin(ctx)
         if found:
             logger.info("omp already available from mise (%s)", found)
             return
@@ -909,16 +777,64 @@ class OmpAgent(Agent):
         _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS)
         _link(ctx, self.SKILLS, SHARED_SKILLS)
         write_omp_mcp(ctx)
+        self.set_memory_backend(ctx)
         # No extension packages: omp covers the retired pi extension set natively
         # (MCP client, sub-agents, browser, Claude-plugin skills discovery).
 
+    def _bin(self, ctx):
+        """omp's binary, PATH first and then mise (whose shims are shell-only)."""
+        return shutil.which(self.binary) or _mise_which(ctx, self.binary)
+
+    @staticmethod
+    def _memory_backend(omp):
+        """omp's configured ``memory.backend``, as omp itself reports it.
+
+        Deliberately NOT through ``ctx.run_command``: this is a read, and the
+        ADR-0010 plan runs with ``dry_run`` set, where ``run_command`` returns an
+        empty result without executing. Routing it through there would make the
+        plan announce a change on a machine that already has the setting.
+        """
+        try:
+            out = subprocess.run([omp, "config", "get", OMP_MEMORY_KEY],
+                                 capture_output=True, stdin=subprocess.DEVNULL)
+        except OSError:
+            return ""
+        return _stdout(out)
+
+    def set_memory_backend(self, ctx):
+        """Turn on omp's native memory store (``memory.backend = mnemopi``).
+
+        The config-plane rule holds: omp rewrites ~/.omp/agent/config.yml itself,
+        so this goes through ``omp config set`` and never through a file this
+        layer writes. Re-asserted on every bootstrap like every other projected
+        capability, and a no-op once the value is already there.
+        """
+        omp = self._bin(ctx)
+        if not omp:
+            logger.warning("omp not resolvable; memory backend not set (would be %s)",
+                           OMP_MEMORY_BACKEND)
+            return
+        if self._memory_backend(omp) == OMP_MEMORY_BACKEND:
+            logger.info("omp memory backend already %s", OMP_MEMORY_BACKEND)
+            return
+        ctx.run_command([omp, "config", "set", OMP_MEMORY_KEY, OMP_MEMORY_BACKEND],
+                        check=False, stdin_devnull=True)
+
     def plan(self, ctx, add):
-        if shutil.which(self.binary) or _mise_which(ctx, self.binary):
+        omp_bin = self._bin(ctx)
+        if omp_bin:
             add("install", "omp (oh-my-pi) already available from mise — left as is")
         else:
             add("install", "omp (oh-my-pi) via mise — github:can1357/oh-my-pi "
                            "(compiling the Nix source build takes too long; config not "
                            "HM-managed)")
+        if omp_bin and self._memory_backend(omp_bin) == OMP_MEMORY_BACKEND:
+            add("config", "omp memory backend already {} — left as is".format(
+                OMP_MEMORY_BACKEND))
+        else:
+            add("config", "omp {} -> {} via `omp config set` — the toolchain's memory "
+                          "plane (bundled local SQLite in ~/.omp; no daemon, no port)"
+                .format(OMP_MEMORY_KEY, OMP_MEMORY_BACKEND))
         add("config", "no omp extension packages projected — native MCP client, native "
                       "sub-agents, native browser, and Claude-plugin skills discovery "
                       "cover the retired pi extension set")
@@ -937,150 +853,6 @@ class OmpAgent(Agent):
                           "merged into)".format(OMP_MCP, OMP_MCP.name))
 
 
-# --- agentmemory (a capability, not an agent) --------------------------------
-
-
-def _agentmemory_wanted(ids):
-    """agentmemory is the memory backend for every agent (ADR-0011 update log,
-    2026-08-13), so any non-empty selection wants it — including a Claude-only
-    run, which previously installed nothing here.
-
-    The other half of "all memory goes through agentmemory" — turning Claude's
-    built-in file memory off (`autoMemoryEnabled: false` in
-    ~/.claude/settings.json) — is deliberately NOT done from here: settings.json
-    is the preference plane, which ADR-0011 leaves untouched because all three
-    agents rewrite it at runtime. It is a per-machine setting. (omp's own memory
-    backends — off/local/hindsight — are a possible future replacement, not the
-    current wiring.)"""
-    return bool(ids)
-
-
-def install_agentmemory(ctx):
-    return _npm_install_global(ctx, AGENTMEMORY_NPM_PACKAGE, "agentmemory")
-
-
-def _has_service_manager(ctx):
-    """Whether a supervisor can own the daemon: launchd on macOS, a systemd user
-    session on Linux. False on the jcc devpods, which have neither — the plan text
-    and the start path both branch on this, so they cannot disagree.
-    """
-    if ctx.os_type == "darwin":
-        return True
-    return bool(shutil.which("systemctl")) and pathlib.Path("/run/systemd/system").is_dir()
-
-
-def _agentmemory_is_up(timeout=0.5):
-    """True when something accepts a connection on the daemon's REST port.
-
-    Cheaper and more honest than a pidfile: ~/.agentmemory/iii.pid outlives the
-    process that wrote it (a container recreation leaves a pid belonging to
-    nothing), so the port is the only thing that answers "is the backend
-    actually reachable" — which is the question every agent's MCP shim asks.
-    """
-    try:
-        with socket.create_connection(("127.0.0.1", AGENTMEMORY_PORT), timeout):
-            return True
-    except OSError:
-        return False
-
-
-def _start_agentmemory_unsupervised():
-    """Start the daemon as a plain detached process — ONLY for hosts with no
-    service manager at all.
-
-    This path is not an alternative to the Home Manager unit; it is what happens
-    where that unit cannot run. The jcc devpods have no init system
-    (`/run/systemd/system` does not exist and there is no session bus), so the
-    unit is declared and never runnable. This used to warn and return, which left
-    the whole memory plane dead: nothing on :3111, no SQLite store ever created,
-    and every agent's MCP shim silently degraded. Since ADR-0011's update log for
-    2026-08-13 makes agentmemory the memory backend for *all three* agents, "no
-    daemon" is no longer a partial loss, so a bootstrap starts it directly.
-
-    One start per bootstrap is the whole contract, and it is the right one for
-    these hosts specifically: $HOME is container-local, so a machine that goes
-    away takes the process with it and the next bootstrap is what brings it back.
-    Nothing here supervises or restarts — a crash mid-session stays down until
-    then. Hosts that *do* have a supervisor keep getting one, via the unit.
-
-    `start_new_session` is what makes the process outlive the run: without it the
-    daemon shares setup.py's process group and dies with the bootstrap shell.
-    """
-    binary = shutil.which(AGENTMEMORY_SERVICE)
-    if not binary:
-        logger.warning("agentmemory is not on PATH; the memory backend stays down")
-        return
-    log = None
-    try:
-        AGENTMEMORY_LOG.parent.mkdir(parents=True, exist_ok=True)
-        log = open(AGENTMEMORY_LOG, "w")
-    except OSError as e:
-        logger.warning("cannot write %s (%s); starting the daemon without a log",
-                       AGENTMEMORY_LOG, e)
-    try:
-        subprocess.Popen([binary], stdin=subprocess.DEVNULL,
-                         stdout=log if log is not None else subprocess.DEVNULL,
-                         stderr=subprocess.STDOUT, start_new_session=True, cwd=str(HOME))
-    except OSError as e:
-        logger.warning("could not start the memory daemon: %s", e)
-        return
-    finally:
-        if log is not None:
-            log.close()
-    # Say whether it actually came up. A daemon that exits on a bad config is
-    # indistinguishable from a healthy one at Popen time, and reporting a start
-    # that did not happen is exactly how this plane stayed dead unnoticed.
-    deadline = time.monotonic() + AGENTMEMORY_START_TIMEOUT
-    while time.monotonic() < deadline:
-        if _agentmemory_is_up():
-            logger.info("memory daemon is up on :%d (no service manager here; log: %s)",
-                        AGENTMEMORY_PORT, AGENTMEMORY_LOG)
-            return
-        time.sleep(0.5)
-    logger.warning("memory daemon did not answer on :%d within %ds — see %s",
-                   AGENTMEMORY_PORT, AGENTMEMORY_START_TIMEOUT, AGENTMEMORY_LOG)
-
-
-def start_agentmemory(ctx):
-    """Start the daemon Home Manager declared (home/agentmemory.nix).
-
-    The unit is written during the HM switch, which runs *before* this script
-    installs the binary — so on a first bootstrap the unit exists but has nothing
-    to run. Kicking it here is the imperative half of that split, and is
-    non-fatal throughout: no path below aborts a bootstrap.
-
-    Three cases, in descending order of supervision: launchd, systemd, and — for
-    a container with neither — a detached process this bootstrap starts once
-    (see `_start_agentmemory_unsupervised`).
-    """
-    if ctx.dry_run:
-        logger.info("[DRY-RUN] would start the '%s' user service on :%d "
-                    "(or, with no service manager, as a detached process)",
-                    AGENTMEMORY_SERVICE, AGENTMEMORY_PORT)
-        return
-    if ctx.os_type == "darwin":
-        uid = os.getuid()
-        ctx.run_command(["launchctl", "kickstart", "-k",
-                         "gui/{}/{}".format(uid, AGENTMEMORY_SERVICE)], check=False)
-        return
-    if not _has_service_manager(ctx):
-        # Idempotent: re-running the bootstrap must not stack a second daemon on
-        # a port the first one already holds. Only this branch needs the guard —
-        # `systemctl enable --now` is idempotent by itself, and must still run
-        # when the unit is up so the enablement is persisted.
-        if _agentmemory_is_up():
-            logger.info("memory daemon already answering on :%d — left as is", AGENTMEMORY_PORT)
-            return
-        _start_agentmemory_unsupervised()
-        return
-    unit = AGENTMEMORY_SERVICE + ".service"
-    ctx.run_command(["systemctl", "--user", "daemon-reload"], check=False)
-    # reset-failed first: an HM switch that landed before the binary existed may
-    # have left the unit in a failed state, which `enable --now` would not clear.
-    ctx.run_command(["systemctl", "--user", "reset-failed", unit], check=False)
-    ctx.run_command(["systemctl", "--user", "enable", "--now", unit], check=False)
-
-
 # --- orchestration -----------------------------------------------------------
 
 
@@ -1097,14 +869,10 @@ def provision(ctx, ids, codegraph_installer):
         return
     logger.info("agents: %s", ", ".join(ids))
     ensure_shared_root(ctx)
-    # Before any npm work: node must be reachable by name, not just by path.
-    ensure_node_on_path(ctx)
 
     agents = [Agent.get(i) for i in ids]
     for agent in agents:
         agent.install(ctx)
-    if _agentmemory_wanted(ids):
-        install_agentmemory(ctx)
 
     # Project BEFORE delegating to codegraph. Its installer writes usage
     # instructions into the agents' instruction files, so with the links already
@@ -1131,9 +899,6 @@ def provision(ctx, ids, codegraph_installer):
     for agent in agents:
         agent.relink(ctx)
 
-    if _agentmemory_wanted(ids):
-        start_agentmemory(ctx)
-
 
 def plan_items(ctx, ids, add):
     """Describe everything ``provision`` would do, through the ADR-0010 ``add``
@@ -1152,23 +917,6 @@ def plan_items(ctx, ids, add):
     else:
         add("install", "CodeGraph from raw.githubusercontent.com/colbymchenry/codegraph "
                        + "+ its MCP server into: " + ", ".join(i for i in ids if i in CODEGRAPH_TARGETS))
-    if _agentmemory_wanted(ids):
-        if shutil.which("agentmemory"):
-            add("install", "agentmemory already present — left as is")
-        else:
-            add("install", "agentmemory via npm -g ({}) — the local SQLite memory backend "
-                           "for every selected agent".format(AGENTMEMORY_NPM_PACKAGE))
-        if _has_service_manager(ctx):
-            add("config", "start the '{}' user service on :{} (unit declared by "
-                          "home/agentmemory.nix)".format(AGENTMEMORY_SERVICE, AGENTMEMORY_PORT))
-        elif _agentmemory_is_up():
-            add("config", "memory daemon already answering on :{} — left as is"
-                .format(AGENTMEMORY_PORT))
-        else:
-            add("config", "start agentmemory on :{} as a DETACHED process — this host has no "
-                          "service manager, so the Home Manager unit cannot run. One start per "
-                          "bootstrap, nothing restarts it; log: {}"
-                .format(AGENTMEMORY_PORT, AGENTMEMORY_LOG))
 
 
 def main():
@@ -1194,6 +942,8 @@ def main():
     print("  extension packages: none projected — native MCP client, native sub-agents,")
     print("  native browser, and Claude-plugin skills discovery cover the retired pi set")
     print("  MCP servers -> {} (read natively; omp rewrites it via /mcp)".format(OMP_MCP))
+    print("  memory: {} = {} (native local SQLite; set with `omp config set`)".format(
+        OMP_MEMORY_KEY, OMP_MEMORY_BACKEND))
 
 
 if __name__ == "__main__":

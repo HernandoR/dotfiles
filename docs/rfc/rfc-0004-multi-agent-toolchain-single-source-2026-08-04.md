@@ -268,3 +268,15 @@ agents it targets and why it is where it is.
   the ADR-0011 update log for the same date carries the reasoning, what the repo
   projects, what stays per-machine, and the finding that the daemon has never
   actually run on the reference host.
+
+- **2026-08-20 — Q5 is retired outright: agentmemory is gone.** Both earlier
+  positions (agentmemory for pi + Codex; then for all three agents) are void.
+  omp ships its own local memory backend (`memory.backend = mnemopi`: SQLite
+  inside `~/.omp`, no daemon, no port, no npm package), so this RFC's central
+  risk — "agentmemory introduces a resident daemon into a bootstrap that
+  currently has none, and its maturity rests on self-reported numbers" — is
+  resolved by removing the daemon rather than by mitigating it. The bootstrap
+  again starts and supervises nothing. Memory is no longer cross-agent: only omp
+  gets a projected backend, and Claude/Codex memory returns to their own
+  preference plane. Full reasoning, the removed code and the accepted
+  consequences are in the ADR-0011 update log for the same date.

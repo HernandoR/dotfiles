@@ -423,3 +423,61 @@ the one genuine Tier A addition is the agentmemory service unit.
 
   The `~/.agentmemory` env link (`home/env-links.nix`) was already correct and
   was only ever waiting for a store to persist.
+
+- **2026-08-20 — agentmemory is removed; memory becomes omp-native (mnemopi).**
+  The 2026-08-13 entry above put every agent on one agentmemory store, on the
+  premise that a shared daemon was the only way to get a real memory backend.
+  omp has since grown its own: `memory.backend = mnemopi` is a built-in local
+  long-term memory backend (SQLite under omp's agent memories dir, recall/retain/
+  reflect + `memory_edit` tools, `/memory` commands) with **no daemon, no port and
+  no npm package**. The owner's call is to use it and delete the daemon rather
+  than run both.
+
+  What was removed:
+
+  - `home/agentmemory.nix` — the systemd-user / launchd unit. With it goes this
+    ADR's *only* Tier A citizen, so the agent toolchain is now entirely
+    imperative-plus-links again and `home/default.nix` imports one module less.
+  - the `~/.agentmemory` env link (`home/env-links.nix`). The store that has to
+    survive container recreation is now inside `~/.omp`, which is already a
+    whole-dir Tier-B link at 700.
+  - in `platform/installers/agents.py`: the `agentmemory` `McpServer` entry, the
+    `AGENTMEMORY_*` constants, `_agentmemory_wanted`, `install_agentmemory`,
+    `_has_service_manager`, `_agentmemory_is_up`, `start_agentmemory` and its
+    unsupervised fallback — and, with the last npm-installed tool gone, the whole
+    npm helper layer (`_npm`, `_npm_global_bin`, `ensure_node_on_path`,
+    `_resolve_bin`, `_npm_install_global`). Nothing in a bootstrap starts or
+    supervises a resident process any more, which retires the init-less-host
+    problem the previous entry solved rather than working around it again.
+
+  What replaced it: `OmpAgent.set_memory_backend` runs
+  `omp config set memory.backend mnemopi`, guarded by `omp config get` so it is a
+  no-op once set. This is the same projection rule as every other capability —
+  through the agent's *own* CLI, never by writing `~/.omp/agent/config.yml`, which
+  omp rewrites at runtime (ADR-0009 Tier A still excluded by construction). The
+  ADR-0010 plan gains one line naming the setting, and `plan_items` lost its
+  install/daemon lines.
+
+  Consequences accepted:
+
+  - **Memory is no longer cross-agent.** Only omp has a projected memory backend;
+    Claude and Codex fall back to whatever their own settings say, which is
+    preference plane and therefore per machine. The single-store property of the
+    2026-08-13 entry is given up deliberately: it was never observed working (see
+    that entry's honest note — the daemon had never persisted a store on these
+    hosts), so what is lost is a declaration, not a working plane. The `claude
+    mcp add` argument-order fix it produced stays; it is correct independently.
+  - **Claude's `autoMemoryEnabled: false`** was, and remains, a per-machine
+    preference-plane setting this repo never projects. A machine that had it
+    turned off for agentmemory's sake should be turned back on by hand; nothing in
+    the bootstrap will do it.
+  - **Retirement is manual, as always.** Projection is add-only, so an already
+    provisioned machine keeps its `agentmemory` MCP entry, its npm install and its
+    `~/.agentmemory` directory until the owner removes them.
+
+  Verified on the reference host: `python3 platform/installers/agents.py` prints
+  the manifest with `codegraph` as the only MCP server and `memory.backend =
+  mnemopi` under omp; `python3 platform/setup.py --plan` shows the single new
+  `omp config set` line and no agentmemory install/daemon items; `nix flake check`
+  passes with the module and the env link gone; and `omp config get
+  memory.backend` reports `mnemopi` after the projection ran.

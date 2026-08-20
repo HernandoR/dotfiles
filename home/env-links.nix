@@ -198,14 +198,10 @@ in
       # oh-my-pi (omp): whole-dir, replacing pi (ADR-0011 update log 2026-08-06).
       # ~/.omp/agent/config.yml is rewritten by /settings and by omp's config
       # writer, and ~/.omp/agent/mcp.json by its /mcp commands; the dir also
-      # holds sessions and the auth store (agent.db) — 700 for the latter.
+      # holds sessions, the auth store (agent.db) and — since the memory backend
+      # is omp-native mnemopi (ADR-0011 update log 2026-08-20) — mnemopi's memory
+      # SQLite store under omp's agent memories dir. 700 for the latter two.
       ".omp" = { kind = "dir"; mode = "700"; };
-
-      # agentmemory's local SQLite store + its pinned engine binary (ADR-0011).
-      # The whole value of a memory backend is that it accumulates, so this is
-      # the one agent path where losing the state would matter most; 700 because
-      # it holds verbatim conversation content.
-      ".agentmemory" = { kind = "dir"; mode = "700"; };
 
       # --- shell / machine state ---
 

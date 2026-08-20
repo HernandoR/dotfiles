@@ -44,7 +44,6 @@ home/                 Home Manager modules (the declarative user environment)
   git.nix             programs.git (settings/lfs/signing/attributes) + git-aliases.conf include
   git-aliases.conf    verbatim git aliases (avoids nix-string escaping)
   tmux.nix / tmux.conf, mise.nix, direnv.nix
-  agentmemory.nix     the agentmemory user service (systemd user unit / launchd agent) — ADR-0011's only Tier A piece
   env-links.nix       ADR-0009 Tier B: mkOutOfStoreSymlink mechanism + the $HOME links every env wants
   env-branch.nix      the per-env delta (empty on shared branches; the ONLY file an env branch edits)
   zsh/                functions.zsh, fzf-tab.zsh — sourced verbatim from initContent
@@ -199,23 +198,16 @@ One manifest, three agents, projected by each agent's own CLI:
   linked.
 - **Selection** — `--agents=<spec>` (`claude,codex,omp` / `all` / `none`; unset =
   all). `--no-claude` is a deprecated alias for `none`.
-- **Memory** — **all memory goes through agentmemory**, for all three agents
-  (ADR-0011's revisit trigger fired; see its update log for 2026-08-13). Claude's
-  built-in file memory is switched off rather than run alongside it, so there is
-  one store instead of two. That switch — `autoMemoryEnabled: false` in
-  `~/.claude/settings.json` — is **preference plane**, which the manifest never
-  touches, so it is applied per machine and is not projected by a bootstrap. The
-  daemon is the HM unit in `home/agentmemory.nix`, started by
-  `agents.start_agentmemory` once the binary exists (the HM switch runs first).
-  **Only where no service manager exists at all** — the jcc devpods have no init
-  system, so the unit is declared and unrunnable — the bootstrap instead starts
-  the daemon as a detached process, once per run, with nothing supervising it.
-  That is deliberate rather than a lesser systemd: `$HOME` there is
-  container-local, so a machine that goes away takes the process with it and the
-  next bootstrap is what brings it back. Hosts with systemd or launchd are
-  untouched by that path. Until something answers on :3111 the MCP shim exposes
-  only a degraded surface, so `agents.plan_items` says which of the two ways
-  this host will start it.
+- **Memory** — **omp-native, via mnemopi**. `memory.backend = mnemopi` is
+  projected with `omp config set` (`OmpAgent.set_memory_backend`), which turns on
+  omp's bundled local memory store: SQLite under omp's agent memories dir inside
+  `~/.omp`, with **no daemon and no port**. The agentmemory daemon, its MCP shim,
+  its Home Manager unit (`home/agentmemory.nix`), its `~/.agentmemory` env link
+  and the no-service-manager fallback start are all gone (ADR-0011 update log,
+  2026-08-20) — nothing in the bootstrap keeps a resident process alive any more.
+  Claude and Codex are back to whatever their own settings say: memory is
+  **preference plane** for them, so it stays per machine and the manifest never
+  writes it.
 
 ## The component model
 
