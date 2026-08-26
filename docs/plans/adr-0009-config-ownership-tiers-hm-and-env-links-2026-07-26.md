@@ -1,9 +1,9 @@
 # ADR-0009: Config ownership tiers — env-specific HM module owns mutable links; declarative nixification deferred
 
-| Field | Value |
-|---|---|
-| Status | accepted |
-| Date | 2026-07-26 (decisions settled 2026-07-27) |
+| Field  | Value                                     |
+| ------ | ----------------------------------------- |
+| Status | accepted                                  |
+| Date   | 2026-07-26 (decisions settled 2026-07-27) |
 
 ## Context
 
@@ -46,7 +46,7 @@ mutable link unchanged (RFC-0003, update log).
 
 - **Tier A — portable declarative config** → shared HM modules on `main`.
   What already lives there (shell, git, tmux, starship, mise, packages) stays
-  there. *No Claude config joins it yet* — see Deferral below.
+  there. _No Claude config joins it yet_ — see Deferral below.
 - **Tier B — env-specific mutable state & secrets** → symlinks to persistent
   storage, declared in **one HM module** (`home/env-links.nix`) using
   `mkOutOfStoreSymlink` with absolute **string** paths (never Nix path
@@ -70,7 +70,7 @@ unconditionally from `home/default.nix`; on the shared branches
 example (no corp paths on shared history). Each environment carries its real
 absolute paths on its own branch — the first being **`prod/mewtant`** for the
 mewtant intranet hosts — so the env delta is confined to this one file and
-reviewed like any other change. Module comments state per entry *why* it is
+reviewed like any other change. Module comments state per entry _why_ it is
 env-specific/mutable.
 
 ### Deferral: declarative Claude config (Tier A candidate)
@@ -99,7 +99,7 @@ suffix, retiring `.pre-dotfiles.bak`.
   answerable from the checked-out branch, and drift like
   `.jcc.yaml`/`.lark-cli` cannot silently accumulate — a new link requires a
   commit.
-- Links appear at HM-switch time — *earlier* in bootstrap than today's
+- Links appear at HM-switch time — _earlier_ in bootstrap than today's
   first-post-setup step — and bootstrap loses an env var
   (`DOTFILE_LINK_MAP_JSON`).
 - Claude ergonomics are untouched: `/model`, `/config`, plugin installs all
@@ -108,10 +108,10 @@ suffix, retiring `.pre-dotfiles.bak`.
   volume, not by review.
 - Env branches must be rebased over `main`; conflicts are confined to
   `home/env-links.nix` by construction.
-- A *new top-level* `$HOME` state file still needs a module commit before it
+- A _new top-level_ `$HOME` state file still needs a module commit before it
   persists — same exposure as ADR-0008, but the fix is now an in-repo diff
   rather than an out-of-repo file edit. (Whole-dir `.claude` linking means
-  new *Claude-internal* state dirs persist automatically.)
+  new _Claude-internal_ state dirs persist automatically.)
 - Migration one-off: existing correct symlinks are "unmanaged files" to HM's
   collision check; the first switch shuffles them through the `-b backup`
   path — run bootstrap `--dry-run` first.
@@ -124,9 +124,8 @@ suffix, retiring `.pre-dotfiles.bak`.
   fresh jcc devpod with an empty `stateRoot`, during the ADR-0011
   implementation). Both are properties of this ADR's seeding, invisible on any
   host whose `stateRoot` was already populated:
-
   - **An empty seeded file is not always a valid empty state.** `.claude.json`
-    is parsed by Claude Code at startup, so a zero-byte file reads as *corrupt*,
+    is parsed by Claude Code at startup, so a zero-byte file reads as _corrupt_,
     not as "nothing yet": it backs the file up and exits non-zero, which on a
     fresh machine also fails its own installer. Entries therefore gained an
     optional `seed` (content applied on creation only, exactly like `mode`), and
@@ -137,37 +136,34 @@ suffix, retiring `.pre-dotfiles.bak`.
   - **A file entry does not stay a link.** Writers that replace rather than
     update — temp file beside the path, `rename` over the top — turn the symlink
     into a regular file. Claude Code does this to `~/.claude.json`. The path then
-    stops persisting to `stateRoot`, and the *next* activation aborts the whole
+    stops persisting to `stateRoot`, and the _next_ activation aborts the whole
     bootstrap: it finds an unmanaged file in the way, tries to back it up, and
     collides with the `.backup` from the previous cycle (reproduced twice).
     `seedEnvLinkTargets` now folds such a file back into its target and leaves the
     path free for Home Manager to relink, newer copy winning and saying so.
     **Residual behaviour, accepted knowingly:** for such a file, persistence is
-    now *switch-time* rather than continuous — the writer keeps replacing the link
+    now _switch-time_ rather than continuous — the writer keeps replacing the link
     within a session, and each activation folds the result back. Two ways out if
     that ever matters: drop the entry (ADR-0005 called `.claude.json` opaque
     machine state anyway), or create the `$HOME` link directly instead of through
-    HM's `home-files` dir, since a one-hop link *does* survive the rename — which
+    HM's `home-files` dir, since a one-hop link _does_ survive the rename — which
     is why the pre-HM hand-made links on the reference host never showed this.
 
   - **`~/.ssh` can lock you out of the machine you are provisioning.** With an
     empty `stateRoot`, the switch moves the host's real `~/.ssh` to
     `.ssh.backup` and points `~/.ssh` at a freshly created empty directory — so
-    `authorized_keys` disappears and the next inbound SSH fails. On the reference
-    hosts `stateRoot` already holds the right keys, which is why this never
-    surfaced; on a *new* environment the first bootstrap severs remote access to
-    it. Nothing in the mechanism is wrong (a whole-dir link is what ADR-0006
-    asked for), so this is recorded as a **provisioning prerequisite**: seed
-    `stateRoot/.ssh` from the host's existing keys *before* the first switch, or
-    run that switch from a session that does not depend on SSH. Worth a plan-time
-    warning when `stateRoot/.ssh` is missing but `~/.ssh/authorized_keys` exists.
+    `authorized_keys` disappears and the next inbound SSH fails. The activation
+    now preserves every entry that exists only in the real `~/.ssh` before Home
+    Manager places the link; existing entries in `stateRoot/.ssh` win and are
+    never overwritten. The first bootstrap therefore retains `authorized_keys`,
+    `known_hosts`, and key material without a separate manual seed step.
 
 - **2026-08-05 — supersession executed.** `apply_link_map`, `_link_map_plan`,
   the hand-rolled JSONC parser and `platform/link-map.jsonc` are deleted;
   `DOTFILE_LINK_MAP_JSON` is no longer read anywhere, and the
   `.pre-dotfiles.bak` convention is gone with it (HM's `.backup` is now the
   only backup suffix, as decided). Refinement to the branch split: the
-  *default* entry set — the agent config/state and shell state any environment
+  _default_ entry set — the agent config/state and shell state any environment
   of this repo wants — now lives in `home/env-links.nix` on the shared
   branches, with `state` (the persistent root) as the single line an env branch
   overrides plus its env-only entries appended. The original "placeholder on
@@ -178,7 +174,7 @@ suffix, retiring `.pre-dotfiles.bak`.
   left in place (inert, unread) — cleanup there is an environment step.
 - **2026-08-05 — the `home.activation` escape hatch is taken, narrowly.** The
   alternatives table reserved activation scripts for emergencies; seeding
-  missing *link targets* is that case. A dangling out-of-store link is not a
+  missing _link targets_ is that case. A dangling out-of-store link is not a
   benign no-op: `mkdir`/`create_dir_all` on one fails with `EEXIST` rather than
   following it (verified), so the tool that owns the path cannot repair it — and
   it never gets the chance, since the HM switch precedes `platform/setup.py`'s
@@ -194,14 +190,14 @@ suffix, retiring `.pre-dotfiles.bak`.
 - **2026-08-05 — the rebase conflict is removed by splitting the file, not by
   git config.** "Env branches must be rebased over `main`; conflicts are
   confined to `home/env-links.nix`" (above) was accepted as a cost; with the
-  shared branch now owning a default entry set *in that same file*, the conflict
+  shared branch now owning a default entry set _in that same file_, the conflict
   would fire on every rebase. Two git-level fixes were rejected on inspection.
   `.gitignore` cannot work at all: the repo is consumed through a git flakeref
   (`nix build "$REPO_DIR#…"`, which warns "Git tree is dirty"), and under the
   git fetcher an untracked file is invisible to eval — verified: `readFile` on
   an untracked probe fails while a tracked-but-modified file reads fine, so the
   `import` would break. A `.gitattributes` `merge=ours` driver resolves
-  *backwards* under rebase — "ours" is the upstream being replayed onto, so it
+  _backwards_ under rebase — "ours" is the upstream being replayed onto, so it
   would silently drop the env branch's entries — and the driver itself must be
   configured per clone, failing open to a normal conflict when it is not. So
   the mechanism plus the shared entries stay in `home/env-links.nix`, and
@@ -223,7 +219,6 @@ suffix, retiring `.pre-dotfiles.bak`.
 
   mise happens to have exactly the seam this needs, and the split follows it
   (all four facts measured against mise 2026.7.0, not read off the docs):
-
   - mise reads **both** `~/.config/mise/config.toml` and
     `~/.config/mise/conf.d/*.toml` as global config, and `mise use -g` writes
     **only** `config.toml`. So `conf.d` is a place Home Manager can own without
@@ -231,11 +226,11 @@ suffix, retiring `.pre-dotfiles.bak`.
   - within the global config, a `conf.d` file **always overrides**
     `config.toml`, whatever it is named (`00-` and `zz-` behave identically);
     mise even says so — `X is defined in conf.d/… which overrides the global
-    config`. That is right for settings and disqualifying for tools, which is
+config`. That is right for settings and disqualifying for tools, which is
     what forces the split rather than merely permitting it: policy
     (`experimental`, `npm.package_manager`) goes to `conf.d` and keeps flowing
     on every switch; the tool list goes to `config.toml` and is seeded once.
-  - *within* `conf.d`, the lexically **first** filename wins. The HM-owned file
+  - _within_ `conf.d`, the lexically **first** filename wins. The HM-owned file
     is therefore named `zz-dotfiles.toml`, so the host-local `conf.d` escape
     hatch the READMEs document still beats it.
   - the HM module writes `config.toml` only when `programs.mise.globalConfig` is
@@ -249,7 +244,7 @@ suffix, retiring `.pre-dotfiles.bak`.
   link hops and the inode survive `mise use -g` and `mise unuse` (measured), and
   persistence stays continuous rather than switch-time — the regular-file repair
   is there for it but should never fire. Two small extensions to the mechanism:
-  `install -D`, because this is the first entry whose name is *nested* rather
+  `install -D`, because this is the first entry whose name is _nested_ rather
   than a top-level dotfile; and a `seedSource` option taking the seed from a
   generated file instead of a string, so `home/mise.nix` keeps its tools as a
   reviewed Nix attrset (`pkgs.formats.toml` generates the seed) —
@@ -260,10 +255,10 @@ suffix, retiring `.pre-dotfiles.bak`.
 
   **Accepted cost, stated plainly:** a tool added to `home/mise.nix` no longer
   reaches a host that has already bootstrapped — seeding is creation-only, so the
-  repo is that host's *initial* tool list, not its live one. Both READMEs, the
+  repo is that host's _initial_ tool list, not its live one. Both READMEs, the
   `just runtimes` recipe comment and the `setup.py` plan wording say so rather
   than implying the old "every host, after `mise install`". **Future work if that
-  stops being acceptable:** have `setup_runtimes` reconcile *additions* only —
+  stops being acceptable:** have `setup_runtimes` reconcile _additions_ only —
   `mise use -g` for a declared tool absent from `config.toml`, never touching a
   version already there — which would restore propagation without taking back
   ownership. Not built now; it needs the declared versions, and `_mise_tools()`

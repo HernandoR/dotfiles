@@ -103,6 +103,24 @@ let
         fi
       fi
     '';
+
+    # Preserve machine-local SSH state before Home Manager replaces ~/.ssh with
+    # its out-of-store link. The target wins for files already migrated, while
+    # files that only exist in the old directory are copied across.
+    preserveSsh = ''
+      sshSource="$HOME/.ssh"
+      sshTarget=${lib.escapeShellArg (target ".ssh")}
+      if [ -d "$sshSource" ] && [ ! -L "$sshSource" ] && [ -d "$sshTarget" ]; then
+        for sshItem in "$sshSource"/* "$sshSource"/.[!.]* "$sshSource"/..?*; do
+          [ -e "$sshItem" ] || [ -L "$sshItem" ] || continue
+          sshName="''${sshItem##*/}"
+          if [ ! -e "$sshTarget/$sshName" ] && [ ! -L "$sshTarget/$sshName" ]; then
+            warnEcho "env-links: preserving ~/.ssh/$sshName in $sshTarget"
+            $DRY_RUN_CMD cp -a "$sshItem" "$sshTarget/$sshName"
+          fi
+        done
+      fi
+    '';
 in
 {
   options.envLinks = {
@@ -247,6 +265,7 @@ in
         else
           $DRY_RUN_CMD mkdir -p ${lib.escapeShellArg cfg.stateRoot}
           ${lib.concatStringsSep "\n  " (lib.mapAttrsToList seedTarget cfg.entries)}
+          ${preserveSsh}
           ${lib.concatStringsSep "\n  " (lib.filter (s: s != "") (lib.mapAttrsToList repairLink cfg.entries))}
         fi
       '';
