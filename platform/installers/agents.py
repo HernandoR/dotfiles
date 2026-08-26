@@ -482,7 +482,7 @@ class Agent:
 
     # -- install ------------------------------------------------------------
     def cli(self, ctx):
-        found = _resolve_bin(ctx, self.binary)
+        found = shutil.which(self.binary)
         if found:
             return found
         # Under --dry-run nothing was actually installed, so fall back to the bare
