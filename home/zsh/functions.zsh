@@ -171,8 +171,9 @@ function tre() {
 # Run the interactive agent extras written by platform/setup.py — Smithery auth
 # and the Lark CLI installer. They need a TTY, so they are NOT run automatically;
 # invoke this once when you are ready to authorize. Everything unattended
-# (marketplaces, plugins, MCP servers, omp's native MCP config) is already
-# applied by the bootstrap itself (ADR-0011). The script self-removes on success
+# (marketplaces, plugins, MCP servers, the shared memory store, pi's declarative
+# files and settings preset) is already applied by the bootstrap itself
+# (ADR-0011, ADR-0012). The script self-removes on success
 # and is safe to re-run.
 function dotfiles-postsetup() {
 	local s="$HOME/.local/share/dotfiles/post-login-setup.sh";

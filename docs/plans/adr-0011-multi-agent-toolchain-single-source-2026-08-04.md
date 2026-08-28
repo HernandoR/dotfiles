@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | accepted |
+| Status | accepted (memory + third slot superseded by ADR-0012) |
 | Date | 2026-08-04 |
 
 ## Context
@@ -82,30 +82,25 @@ numbers (`agent-skillset/discuss/0.1.0/skills`), so those links would break on
 every plugin upgrade and need rebuilding each run. **Codex therefore cannot see
 `agent-skillset`**; this is an accepted gap, not an oversight.
 
-### Memory
+### Memory and the third slot — superseded by ADR-0012
 
-**agentmemory** (local SQLite; MCP server + native pi plugin; resident daemon)
-is wired to **pi and Codex only**. Claude keeps its built-in file memory
-(`~/.claude/projects/<proj>/memory/`), which is in active use. Revisit trigger:
-the backend proving itself across a period of real use. The daemon is declared
-as an HM `systemd.user.services` / `launchd.agents` unit — a service unit is
-never rewritten at runtime, making it the one part of this work that is a
-legitimate **Tier A** citizen under ADR-0009.
+**Both are now owned by
+[ADR-0012](adr-0012-third-slot-upstream-pi-2026-08-28.md). Read that instead of
+this section.** The two sections this replaces described (a) the third slot as
+`pi` plus a four-package extension set, and (b) memory as the `agentmemory`
+daemon wired to pi and Codex only. Neither survived: the slot went to omp on
+2026-08-06 and back to upstream pi on 2026-08-28, and memory went from
+agentmemory to omp-native mnemopi to a shared MCP knowledge graph under
+`~/.agents`. The full reasoning for each turn is in this ADR's update log below
+and in RFC-0005; the *current* intent is only in ADR-0012.
 
-### pi extension set
+What this ADR still owns, unchanged by any of it: the three-plane partition, the
+add-only projection rule, the dual-track skills decision, the `--agents=<spec>`
+selection, and the standing rule that nothing cross-agent may be written into the
+`~/.claude/CLAUDE.md` shell. That those survived three changes of occupant and
+three memory backends is the strongest evidence the partition was the right unit
+of decision.
 
-`pi-claude-marketplace` (skills bridge), the agentmemory plugin,
-`pi-tinyfish` (web search — chosen over `pi-websearch` to avoid a provider
-credential on intranet hosts), `pi-subagents`, and `pi-mcp-adapter`. The
-adapter is what makes the MCP list a genuine three-way single point; without it
-pi would be the one agent unable to reach any declared MCP server.
-
-Note, from reading `~/.claude/plugins/cache/`: `agent-skillset` and
-`astral-sh/astral` are **pure skills** (hooks only in `dev-loop`; no agents, no
-`.mcp.json`). So the marketplace bridge needs neither `pi-subagents` nor
-`pi-mcp-adapter` as a dependency — both are included for their own sake.
-`dev-loop`'s hooks fall under `pi-claude-marketplace`'s documented partial hook
-support and are expected to degrade under pi.
 
 ### Install channels and the selection flag
 
@@ -481,3 +476,38 @@ the one genuine Tier A addition is the agentmemory service unit.
   `omp config set` line and no agentmemory install/daemon items; `nix flake check`
   passes with the module and the env link gone; and `omp config get
   memory.backend` reports `mnemopi` after the projection ran.
+
+- **2026-08-28 — the third slot and the memory plane leave this ADR for
+  [ADR-0012](adr-0012-third-slot-upstream-pi-2026-08-28.md).** The slot returns to
+  upstream pi, chosen for *interoperability* rather than features: omp is the
+  richer binary but appears in no IDE plugin's or ACP client's supported-agent
+  list, and — measured on the reference host — its mise-installed binary cannot be
+  resolved by any process that is not an interactive zsh, because mise's shims
+  reach PATH only through `mise activate`. Memory becomes a single MCP knowledge
+  graph under `~/.agents`, shared by all three agents and cross-machine because
+  that root is already a Tier-B env link onto the shared state volume.
+
+  Two of this ADR's own claims are corrected by the work rather than merely
+  superseded, and both are worth carrying forward:
+
+  - **"The `worktrunk`/`composio` drift is closed by construction" was false.**
+    On 2026-08-28 the live `~/.claude/settings.json` declared **5** marketplaces
+    and **13** plugins where this repo declared 4 and 7. Add-only projection can
+    only ever add to a machine, and nothing ever read the machine back, so the
+    manifest silently fell behind again. ADR-0012 records the reconciliation and
+    adds `RETIRED_MCP_SERVERS` / `RETIRED_PI_PACKAGES` so a name this repo used to
+    declare can at least leave the files it writes whole. Closing the gap properly
+    — reading the machine back and reporting divergence — is still open and is the
+    strongest candidate for the next ADR.
+  - **The standing gap "reopen if it bites" bit twice in one sitting.** Besides
+    the manifest drift, `~/.agents/mcp.json` still declared the `agentmemory`
+    server retired on 2026-08-20, pointing at a port nothing serves. Left alone it
+    would have handed pi a dead MCP server on its first session.
+
+  Also of note for anyone reading the plane-③ rule: ADR-0012 relaxes "nothing
+  writes an agent's config file" **for pi only**, because pi has no scriptable
+  config setter at all (`pi config` is an interactive TUI). It keeps this ADR's
+  actual protection by changing the contract from *own* to **seed** — values
+  written leaf by leaf only when absent, so runtime writes survive. Claude's and
+  Codex's config files are still never written from `platform/`.
+

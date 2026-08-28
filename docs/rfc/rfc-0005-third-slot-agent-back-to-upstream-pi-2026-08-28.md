@@ -1,6 +1,6 @@
 # RFC-0005: The third slot returns to upstream pi — ecosystem interoperability over a fork's feature surface
 
-- Status: Open
+- Status: Resolved
 - Date: 2026-08-28
 - Owners: HernandoR
 

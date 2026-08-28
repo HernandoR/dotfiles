@@ -169,45 +169,59 @@ plus the `installers` package only). Steps: `set_login_shell` (chsh to
 `write_deferred_setup` (the interactive remainder) → `run_system` (opt-in
 components). The last three run only when at least one agent is selected.
 
-### 4. The agent toolchain (`platform/installers/agents.py`, ADR-0011)
+### 4. The agent toolchain (`platform/installers/agents.py`, ADR-0011 + ADR-0012)
 
-One manifest, three agents, projected by each agent's own CLI:
+One manifest, three agents, projected per agent:
 
-- **Manifest** — `MARKETPLACES`, `PLUGINS`, `MCP_SERVERS`. Every
+- **Manifest** — `MARKETPLACES`, `PLUGINS`, `MCP_SERVERS`, `PI_PACKAGES`. Every
   entry names the agents it targets and why. This is the single reviewed source
   for what the agents *have*; adding one is a commit, not a per-machine command.
-- **Projection** — one `Agent` subclass per agent (`claude`/`codex`/`omp`) owning
-  that agent's install channel and its own commands (`claude plugin install`,
-  `claude mcp add`, `codex mcp add`, omp's native `~/.omp/agent/mcp.json`).
-  Nothing here writes an agent's config file: all three rewrite their own config
-  at runtime, which is also why none of it is Home-Manager-managed (ADR-0009
-  Tier A is excluded by construction). **Projection is add-only** — removing a
-  manifest entry does not uninstall it.
+- **Projection** — one `Agent` subclass per agent (`claude`/`codex`/`pi`). Claude
+  and Codex get theirs through their own CLIs (`claude plugin install`,
+  `claude mcp add`, `codex mcp add`). pi has no MCP and no marketplace CLI, so it
+  gets three **declarative files this repo owns**: `~/.agents/mcp.json`,
+  `~/.pi/agent/claude-plugins.json`, and the `packages` array in its settings.
+  **Projection is add-only** — removing a manifest entry does not uninstall it —
+  with one narrow exception: the files this repo writes *whole* also drop names
+  listed in `RETIRED_MCP_SERVERS` / `RETIRED_PI_PACKAGES`, because otherwise a
+  retired server or an abandoned extension can never leave. Anything the manifest
+  never knew about is still left alone.
 - **Instruction plane** — `~/.agents/AGENTS.md` is the only source, and all three
-  agents reach it: `~/.codex/AGENTS.md` and `~/.omp/agent/AGENTS.md` symlink to
-  it, and `~/.claude/CLAUDE.md` is a thin shell that `@~/.agents/AGENTS.md`-imports
-  it and holds Claude-only lines. Nothing cross-agent may go in the shell
+  agents reach it: `~/.codex/AGENTS.md` and `~/.pi/agent/AGENTS.md` symlink to it,
+  and `~/.claude/CLAUDE.md` is a thin shell that `@~/.agents/AGENTS.md`-imports it
+  and holds Claude-only lines. Nothing cross-agent may go in the shell
   (`setup.py` warns when it grows past 40 lines). Delegated installers that append
   to a linked file and write it back (codegraph does) are handled by re-asserting
   the links afterwards and folding the addition into the shared source.
-- **Skills** — dual track. Marketplaces stay marketplace-managed and now reach
-  **both** Claude and Codex (Codex grew a plugin marketplace after ADR-0011 was
-  written; the ADR's "Codex cannot see agent-skillset" gap is closed and its
-  closure is verified). Loose skills live in `~/.agents/skills`, which Codex and
-  omp read natively and to which `~/.codex/skills` and `~/.omp/agent/skills` are
-  linked.
-- **Selection** — `--agents=<spec>` (`claude,codex,omp` / `all` / `none`; unset =
-  all). `--no-claude` is a deprecated alias for `none`.
-- **Memory** — **omp-native, via mnemopi**. `memory.backend = mnemopi` is
-  projected with `omp config set` (`OmpAgent.set_memory_backend`), which turns on
-  omp's bundled local memory store: SQLite under omp's agent memories dir inside
-  `~/.omp`, with **no daemon and no port**. The agentmemory daemon, its MCP shim,
-  its Home Manager unit (`home/agentmemory.nix`), its `~/.agentmemory` env link
-  and the no-service-manager fallback start are all gone (ADR-0011 update log,
-  2026-08-20) — nothing in the bootstrap keeps a resident process alive any more.
-  Claude and Codex are back to whatever their own settings say: memory is
-  **preference plane** for them, so it stays per machine and the manifest never
-  writes it.
+- **Skills** — dual track. Marketplaces stay marketplace-managed and reach all
+  three agents; pi reads them through `pi-claude-marketplace`, which is an
+  independent marketplace client that clones from git itself and never touches
+  `~/.claude/plugins/cache`, so Claude's version-bearing cache paths are
+  irrelevant to it. Loose skills live in `~/.agents/skills`, which Codex and pi
+  both read natively and to which `~/.codex/skills` and `~/.pi/agent/skills` are
+  linked as a belt. One pi caveat: it ignores root-level `.md` files there — only
+  `SKILL.md` directories and nested `.md` in grouping folders are discovered.
+- **Selection** — `--agents=<spec>` (`claude,codex,pi` / `all` / `none`; unset =
+  all). `--no-claude` is a deprecated alias for `none`, and `omp` a deprecated
+  alias for `pi`; both warn.
+- **Memory** — **two layers, and the shared one is cross-agent.** The shared layer
+  is a single MCP knowledge graph at `~/.agents/memory/memory.jsonl`
+  (`@modelcontextprotocol/server-memory`), declared once in `MCP_SERVERS` and
+  reaching Claude, Codex and pi. It sits under `~/.agents` deliberately: that root
+  is a Tier-B env link onto the shared state volume, so the store is cross-machine
+  with **no service, no credential and no egress**. The local layer is `pi-memory`,
+  pi only. Claude's built-in memory stays **off** by the owner's decision, and that
+  switch is preference plane, so it is never projected. mem0 was investigated and
+  declined on data governance (RFC-0005). The retired mnemopi banks live on as
+  markdown in `~/.agents/memory-archive/`, written by
+  `scripts/export-mnemopi-banks.py` and deliberately not auto-loaded.
+- **pi is seeded, not owned** — the one place ADR-0011's "never write an agent's
+  config file" is relaxed, on the owner's call (ADR-0012). It keeps that rule's
+  protection by changing the contract: `~/.pi/agent/settings.json` gets a
+  **preset**, and the host owns it from then on. Split by plane — `packages` is
+  capability and is *reconciled* to the manifest; every other key is preference
+  and is seeded **leaf by leaf, never overwriting** a value pi or the owner set,
+  so `/model`, `/theme` and hand edits all survive re-projection.
 
 ## The component model
 
@@ -249,9 +263,10 @@ One manifest, three agents, projected by each agent's own CLI:
 Only what genuinely blocks on a human — Smithery auth and the Lark CLI installer
 — is deferred to `~/.local/share/dotfiles/post-login-setup.sh`; the HM zsh prints
 a reminder and the user runs it once via the `dotfiles-postsetup` shell function
-(self-removes on success). Marketplaces, plugins, MCP servers and omp's native
-MCP config are **not** deferred: the manifest is only a single source if applying
-it needs no human, so they run unattended with stdin on `/dev/null`.
+(self-removes on success). Marketplaces, plugins, MCP servers, the shared memory
+store and pi's declarative files are **not** deferred: the manifest is only a
+single source if applying it needs no human, so they run unattended with stdin on
+`/dev/null`.
 
 ## Conventions
 
@@ -288,13 +303,16 @@ it needs no human, so they run unattended with stdin on `/dev/null`.
   file sourced from `initContent`.
 - **A new machine** → add a `hosts` entry in `flake.nix` (name = hostname for
   auto-detection), or rely on the `generic` impure fallback.
-- **A marketplace / plugin / MCP server / agent extension** → one entry in the
+- **A marketplace / plugin / MCP server / pi extension** → one entry in the
   matching table in `platform/installers/agents.py`, stating which agents it
-  targets and why (omp's extension set is deliberately empty — its native MCP
-  client, sub-agents, browser and Claude-plugin skills discovery cover the
-  retired pi packages). Verify with `python3 platform/installers/agents.py` and
-  `platform/setup.py --plan`. Never install it by hand on a machine — that is the
-  drift ADR-0011 exists to stop.
+  targets and why. A marketplace MUST target every agent its plugins do, or
+  `pi-claude-marketplace` reports `<marketplace not declared>`. A `PI_PACKAGES`
+  spec MUST carry the `npm:` prefix — anything unprefixed is parsed as a local
+  path and a missing local path is skipped **silently**. Verify with
+  `python3 platform/installers/agents.py` and `platform/setup.py --plan`. Never
+  install it by hand on a machine — that is the drift ADR-0011 exists to stop, and
+  it recurred anyway (found 2026-08-28: the live machine was one marketplace and
+  six plugins ahead of this repo).
 - **A cross-agent instruction/rule** → `~/.agents/AGENTS.md` (the machine's
   shared source), never `~/.claude/CLAUDE.md`.
 - **A fourth agent** → subclass `Agent` in `agents.py` (`id`, `binary`,
@@ -321,10 +339,13 @@ it needs no human, so they run unattended with stdin on `/dev/null`.
   `~/.agents/AGENTS.md`; nothing mechanically enforces this, which is why
   ADR-0011 makes it a standing rule.
 - **Agent config files** (`~/.claude/settings.json`, `~/.codex/config.toml`,
-  `~/.omp/agent/config.yml` + `~/.omp/agent/mcp.json`) — all three are rewritten
-  by the agents at runtime. Never manage them with Home Manager and never patch
-  them from `platform/`; project capabilities through the agents' own CLIs (or
-  omp's native MCP file) instead.
+  `~/.pi/agent/settings.json`) — all three are rewritten by the agents at runtime,
+  so none may ever be a Home Manager store link. Claude's and Codex's are never
+  written from `platform/` at all: project their capabilities through their own
+  CLIs. **pi's is the single exception** (ADR-0012) and only under seed semantics —
+  `packages` reconciled, every other key written **only when absent**. If you find
+  yourself overwriting a key pi already has, you have broken the contract that
+  makes this safe.
 - **Legacy ADRs 0001–0006** — describe the retired Python pipeline; ADR-0007
   governs. Don't cite them as current design.
 
