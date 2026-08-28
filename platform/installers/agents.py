@@ -887,9 +887,6 @@ def write_pi_claude_plugins(ctx):
 # --- the agents --------------------------------------------------------------
 
 
-_AGENT_ALIASES = {"omp": "pi"}
-
-
 class Agent:
     """One coding agent: how to install its CLI, and how to project the manifest
     onto it with that CLI. Self-registers by ``id`` so ``--agents=<spec>`` can
@@ -927,14 +924,6 @@ class Agent:
             part = part.strip().lower()
             if not part or part == "none":
                 continue
-            # `omp` held the third slot until ADR-0012. Kept as a deprecated alias
-            # so an existing invocation, script or shell alias does not break — the
-            # same courtesy `--no-claude` got when `--agents` replaced it.
-            if part in _AGENT_ALIASES:
-                canonical = _AGENT_ALIASES[part]
-                logger.warning("agent %r is a deprecated alias for %r (ADR-0012)",
-                               part, canonical)
-                part = canonical
             if part in ("all", "default"):
                 requested.update(cls._registry.keys())
             elif part in cls._registry:

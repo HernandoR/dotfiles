@@ -202,8 +202,9 @@ One manifest, three agents, projected per agent:
   linked as a belt. One pi caveat: it ignores root-level `.md` files there — only
   `SKILL.md` directories and nested `.md` in grouping folders are discovered.
 - **Selection** — `--agents=<spec>` (`claude,codex,pi` / `all` / `none`; unset =
-  all). `--no-claude` is a deprecated alias for `none`, and `omp` a deprecated
-  alias for `pi`; both warn.
+  all). `--no-claude` is a deprecated alias for `none`. There is deliberately no
+  alias for the retired `omp` id: an unknown agent warns and is skipped, which is
+  the honest outcome for a spec naming an agent this repo no longer provisions.
 - **Memory** — **two layers, and the shared one is cross-agent.** The shared layer
   is a single MCP knowledge graph at `~/.agents/memory/memory.jsonl`
   (`@modelcontextprotocol/server-memory`), declared once in `MCP_SERVERS` and

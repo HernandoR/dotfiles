@@ -73,8 +73,11 @@ can be given declaratively.
 
 `PiAgent` replaces `OmpAgent`: `id = "pi"`, `binary = "pi"`,
 `config_dir = "~/.pi"`. The `--agents=<spec>` vocabulary becomes
-`claude,codex,pi`; `omp` is accepted as a deprecated alias for `pi`, the same
-courtesy `--no-claude` received.
+`claude,codex,pi`, with **no alias for the retired `omp` id** — an unknown agent
+warns and is skipped. An alias was written and then removed on the owner's call:
+`--no-claude` earned its alias by being a *renamed flag* for an unchanged
+concept, whereas `omp` names an agent that no longer exists here, and silently
+resolving it to a different one would hide the change rather than surface it.
 
 ### Install channel — the constraint, not a preference
 
