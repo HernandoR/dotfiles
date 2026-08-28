@@ -315,7 +315,8 @@ RETIRED_MCP_SERVERS = ("agentmemory",)
 # seeded into `packages` in pi's settings.json, and pi installs any missing one
 # itself at startup — verified in dist/: resolve() runs with no onMissing callback,
 # so installMissing() installs unconditionally (only PI_OFFLINE stops it). That
-# removes nine subprocess calls and the partial-install failure mode with them.
+# removes one subprocess call per package and the partial-install failure mode
+# with them.
 #
 # The `npm:` prefix is MANDATORY. Anything not prefixed
 # npm:/git:/github:/http:/https:/ssh: is parsed as a *local path*, and a missing
@@ -344,17 +345,29 @@ PI_PACKAGES = (
                    "clones from git itself, so Claude's version-bearing cache paths are "
                    "irrelevant to it. Its declarative config is generated from MARKETPLACES "
                    "+ PLUGINS (see write_pi_claude_plugins)"),
-    PiPackage("npm:pi-web-search",
-              note="web search. The ONLY candidate reaching Anthropic's native Messages-API "
-                   "search, so no extra credential — exactly the rationale that once chose "
-                   "pi-tinyfish over pi-websearch, now satisfiable without a third-party key"),
     PiPackage("npm:pi-web-access",
-              note="installed for `fetch_content` ONLY — the one keyless intranet-capable "
-                   "fetcher (local HTTP, local PDF, local git clone). It collides with "
-                   "pi-web-search on `web_search` and is the only one of the two with a "
-                   "rename/disable knob, so it gives that tool up. Needs ssrf.allowRanges "
-                   "widened for intranet hosts while fetchRouting.allowRemoteHostedProviders "
-                   "stays false. Config: ~/.pi/web-search.json (NOT under ~/.pi/agent/)"),
+              note="ALL web access, since pi's four built-in tools (read/write/edit/bash) "
+                   "include no fetch and no search. Sole owner of `web_search` since "
+                   "pi-web-search was retired, plus `source_check`, `get_search_content` "
+                   "and — with no substitute anywhere — `fetch_content`, the one keyless "
+                   "intranet-capable fetcher (local HTTP, local PDF, local git clone). "
+                   "Search is keyless via Exa MCP and dispatches independently of the "
+                   "session model, which is the property that survives adding DeepSeek. "
+                   "Needs ssrf.allowRanges widened for intranet hosts while "
+                   "fetchRouting.allowRemoteHostedProviders stays false. "
+                   "Config: ~/.pi/web-search.json (NOT under ~/.pi/agent/)"),
+    PiPackage("npm:pi-hide-providers",
+              note="the provider fence pi does not have. pi has NO provider allowlist — "
+                   "verified against the settings schema, models.json (its `models` array "
+                   "merges by id and its `apiKey` is the lowest-precedence credential "
+                   "source), auth.json's provider-scoped `env` (||-chained, so a blank "
+                   "value falls through to process.env) and the extension API "
+                   "(unregisterProvider only removes extension-registered providers) — and "
+                   "this package's own README documents the same dead ends. It works by "
+                   "MONKEY-PATCHING ModelRuntime's getModels/getAvailableSnapshot/"
+                   "getAvailable/getModel on session_start, which the author labels as not "
+                   "an official SDK mechanism. Accepted with the risk named, as pi-lens "
+                   "was. Read PI_HIDE_PROVIDERS_SEED for what it does and does NOT close"),
     PiPackage("npm:pi-lens",
               note="LSP + diagnostics, replacing omp's native LSP, and the nearest thing to "
                    "omp's `edit.mode: hashline` (it ships hashline-anchored edit tools). "
@@ -370,6 +383,18 @@ PI_PACKAGES = (
                    "use OAuth. Also installs a provider that rewrites Anthropic request "
                    "metadata; audit that on first use"),
     # Deliberately NOT here, each for a stated reason:
+    # - pi-web-search: declared until 2026-08-28 as "the ONLY candidate reaching
+    #   Anthropic's native Messages-API search, so no extra credential". Dropped on
+    #   the owner's call once the provider set was pinned to Anthropic now, Codex
+    #   and DeepSeek later. Both its tools fail that set: `url_context` is
+    #   Gemini-only, so it can never fire, and its `web_search` dispatches on the
+    #   *current model's* provider (Gemini/OpenAI/Codex/Anthropic) and hard-errors
+    #   rather than falling back — DeepSeek is not in that list. Its one real
+    #   advantage, server-side grounded search inside the same inference call, is
+    #   also billed per search and lands in Anthropic extra usage under
+    #   subscription OAuth, which is the very thing warnings.anthropicExtraUsage is
+    #   turned on to surface. Removing it also dissolves the `web_search` name
+    #   collision at the root instead of renaming around it.
     # - pi-tinyfish / pi-brave-search: both need a third-party key, both ~3.5 months
     #   stale at 29-60 downloads/week, and both are already providers inside
     #   pi-web-access. The retired set's web-search entry is not restored as-is.
@@ -415,6 +440,22 @@ PI_AGENT_DIR = HOME / ".pi" / "agent"
 PI_SETTINGS = PI_AGENT_DIR / "settings.json"
 PI_CLAUDE_PLUGINS = PI_AGENT_DIR / "claude-plugins.json"
 
+# pi-web-access's own config. Note the path: ~/.pi/web-search.json, NOT under
+# ~/.pi/agent/ (getWebSearchConfigDir() returns PI_CODING_AGENT_DIR, else
+# $XDG_CONFIG_HOME/pi, else ~/.pi). This repo writes nothing here any more and
+# only retires its own past key out of it — see RETIRED_PI_WEB_SEARCH.
+PI_WEB_SEARCH = HOME / ".pi" / "web-search.json"
+
+# The npm project pi installs its extensions into. pi creates this file only when
+# absent (`existsSync(p) || writeFileSync(…)`) and never rewrites it, npm owns
+# `dependencies` inside it, and this repo owns one field: `allowScripts`.
+PI_NPM_PROJECT = PI_AGENT_DIR / "npm" / "package.json"
+
+# pi-hide-providers' blocklist. Under PI_AGENT_DIR because the extension resolves it
+# with pi's own getAgentDir(), so it follows PI_CODING_AGENT_DIR if that is ever set.
+PI_HIDE_PROVIDERS = PI_AGENT_DIR / "hide-providers.json"
+PI_NPM_LOCKFILE = PI_AGENT_DIR / "npm" / "package-lock.json"
+
 # pi extension specs this repo used to declare and no longer does. Same reason
 # RETIRED_MCP_SERVERS exists: the seed is otherwise add-only, so without this a
 # dropped package never leaves. `pi-tinyfish` is the live case — the pre-omp
@@ -423,6 +464,7 @@ PI_CLAUDE_PLUGINS = PI_AGENT_DIR / "claude-plugins.json"
 RETIRED_PI_PACKAGES = (
     "npm:pi-tinyfish",
     "npm:pi-claude-marketplace@0.13.0",
+    "npm:pi-web-search",
 )
 
 # The plane-③ preset (ADR-0012). Seeded LEAF BY LEAF and add-only: a key already
@@ -448,9 +490,34 @@ RETIRED_PI_PACKAGES = (
 #   - `theme` is one string, "<light>/<dark>", and `titanium` is not a built-in —
 #     it would need ~/.pi/agent/themes/titanium.json first.
 #
-# `disabledProviders` (~80 ids in omp) has no equivalent and is mostly moot: pi
-# only offers providers with saved credentials. `enabledModels` below does the
-# same job in one glob. Keys with no equivalent anywhere, accepted as lost:
+# `disabledProviders` (~80 ids in omp) has no equivalent, and `enabledModels` is
+# NOT a replacement for it — an earlier revision of this comment claimed it "does
+# the same job in one glob" and that is wrong twice over.
+#
+# First, "pi only offers providers with saved credentials" reads as narrower than
+# it is: pi counts a provider credentialed when its *environment variable* is set
+# (docs/providers.md), and nothing in ~/.pi is involved. On a host that exports
+# HF_TOKEN or carries an AWS role, `huggingface` and `amazon-bedrock` are live
+# providers pi will happily choose, with no login and no entry in auth.json.
+#
+# Second, `enabledModels` scopes Ctrl+P cycling and the *initial* model pick
+# (main.js buildSessionOptions), and only while it matches something. A pattern
+# that matches nothing yields `Warning: No models match pattern …` and an EMPTY
+# scope — at which point the model choice falls through to pi's own default and
+# the unwanted provider wins anyway. Measured here: with no `anthropic`
+# credential, `anthropic/claude-*` matched 0 of 185 available models and the
+# session silently landed on amazon-bedrock's us.anthropic.claude-opus-4-6-v1,
+# where the pod's IAM role is not authorized to invoke and the run died with
+# AccessDeniedException.
+#
+# So the glob below states the *intent* — only Anthropic's Claude models, with
+# `openai-codex` and `deepseek` to be added to it when those providers are
+# adopted — and that warning is the honest signal that the chosen provider is not
+# authenticated on this host. There is no setting that makes it a hard fence; the
+# fix for the warning is `/login` (Claude Pro/Max OAuth) or ANTHROPIC_API_KEY,
+# both per-host credential acts this repo deliberately does not project.
+#
+# Keys with no equivalent anywhere, accepted as lost:
 # symbolPreset, autolearn, github, composer, setupVersion, mnemopi.
 #
 # `npmCommand` is deliberately ABSENT — setting it makes pi skip prefix inference
@@ -495,6 +562,127 @@ PI_SETTINGS_SEED = {
             "researcher": {"model": "anthropic/claude-sonnet-5", "thinking": "medium"},
             "scout": {"model": "anthropic/claude-haiku-4-5", "thinking": "low"},
         },
+    },
+}
+
+# The one thing this repo has ever written into pi-web-access's config, and now
+# unwrites. Same reason RETIRED_PI_PACKAGES exists: the seed contract is add-only,
+# so without an explicit retirement a value this repo stopped believing in never
+# leaves a host it was already projected onto.
+#
+# The history in one paragraph, because the file is otherwise inexplicable. While
+# `npm:pi-web-search` was declared, it and pi-web-access both registered a tool
+# named `web_search`, and pi does not warn and continue on that — it FAILS the
+# second extension load outright:
+#
+#   Error: Failed to load extension ".../pi-web-access/index.ts":
+#     Tool "web_search" conflicts with ".../pi-web-search/src/index.ts"
+#
+# taking `fetch_content`, `source_check` and `get_search_content` down with it. pi
+# had never started on a host this repo provisioned. pi-web-access was the only one
+# of the two with a rename/disable knob, so it yielded the name and its search tool
+# was renamed to `web_search_fallback` here.
+#
+# Retiring pi-web-search dissolves the collision at the root, so the rename is not
+# merely unnecessary — it is now actively wrong. pi-web-access owns the only
+# `web_search` in the session, and calling it "fallback" misdescribes the sole
+# search tool to the model. Removing the key restores the package default.
+#
+# Only removed when the value still MATCHES what this repo wrote: a name the owner
+# chose by hand is theirs, and pi-web-access rewrites this same file itself (the
+# curator UI persists `provider`, `/curator` persists the workflow), so it can
+# never be owned outright.
+RETIRED_PI_WEB_SEARCH = (
+    (("toolNames", "webSearch"), "web_search_fallback"),
+)
+
+# pi-hide-providers' blocklist, and the plane-③ half of "only the providers I chose"
+# (the other half is `enabledModels`, which is an allowlist over MODELS and cannot do
+# this job — see its comment above).
+#
+# A BLOCKLIST, so it has to name what to hide: isHidden() requires an exact
+# `rule.provider === provider` match and there is no provider wildcard, so
+# "hide everything except anthropic" is not expressible. What is named here is
+# therefore the set of providers pi turns on from AMBIENT ENVIRONMENT rather than
+# from a login — the ones the owner never chose and cannot un-choose:
+#
+#   amazon-bedrock  <- AWS_PROFILE | AWS_ACCESS_KEY_ID+SECRET | AWS_BEARER_TOKEN_BEDROCK
+#                      | AWS_CONTAINER_CREDENTIALS_* | AWS_WEB_IDENTITY_TOKEN_FILE
+#   huggingface     <- HF_TOKEN
+#
+# Both are set on these hosts for unrelated reasons (the pod's IAM role; the HF
+# datasets cache), and neither can be unset for pi alone without also breaking `aws`
+# and `hf` inside pi's own bash tool. A rule for a provider that is not present is a
+# no-op, so this list is safe on hosts that have neither. Providers the owner DOES
+# choose arrive through /login and must never be listed here.
+#
+# What this closes, measured: the `/model` picker, Ctrl+P cycling and session-restore
+# lookups, which read exactly the four ModelRuntime accessors the extension patches.
+# That was the whole residual exposure once the chosen provider is authenticated.
+#
+# What it does NOT close, and the README is wrong about both:
+#
+#   - `pi --list-models` is NOT filtered. Verified with this exact config in place:
+#     all 118 amazon-bedrock models still listed. That path never opens a session, so
+#     the session_start patch never runs.
+#   - the COLD-START model pick is not filtered either. main.js resolves
+#     `enabledModels` and chooses the initial model in buildSessionOptions BEFORE
+#     createAgentSession, so before any session_start handler exists. A pattern that
+#     matches nothing still falls through to pi's own default, hidden or not. The
+#     extension's `model_select` handler is documented in its source as a "safety net"
+#     that blocks hidden models, but it only calls ctx.ui.notify() — it does not
+#     revert the selection.
+#
+# So the cold-start fallback is still closed by authenticating the chosen provider
+# (which makes `enabledModels` match, so the fallback is never reached), NOT by this
+# package. Reconciled rather than add-only seeded, like `packages`: this is policy,
+# and `/hide-models add` writes to the same file, so host additions are kept.
+PI_HIDE_PROVIDERS_SEED = (
+    {"provider": "amazon-bedrock"},
+    {"provider": "huggingface"},
+)
+
+# The install-script review npm 11.19 demands, decided once here instead of being
+# re-asked on every pi startup. pi installs extensions with
+# `npm install <specs> --prefix <root> --legacy-peer-deps` — no --ignore-scripts
+# and no --allow-scripts — so npm applies its 11.19 default, BLOCKS every
+# dependency install script, and ends with the advisory the owner reported:
+#
+#   npm warn install-scripts Run `npm install-scripts ls` to review, or
+#     `npm install-scripts approve <pkg>` to allow.
+#
+# The advisory is noise, but what it is hiding is not. Three scripts are pending
+# and they are not equivalent:
+#
+#   - node-pty (via @plannotator/webtui ← @plannotator/pi-extension, plan mode):
+#     `node scripts/prebuild.js || node-gyp rebuild`. APPROVED, and this one is
+#     load-bearing — the 1.1.0 tarball ships prebuilds for darwin and win32
+#     ONLY, so on Linux the binary exists only if that script runs. This host has
+#     build/Release/pty.node from a provisioning run under an older npm default;
+#     a clean host under 11.19 would silently get plan mode's web TUI with no
+#     native module at all. Blocking it is the actual bug here, not the warning.
+#   - @ast-grep/cli (← pi-lens): a postinstall that wires up the launcher for the
+#     platform package. APPROVED. Lower stakes than node-pty — the real binary
+#     ships in @ast-grep/cli-linux-x64-gnu either way — but there is no reason to
+#     leave a reviewed native-toolchain package half-installed.
+#   - pi-memory: a postinstall gated on `isDevCheckout()`, which is false by
+#     construction under node_modules. DENIED, not approved: a name-only `false`
+#     entry is the permanent record that this one was read and is a no-op, and it
+#     survives a later `npm install-scripts approve --all`.
+#
+# Written into `allowScripts` in PI_NPM_PROJECT, npm's own documented home for
+# this decision, and seeded BEFORE pi's first startup precisely so the node-pty
+# build is allowed on the install that first creates the tree. Entries are
+# name-only rather than pinned (`pkg@1.2.3`): pi's lockfile entries carry no
+# `resolved` URL, so npm cannot pin them, and a pin would in any case expire on
+# the next extension bump and re-raise the warning on every host.
+PI_NPM_PROJECT_SEED = {
+    "name": "pi-extensions",
+    "private": True,
+    "allowScripts": {
+        "node-pty": True,
+        "@ast-grep/cli": True,
+        "pi-memory": False,
     },
 }
 
@@ -791,7 +979,7 @@ def seed_pi_settings(ctx):
 
     pi acts on ``packages`` itself: at startup it resolves the array with no
     onMissing callback and installs anything missing, so this replaces a
-    nine-command ``pi install`` projection and the partial-install failure mode
+    one-``pi install``-per-package projection and the partial-install failure mode
     that came with it.
     """
     wanted = [pkg.spec for pkg in PI_PACKAGES]
@@ -836,6 +1024,256 @@ def seed_pi_settings(ctx):
     PI_SETTINGS.write_text(json.dumps(current, indent=2) + "\n")
     logger.info("seeded %s: %d package(s) declared, %d preference key(s) present",
                 PI_SETTINGS, len(reconciled), len(PI_SETTINGS_SEED))
+
+
+def _pi_web_search_has_retired_keys():
+    """Whether ``~/.pi/web-search.json`` still carries anything RETIRED_PI_WEB_SEARCH
+    would remove. Read-only, for the plan; ADR-0010 wants the plan to list only
+    steps that will actually do something.
+    """
+    try:
+        current = json.loads(PI_WEB_SEARCH.read_text())
+    except (OSError, ValueError):
+        return False
+    if not isinstance(current, dict):
+        return False
+    for path, retired_value in RETIRED_PI_WEB_SEARCH:
+        node = current
+        for key in path[:-1]:
+            if not isinstance(node, dict):
+                break
+            node = node.get(key)
+        if isinstance(node, dict) and node.get(path[-1]) == retired_value:
+            return True
+    return False
+
+
+def reconcile_pi_web_search(ctx):
+    """Drop retired keys from ``~/.pi/web-search.json`` (pi-web-access's own store).
+
+    The mirror image of ``seed_pi_settings``' retirement half, for the one key this
+    repo used to write there. See RETIRED_PI_WEB_SEARCH for what and why.
+
+    The file is deleted outright if retirement empties it, since in that case it
+    exists only because this repo wrote it; a file holding anything else — a search
+    provider key, a curator preference — is left in place with the rest intact.
+    """
+    if not PI_WEB_SEARCH.exists():
+        return
+    try:
+        current = json.loads(PI_WEB_SEARCH.read_text())
+    except ValueError:
+        current = None
+    if not isinstance(current, dict):
+        # Not ours to interpret, and pi-web-access will complain about it loudly
+        # enough on its own. seed_pi_settings moves such a file aside because it
+        # has something to write; here there is nothing left to write.
+        logger.warning("%s is not a JSON object; leaving it alone", PI_WEB_SEARCH)
+        return
+
+    removed = []
+    for path, retired_value in RETIRED_PI_WEB_SEARCH:
+        parents, node = [], current
+        for key in path[:-1]:
+            if not isinstance(node, dict) or key not in node:
+                node = None
+                break
+            parents.append((node, key))
+            node = node[key]
+        if not isinstance(node, dict) or node.get(path[-1]) != retired_value:
+            continue
+        del node[path[-1]]
+        removed.append("/".join(path))
+        # Prune objects this repo created and just emptied, innermost first.
+        for parent, key in reversed(parents):
+            if parent[key] == {}:
+                del parent[key]
+
+    if not removed:
+        return
+    if ctx.dry_run:
+        logger.info("[DRY-RUN] would drop retired key(s) %s from %s%s",
+                    ", ".join(removed), PI_WEB_SEARCH,
+                    " and delete the now-empty file" if not current else "")
+        return
+    for key in removed:
+        logger.info("removing retired key %r from %s", key, PI_WEB_SEARCH)
+    if not current:
+        PI_WEB_SEARCH.unlink()
+        logger.info("%s is empty after retirement; removed it", PI_WEB_SEARCH)
+        return
+    PI_WEB_SEARCH.write_text(json.dumps(current, indent=2) + "\n")
+    PI_WEB_SEARCH.chmod(0o600)
+
+
+def _hide_rule_key(rule):
+    """``(provider, model)`` identity of a hide rule, with the two spellings of "the
+    whole provider" — no ``model`` key and ``model: "*"`` — collapsed, since
+    ``isHidden`` treats them identically.
+    """
+    if not isinstance(rule, dict):
+        return None
+    provider = rule.get("provider")
+    if not isinstance(provider, str):
+        return None
+    model = rule.get("model")
+    return (provider, None if model in (None, "*") else model)
+
+
+def seed_pi_hide_providers(ctx):
+    """Reconcile the hide rules in ``~/.pi/agent/hide-providers.json``.
+
+    Reconciled, not add-only merged: every rule in PI_HIDE_PROVIDERS_SEED is ensured
+    present because it is policy, while rules the host added — by hand or through
+    ``/hide-models add``, which writes this same file — are kept untouched. Nothing
+    is ever removed; unlike ``packages`` there is no retirement set here, because a
+    stale hide rule costs nothing (a rule for an absent provider is a no-op).
+    """
+    if ctx.dry_run:
+        logger.info("[DRY-RUN] would ensure %d hide rule(s) in %s",
+                    len(PI_HIDE_PROVIDERS_SEED), PI_HIDE_PROVIDERS)
+        return
+    current = {}
+    if PI_HIDE_PROVIDERS.exists():
+        try:
+            current = json.loads(PI_HIDE_PROVIDERS.read_text())
+        except ValueError:
+            current = None
+        if not isinstance(current, dict):
+            backup = PI_HIDE_PROVIDERS.with_name(PI_HIDE_PROVIDERS.name + ".backup")
+            logger.warning("%s is not a JSON object; moving it to %s",
+                           PI_HIDE_PROVIDERS, backup)
+            shutil.move(str(PI_HIDE_PROVIDERS), str(backup))
+            current = {}
+
+    rules = current.get("hide")
+    if not isinstance(rules, list):
+        rules = []
+    have = {_hide_rule_key(r) for r in rules}
+    missing = [dict(r) for r in PI_HIDE_PROVIDERS_SEED if _hide_rule_key(r) not in have]
+    if not missing:
+        logger.info("%s already hides every provider the manifest names",
+                    PI_HIDE_PROVIDERS)
+        return
+    current["hide"] = rules + missing
+    PI_HIDE_PROVIDERS.parent.mkdir(parents=True, exist_ok=True)
+    PI_HIDE_PROVIDERS.write_text(json.dumps(current, indent=2) + "\n")
+    logger.info("added %d hide rule(s) to %s: %s", len(missing), PI_HIDE_PROVIDERS,
+                ", ".join(r["provider"] for r in missing))
+
+
+def _pi_npm_lockfile_escaped_count():
+    """How many ``package-lock.json`` entries have escaped the npm root, for the
+    plan. 0 when the file is absent, unreadable or healthy.
+    """
+    try:
+        lock = json.loads(PI_NPM_LOCKFILE.read_text())
+    except (OSError, ValueError):
+        return 0
+    packages = lock.get("packages") if isinstance(lock, dict) else None
+    if not isinstance(packages, dict):
+        return 0
+    return sum(1 for k in packages if isinstance(k, str) and k.startswith("../"))
+
+
+def repair_pi_npm_lockfile(ctx):
+    """Delete ``~/.pi/agent/npm/package-lock.json`` when it has escaped the npm root.
+
+    ADR-0009 makes ``~/.pi`` a Tier-B out-of-store symlink to stateRoot. pi derives
+    its extension root as ``<agentDir>/npm`` from ``~/.pi/agent`` and hands that
+    **symlinked** path to ``npm install --prefix``, from whatever directory the
+    session happens to be in. npm then resolves ``node_modules`` through the
+    symlink to its real location but keeps the symlinked prefix, so it records
+    every package as a path *escaping* the prefix::
+
+        ../../../../<stateRoot>/.pi/agent/npm/node_modules/<pkg>
+
+    On the next install those relative keys are re-resolved against the *real*
+    root, so each one gains another copy of the stateRoot segment and is written
+    back alongside — not instead of — the correct entry. Measured on this host with
+    ``npm install --prefix ~/.pi/agent/npm`` repeated from a foreign cwd:
+
+        install 1 -> 330 entries, 329 escaping, no warning
+        install 2 -> 641 entries, 640 escaping, npm's install-scripts advisory appears
+        install 3 -> 952 entries, 951 escaping, and so on, +311 every time
+
+    The host that prompted this had reached 3082 entries in a 1.9 MB lockfile, only
+    330 of them real, with 13 stacked stateRoot segments. That is what was actually
+    emitting the reported ``npm warn install-scripts`` line: npm cannot read a
+    package.json for a phantom entry, so it reports the package as unreviewed no
+    matter what ``allowScripts`` says — and the same phantom entries inflated
+    ``npm audit`` from 302 packages to 2433. Repairing it is not cosmetic.
+
+    Deleting the file is the whole repair: npm rebuilds it from the installed tree
+    on the next install, and a lockfile is not load-bearing here — this tree is a
+    cache of extension installs, not a reproducible build. Verified: with a clean
+    lockfile the same repeated install stays at 330 entries and 0 escaping keys
+    when the prefix is the realpath, and re-corrupts only through the symlinked
+    prefix, so this runs on every projection rather than once.
+
+    The cause is upstream of this repo: it is pi's ``--prefix <symlink>`` call, not
+    the seed. Fixing it at the source would mean pointing pi at the realpath with
+    ``PI_CODING_AGENT_DIR=<stateRoot>/.pi/agent`` in ``home.sessionVariables`` —
+    correct, but it also relocates pi-web-access's ``web-search.json`` (it reads
+    the same variable) and needs a Home Manager switch, so it is a separate change.
+    """
+    try:
+        lock = json.loads(PI_NPM_LOCKFILE.read_text())
+    except (OSError, ValueError):
+        return
+    packages = lock.get("packages") if isinstance(lock, dict) else None
+    if not isinstance(packages, dict):
+        return
+    escaped = [k for k in packages if isinstance(k, str) and k.startswith("../")]
+    if not escaped:
+        return
+    if ctx.dry_run:
+        logger.info("[DRY-RUN] would delete %s: %d of %d entries have escaped the npm "
+                    "root; npm rebuilds it on the next install", PI_NPM_LOCKFILE,
+                    len(escaped), len(packages))
+        return
+    PI_NPM_LOCKFILE.unlink()
+    logger.info("deleted %s: %d of %d entries had escaped the npm root through the "
+                "~/.pi symlink; npm rebuilds it on the next install", PI_NPM_LOCKFILE,
+                len(escaped), len(packages))
+
+
+def seed_pi_npm_project(ctx):
+    """Seed ``allowScripts`` into ``~/.pi/agent/npm/package.json``.
+
+    Same add-only seed contract as the two files above, and safe for the same
+    reason: pi writes this file only when it is absent and npm maintains
+    ``dependencies`` in place, so a leaf-by-leaf merge cannot collide with either.
+
+    Ordering matters. This runs during projection, before the owner first starts
+    pi, which is what lets the very first extension install run node-pty's build
+    script — see PI_NPM_PROJECT_SEED for why that one is not optional on Linux.
+    """
+    if ctx.dry_run:
+        logger.info("[DRY-RUN] would seed %s with %d reviewed install-script "
+                    "decision(s)", PI_NPM_PROJECT,
+                    len(PI_NPM_PROJECT_SEED["allowScripts"]))
+        return
+    current = {}
+    if PI_NPM_PROJECT.exists():
+        try:
+            current = json.loads(PI_NPM_PROJECT.read_text())
+        except ValueError:
+            current = None
+        if not isinstance(current, dict):
+            backup = PI_NPM_PROJECT.with_name(PI_NPM_PROJECT.name + ".backup")
+            logger.warning("%s is not a JSON object; moving it to %s", PI_NPM_PROJECT, backup)
+            shutil.move(str(PI_NPM_PROJECT), str(backup))
+            current = {}
+
+    if not _seed_missing_leaves(current, PI_NPM_PROJECT_SEED):
+        logger.info("%s already carries every install-script decision", PI_NPM_PROJECT)
+        return
+    PI_NPM_PROJECT.parent.mkdir(parents=True, exist_ok=True)
+    PI_NPM_PROJECT.write_text(json.dumps(current, indent=2) + "\n")
+    logger.info("seeded %s: %d install-script decision(s), so npm stops asking on "
+                "every pi startup", PI_NPM_PROJECT,
+                len(PI_NPM_PROJECT_SEED["allowScripts"]))
 
 
 def write_pi_claude_plugins(ctx):
@@ -1205,6 +1643,15 @@ class PiAgent(Agent):
       plus ``packages`` reconciled. **This is the one place ADR-0011's "never write
       an agent's config file" is relaxed**, on the owner's call and with the rule's
       actual protection kept: the contract is *seed*, not *own*.
+    - ``~/.pi/web-search.json`` → the ``web_search`` rename this repo wrote while
+      ``pi-web-search`` was declared is now retired out of it again
+      (RETIRED_PI_WEB_SEARCH). pi-web-access's own store otherwise; not owned.
+    - ``~/.pi/agent/npm/package.json`` ← ``allowScripts`` only, the install-script
+      review npm 11.19 blocks on. Seeded before ``packages`` is declared so the
+      first extension install can build node-pty (PI_NPM_PROJECT_SEED).
+    - ``~/.pi/agent/hide-providers.json`` ← the hide rules that keep providers pi
+      turns on from ambient environment out of the model picker, since pi itself has
+      no provider allowlist (PI_HIDE_PROVIDERS_SEED). Reconciled, not add-only.
 
     Nothing here runs ``pi install``: pi installs its own missing packages at
     startup from the seeded array.
@@ -1244,7 +1691,13 @@ class PiAgent(Agent):
         write_shared_mcp(ctx)
         ensure_shared_memory(ctx)
         write_pi_claude_plugins(ctx)
+        # Before seed_pi_settings: that call is what declares `packages`, and pi
+        # installs them on its next startup — allowScripts has to already be there.
+        repair_pi_npm_lockfile(ctx)
+        seed_pi_npm_project(ctx)
         seed_pi_settings(ctx)
+        seed_pi_hide_providers(ctx)
+        reconcile_pi_web_search(ctx)
 
     def relink(self, ctx):
         """Re-assert the instruction link after delegated installers have run.
@@ -1295,6 +1748,27 @@ class PiAgent(Agent):
         add("config", "{} <- {} preference key(s), seeded leaf-by-leaf and never "
                       "overwriting a value pi or the owner already set".format(
                           PI_SETTINGS, len(PI_SETTINGS_SEED)))
+        if _pi_web_search_has_retired_keys():
+            add("config", "{} -> drop the retired `web_search` rename this repo wrote "
+                          "while pi-web-search was declared; pi-web-access now owns that "
+                          "tool name outright".format(PI_WEB_SEARCH))
+        escaped = _pi_npm_lockfile_escaped_count()
+        if escaped:
+            add("config", "{} -> delete it; {} entr(y/ies) have escaped the npm root "
+                          "through the ~/.pi symlink, which is what makes npm report "
+                          "install scripts as unreviewed. npm rebuilds it".format(
+                              PI_NPM_LOCKFILE, escaped))
+        add("config", "{} <- hide rule(s) for {}; pi has no provider allowlist, and "
+                      "these are the providers it turns on from ambient env (AWS role, "
+                      "HF_TOKEN) rather than from a login".format(
+                          PI_HIDE_PROVIDERS,
+                          ", ".join(r["provider"] for r in PI_HIDE_PROVIDERS_SEED)))
+        add("config", "{} <- allowScripts for {}; npm 11.19 blocks dependency install "
+                      "scripts by default, which silently leaves node-pty unbuilt on "
+                      "Linux".format(
+                          PI_NPM_PROJECT,
+                          ", ".join("{}={}".format(k, "approve" if v else "deny")
+                                    for k, v in PI_NPM_PROJECT_SEED["allowScripts"].items())))
 
 
 

@@ -373,8 +373,8 @@ dependencies and tool-name collisions more than by preference.
 | `pi-subagents` (unscoped) | 0.58.0 | native sub-agents | **forced** — the only package satisfying the marketplace's `pi-subagents >= 0.35.0` peer |
 | `pi-memory` | 0.4.2 | `memory.backend = mnemopi` (local layer) | one agent, not one machine; the shared layer is the `memory` MCP entry |
 | `pi-claude-marketplace` | 0.17.0 | `claude` / `claude-plugins` discovery | config **is** projected — `claude-plugins.json` from the manifest |
-| `pi-web-search` | 1.3.1 | native browser / web search | Anthropic-native, **no extra credential** |
-| `pi-web-access` | 0.25.0 | intranet fetch | `fetch_content` **only** — its `web_search` must be disabled |
+| `pi-web-access` | 0.25.0 | native browser / web search + intranet fetch | all web access; keyless and model-independent (see the update log for why `pi-web-search` went) |
+| `pi-hide-providers` | 0.1.15 | `disabledProviders` | the provider fence pi has none of; monkey-patches `ModelRuntime` — risk named in the update log |
 | `pi-lens` | 4.1.2 | native LSP + diagnostics | no CI; pins `pi-tui ^0.84.1`; rewrites source |
 | `@plannotator/pi-extension` | 0.27.9 | plan mode | set `model: null`; needs a browser |
 | `pi-background-tasks` | 2.4.2 | background bash | Fusion is OAuth-only — satisfied, these hosts use OAuth |
@@ -388,9 +388,9 @@ Three constraints that are decisions, not details:
   **`~/.claude/agents/` does not exist**, and *plugin-provided* agents are
   installed there automatically by `pi-claude-marketplace`. So the burden is
   currently nil and the gap is latent, not active.
-- **`pi-web-search` and `pi-web-access` collide on `web_search`.** Only
-  `pi-web-access` has the rename/disable knob, so it gives the tool up and
-  contributes `fetch_content` alone — the one keyless intranet-capable fetcher.
+- **Web access is one package, not two.** `pi-web-search` and `pi-web-access`
+  collide on the `web_search` tool name — fatally, as it turned out — and the
+  collision was resolved by dropping the former; see the update log.
   `pi-tinyfish` and `pi-brave-search` are **dropped**, not restored: both need a
   third-party key, both are ~3.5 months stale at 29–60 downloads/week, and both
   are already providers inside `pi-web-access`.
@@ -533,3 +533,106 @@ its body and point here instead, rather than being left half-current.
   process today; if something does, this ADR's reasoning applies to it too.
 - **A fourth agent still joins by the ADR-0011 recipe.** This change is an
   occupant swap, not a mechanism change.
+
+## Update log
+
+- **2026-08-28 — first-start defects, and one decision reversed.** pi had never
+  actually started on a host this ADR provisioned. Three findings, in ascending
+  order of how wrong this ADR was.
+
+  - **The `web_search` collision was fatal, not a warning.** This ADR recorded
+    that `pi-web-access` "gives the tool up", but nothing was ever written to make
+    it do so — the knob lives in `~/.pi/web-search.json`, which no projection
+    touched. pi does not warn and continue on a duplicate tool name; it fails the
+    second extension load outright, taking `fetch_content`, `source_check` and
+    `get_search_content` with it. Every host provisioned under this ADR was in
+    that state.
+
+  - **`pi-web-search` is retired, reversing this ADR's choice of it.** The
+    original rationale — the only candidate reaching Anthropic's native
+    Messages-API search with no extra credential — held only while Anthropic was
+    the whole provider set. With the set pinned to Anthropic now, Codex and
+    DeepSeek later, both of its tools fail: `url_context` is Gemini-only and can
+    never fire, and its `web_search` dispatches on the *current model's* provider
+    and hard-errors rather than falling back, with DeepSeek absent from its list.
+    Its remaining advantage, grounded search inside the same inference call, is
+    billed per search and lands in Anthropic extra usage under subscription OAuth
+    — the exact thing `warnings.anthropicExtraUsage` is enabled to surface.
+    Dropping it dissolves the collision at the root instead of renaming around it,
+    and leaves `pi-web-access` — keyless via Exa MCP, and dispatching
+    independently of the session model — as the sole owner of `web_search`.
+    `fetch_content` had no substitute either way: pi's four built-in tools
+    (`read` / `write` / `edit` / `bash`) include no fetch and no search.
+
+  - **ADR-0009's `~/.pi` symlink silently corrupts npm's lockfile.** pi derives
+    its extension root as `<agentDir>/npm` and hands that **symlinked** path to
+    `npm install --prefix` from an arbitrary cwd. npm resolves `node_modules`
+    through the symlink but keeps the symlinked prefix, so every package is
+    recorded as a path escaping the prefix; the next install re-resolves those
+    keys against the real root and writes a second copy alongside the first.
+    Measured: +311 entries per install, unbounded. The reference host had reached
+    3082 entries in a 1.9 MB lockfile — 330 real, 13 stacked stateRoot segments —
+    which inflated `npm audit` from 302 packages to 2433 and made npm report
+    install scripts as unreviewed no matter what `allowScripts` said. That report
+    was the `npm warn install-scripts` line the owner saw. Deleting the lockfile
+    is the whole repair and is now a projection step; the root-cause fix
+    (`PI_CODING_AGENT_DIR=<stateRoot>/.pi/agent`, so pi never hands npm a
+    symlink) also relocates `pi-web-access`'s config and is deliberately left to
+    a separate change.
+
+  Two smaller corrections fell out of the same pass. `enabledModels` is **not**
+  an equivalent of omp's `disabledProviders`, as the implementation notes
+  claimed: pi counts a provider credentialed from its *environment variable*
+  alone, and a pattern matching nothing yields an empty scope that pi then falls
+  through — on a host with an AWS role and no Anthropic login it silently chose a
+  Bedrock model. pi 0.84.3 has no provider allowlist at all; verified against the
+  settings schema, `models.json` (its `models` array merges, and its `apiKey` is
+  the lowest-precedence credential source), `auth.json`'s provider-scoped `env`
+  (`||`-chained, so a blank value falls through to `process.env`) and the
+  extension API (`unregisterProvider` only removes extension-registered
+  providers). And npm 11.19 blocks dependency install scripts by default, which on
+  Linux leaves `node-pty` — plan mode's web TUI, whose tarball ships darwin and
+  win32 prebuilds only — with no native module; `allowScripts` in
+  `~/.pi/agent/npm/package.json` is now seeded before `packages` is declared so
+  the first extension install can build it.
+
+- **2026-08-28 (later) — `disabledProviders` has an answer after all.**
+  `pi-hide-providers` 0.1.15 is added to the set, on the owner's find. It supplies
+  the provider fence the entry above concluded pi does not have, and it does not
+  contradict that conclusion: its own README documents the same dead ends this repo
+  measured — `registerProvider({ models: [] })` is override-only, and
+  `unregisterProvider()` reaches only extension-registered providers — and it
+  therefore works by **monkey-patching** `ModelRuntime`'s `getModels`,
+  `getAvailableSnapshot`, `getAvailable` and `getModel` on `session_start`. The
+  author labels that as not an official SDK mechanism. Accepted with the risk named,
+  on the same basis as `pi-lens`: MIT, no runtime dependencies, `@earendil-works/
+  pi-coding-agent` 0.84.3 pinned as a devDependency, and vitest + typecheck + knip
+  in the repo. The counterweight is that it is 0.1.x, four days old at adoption,
+  16 versions in that span, single-maintainer, and reaches into pi internals that
+  carry no compatibility promise — so a pi upgrade is the thing to watch.
+
+  Its scope is narrower than its README claims, and the manifest note records the
+  two measured gaps rather than the advertised behaviour:
+
+  - **`pi --list-models` is not filtered.** Verified with `amazon-bedrock` and
+    `huggingface` hidden: all 118 Bedrock models still listed. That path opens no
+    session, so the `session_start` patch never runs.
+  - **The cold-start model pick is not filtered.** `main.js` resolves
+    `enabledModels` and chooses the initial model in `buildSessionOptions` *before*
+    `createAgentSession`, so before any `session_start` handler exists. The
+    empty-scope fallback this ADR's earlier entry describes is therefore still
+    reachable. The extension's `model_select` handler is described in its source as
+    a safety net that blocks hidden models, but it only calls `ctx.ui.notify()`.
+
+  What it does close is the whole remaining exposure once the chosen provider is
+  authenticated: the `/model` picker, `Ctrl+P` cycling and session-restore lookups,
+  which read exactly the four accessors it patches. The blocklist is seeded with the
+  providers pi turns on from **ambient environment** rather than from a login —
+  `amazon-bedrock` (the pod's IAM role) and `huggingface` (`HF_TOKEN`) — because
+  neither variable can be unset for pi alone without also breaking `aws` and `hf`
+  inside pi's own bash tool. `isHidden()` requires an exact provider match and has
+  no wildcard, so "hide everything except Anthropic" is not expressible; the list
+  names what to hide and is reconciled, keeping rules added by `/hide-models add`.
+
+  Installing it also re-demonstrated the lockfile defect above: `pi install` took
+  the tree from 0 escaping entries back to 330 in a single call.

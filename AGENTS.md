@@ -346,7 +346,14 @@ single source if applying it needs no human, so they run unattended with stdin o
   CLIs. **pi's is the single exception** (ADR-0012) and only under seed semantics —
   `packages` reconciled, every other key written **only when absent**. If you find
   yourself overwriting a key pi already has, you have broken the contract that
-  makes this safe.
+  makes this safe. Two more files ride that contract. `allowScripts` in
+  `~/.pi/agent/npm/package.json` — npm 11.19 blocks dependency install scripts by
+  default, which on Linux leaves node-pty unbuilt; seed it *before* `packages` is
+  declared or the first extension install misses it. And `~/.pi/web-search.json`
+  (pi-web-access's own store — note the path is *not* under `~/.pi/agent/`), where
+  the repo now only **retires** the `web_search` rename it used to write while
+  `pi-web-search` was still declared: seeding is add-only, so a value the repo
+  stops believing in needs an explicit retirement or it never leaves a host.
 - **Legacy ADRs 0001–0006** — describe the retired Python pipeline; ADR-0007
   governs. Don't cite them as current design.
 
