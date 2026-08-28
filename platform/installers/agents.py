@@ -69,7 +69,6 @@ import logging
 import os
 import pathlib
 import shutil
-import subprocess
 import sys
 
 if __package__ in (None, ""):  # run directly (`python3 platform/installers/agents.py`)
@@ -528,7 +527,11 @@ def _mise_which(ctx, name):
     mise's shims only land on PATH through the *shell* integration, never in this
     process. `mise which` resolves the installed binary even when its dir is off
     this process' PATH, and is a cheap non-zero exit for tools mise does not
-    manage (claude, codex).
+    manage.
+
+    Only ``_npm`` needs this now. No agent binary does any more, and that is the
+    point of ADR-0012's install channel: a third-slot binary reachable only
+    through `mise which` is a binary no IDE or ACP client can launch either.
     """
     mise = shutil.which("mise")
     if not mise:
@@ -555,14 +558,7 @@ def _npm(ctx):
     """
     if _NPM:
         return _NPM[0]
-    npm = shutil.which("npm")
-    if not npm:
-        mise = shutil.which("mise")
-        if mise:
-            out = ctx.run_command([mise, "which", "npm"], capture_output=True, check=False)
-            resolved = _stdout(out)
-            if resolved and pathlib.Path(resolved).is_file():
-                npm = resolved
+    npm = shutil.which("npm") or _mise_which(ctx, "npm")
     if not npm:
         if ctx.dry_run:
             # Describe-only run: nothing is installed, so name the command anyway.
@@ -1371,12 +1367,17 @@ def plan_items(ctx, ids, add):
         SHARED_INSTRUCTIONS, SHARED_SKILLS))
     for agent in (Agent.get(i) for i in ids):
         agent.plan(ctx, add)
+    # pi is not a `codegraph install --target` id, so a pi-only run installs the
+    # binary and wires nothing — say that rather than printing an empty list.
+    targets = [i for i in ids if i in CODEGRAPH_TARGETS]
+    into = (" + its MCP server into: " + ", ".join(targets)) if targets else (
+        " (no selected agent is a codegraph --target; pi gets it through {})".format(
+            SHARED_MCP.name))
     if shutil.which("codegraph"):
-        add("install", "CodeGraph self-update (codegraph upgrade) + its MCP server into: "
-                       + ", ".join(i for i in ids if i in CODEGRAPH_TARGETS))
+        add("install", "CodeGraph self-update (codegraph upgrade)" + into)
     else:
-        add("install", "CodeGraph from raw.githubusercontent.com/colbymchenry/codegraph "
-                       + "+ its MCP server into: " + ", ".join(i for i in ids if i in CODEGRAPH_TARGETS))
+        add("install", "CodeGraph from raw.githubusercontent.com/colbymchenry/codegraph"
+                       + into)
 
 
 def main():
