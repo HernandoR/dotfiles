@@ -13,3 +13,4 @@
 | [ADR-0009](adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md) | Config ownership tiers — env-specific HM module owns mutable links; declarative nixification deferred | accepted | 2026-07-26 |
 | [ADR-0010](adr-0010-plan-first-one-shot-clearance-2026-08-04.md) | Plan-first bootstrap with a single interactive clearance | accepted | 2026-08-04 |
 | [ADR-0011](adr-0011-multi-agent-toolchain-single-source-2026-08-04.md) | Multi-agent toolchain — one manifest projected by CLI; instructions single-sourced | accepted | 2026-08-04 |
+| [ADR-0012](adr-0012-third-slot-upstream-pi-2026-08-28.md) | The third agent slot is upstream pi, chosen for interoperability and paid for in extensions | proposed | 2026-08-28 |
