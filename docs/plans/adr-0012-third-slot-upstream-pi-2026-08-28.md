@@ -636,3 +636,45 @@ its body and point here instead, rather than being left half-current.
 
   Installing it also re-demonstrated the lockfile defect above: `pi install` took
   the tree from 0 escaping entries back to 330 in a single call.
+
+- **2026-08-28 (later still) — the lockfile escape is fixed at the cause.**
+  `home/env-links.nix` now sets `home.sessionVariables.PI_CODING_AGENT_DIR` to
+  `${cfg.stateRoot}/.pi/agent`, so pi never hands npm the `~/.pi` symlink. The
+  projection-time lockfile repair stays as the belt: it heals hosts provisioned
+  before this, and any context the session variable does not reach.
+
+  Nothing moves. `~/.pi/agent` *is* `${stateRoot}/.pi/agent` — one is the ADR-0009
+  link, the other its target — so `settings.json`, `auth.json`, `sessions/`,
+  `npm/`, the memory store and `hide-providers.json` are the same files under
+  either spelling. What changes is the string pi passes to `npm --prefix`, and that
+  is the whole defect. Measured through pi's own installer, one `pi install`,
+  everything else held equal:
+
+  | `PI_CODING_AGENT_DIR` | lockfile after |
+  |---|---|
+  | unset | 331 entries, **330 escaped** |
+  | `${stateRoot}/.pi/agent` | 331 entries, **0 escaped** |
+
+  Three consequences worth having on the record:
+
+  - **`home.sessionVariables`, not `programs.zsh.sessionVariables`.** The existing
+    `sessionVariables` block in `home/shell.nix` is the zsh one, which would have
+    reproduced exactly the reach failure this ADR fixed for pi's binary by using
+    `home.sessionPath`: an editor extension host or an ACP server is not an
+    interactive zsh. Verified in the built generation — the export lands in
+    `hm-session-vars.sh`, beside the `home.sessionPath` PATH line.
+  - **One file genuinely relocates.** `pi-web-access` resolves its config through
+    the same variable, so `web-search.json` moves from `~/.pi/` down to
+    `~/.pi/agent/`. Harmless — this repo stopped writing that file when
+    `pi-web-search` was retired — but `RETIRED_PI_WEB_SEARCH` now sweeps both
+    spellings (`PI_WEB_SEARCH_PATHS`), since retirement has to reach hosts
+    provisioned before the variable existed.
+  - **Graceful degradation.** Where the variable does not reach, pi falls back to
+    `~/.pi/agent`, the same directory, so the only regression is the escape itself
+    — which the repair step already handles. Also, setting the variable makes pi
+    skip its first-run startup selector; moot, since that path additionally needs
+    experimental features and a missing `settings.json`, and the projection always
+    seeds one.
+
+  Verified with `just build` (changes nothing in `$HOME`); activation is `just
+  switch`, which is the owner's to run.

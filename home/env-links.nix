@@ -226,7 +226,9 @@ in
       # sessions, pi-memory's local store, and the npm/ + git/ trees the extensions
       # are installed into, so it has to persist as a unit. Two files land inside
       # it that are easy to miss: pi-acp writes a hard-coded ~/.pi/pi-acp/, and
-      # pi-web-access writes ~/.pi/web-search.json (note: NOT under ~/.pi/agent/).
+      # pi-web-access writes web-search.json into whatever
+      # PI_CODING_AGENT_DIR names — so ~/.pi/agent/web-search.json now that it is
+      # set below, and ~/.pi/web-search.json on any host where it is not.
       # 700 — it holds OAuth material.
       #
       # NOTE the retirement asymmetry: dropping the old ".omp" entry only removes
@@ -268,6 +270,38 @@ in
     # tools cannot win the race anyway — the HM switch runs before
     # platform/setup.py installs the agent CLIs, so the link is always there first.
     #
+    # pi: point pi at the REAL config dir rather than the $HOME symlink above.
+    #
+    # Same directory either way — `~/.pi/agent` IS `${cfg.stateRoot}/.pi/agent`, one
+    # is the link and one is the target — so nothing moves except one file (see the
+    # ".pi" entry's note on web-search.json). What changes is the *spelling* pi hands
+    # to npm, and that spelling is load-bearing: pi derives its extension root as
+    # `<agentDir>/npm` and passes it to `npm install --prefix` from whatever cwd the
+    # session is in. Given the symlinked spelling, npm resolves node_modules through
+    # the link but keeps the unresolved prefix, so it records every package as a path
+    # *escaping* the prefix; the next install re-resolves those keys against the real
+    # root and writes a second copy alongside the first. Measured through pi's own
+    # installer, one `pi install`, everything else held equal:
+    #
+    #   PI_CODING_AGENT_DIR unset      -> 331 lockfile entries, 330 escaped
+    #   PI_CODING_AGENT_DIR = realpath -> 331 lockfile entries,   0 escaped
+    #
+    # Unset, that compounds by ~311 entries per install until npm can no longer
+    # match a package against `allowScripts` and reports every install script as
+    # unreviewed — which is how it surfaces, as a spurious `npm warn install-scripts`
+    # line. The reference host reached 3082 entries in a 1.9 MB lockfile.
+    #
+    # `home.sessionVariables`, NOT `programs.zsh.sessionVariables`, for the same
+    # reason ADR-0012 put pi's binary on `home.sessionPath`: an editor extension host
+    # or an ACP server is not an interactive zsh. Where even that does not reach, pi
+    # falls back to `~/.pi/agent` — the same directory — so the only regression is
+    # the lockfile escape, which agents.py repairs on every projection.
+    #
+    # One documented side effect: pi skips its first-run startup selector when this
+    # is set. Moot here, since that also requires experimental features AND a missing
+    # settings.json, and platform/installers/agents.py always seeds one.
+    home.sessionVariables.PI_CODING_AGENT_DIR = "${cfg.stateRoot}/.pi/agent";
+
     # This is the `home.activation` escape hatch ADR-0009 reserved: the entries
     # stay the single declarative inventory, and this only makes what they
     # already declare TRUE — first by creating a missing target (below), then by

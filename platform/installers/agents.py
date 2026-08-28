@@ -355,7 +355,9 @@ PI_PACKAGES = (
                    "session model, which is the property that survives adding DeepSeek. "
                    "Needs ssrf.allowRanges widened for intranet hosts while "
                    "fetchRouting.allowRemoteHostedProviders stays false. "
-                   "Config: ~/.pi/web-search.json (NOT under ~/.pi/agent/)"),
+                   "Config: web-search.json under PI_CODING_AGENT_DIR, so "
+                   "~/.pi/agent/ here — see PI_WEB_SEARCH_PATHS for the fallback "
+                   "spelling on a host where that variable is unset"),
     PiPackage("npm:pi-hide-providers",
               note="the provider fence pi does not have. pi has NO provider allowlist — "
                    "verified against the settings schema, models.json (its `models` array "
@@ -440,11 +442,19 @@ PI_AGENT_DIR = HOME / ".pi" / "agent"
 PI_SETTINGS = PI_AGENT_DIR / "settings.json"
 PI_CLAUDE_PLUGINS = PI_AGENT_DIR / "claude-plugins.json"
 
-# pi-web-access's own config. Note the path: ~/.pi/web-search.json, NOT under
-# ~/.pi/agent/ (getWebSearchConfigDir() returns PI_CODING_AGENT_DIR, else
-# $XDG_CONFIG_HOME/pi, else ~/.pi). This repo writes nothing here any more and
-# only retires its own past key out of it — see RETIRED_PI_WEB_SEARCH.
-PI_WEB_SEARCH = HOME / ".pi" / "web-search.json"
+# pi-web-access's own config, in BOTH the places it can live.
+# getWebSearchConfigDir() returns PI_CODING_AGENT_DIR when set, else
+# $XDG_CONFIG_HOME/pi, else ~/.pi — so `home/env-links.nix` setting
+# PI_CODING_AGENT_DIR (for npm's sake; see repair_pi_npm_lockfile) moves this file
+# one level down, from ~/.pi/web-search.json to ~/.pi/agent/web-search.json. Both
+# are listed because retirement has to reach a host provisioned before that
+# variable existed, and because a context the variable does not reach falls back to
+# the old spelling. This repo writes nothing here any more and only retires its own
+# past key out of it — see RETIRED_PI_WEB_SEARCH.
+PI_WEB_SEARCH_PATHS = (
+    PI_AGENT_DIR / "web-search.json",
+    HOME / ".pi" / "web-search.json",
+)
 
 # The npm project pi installs its extensions into. pi creates this file only when
 # absent (`existsSync(p) || writeFileSync(…)`) and never rewrites it, npm owns
@@ -1026,49 +1036,44 @@ def seed_pi_settings(ctx):
                 PI_SETTINGS, len(reconciled), len(PI_SETTINGS_SEED))
 
 
-def _pi_web_search_has_retired_keys():
-    """Whether ``~/.pi/web-search.json`` still carries anything RETIRED_PI_WEB_SEARCH
-    would remove. Read-only, for the plan; ADR-0010 wants the plan to list only
-    steps that will actually do something.
+def _pi_web_search_retired_paths():
+    """The PI_WEB_SEARCH_PATHS entries that still carry a retired key. Read-only, for
+    the plan; ADR-0010 wants the plan to list only steps that will actually do
+    something.
     """
-    try:
-        current = json.loads(PI_WEB_SEARCH.read_text())
-    except (OSError, ValueError):
-        return False
-    if not isinstance(current, dict):
-        return False
-    for path, retired_value in RETIRED_PI_WEB_SEARCH:
-        node = current
-        for key in path[:-1]:
-            if not isinstance(node, dict):
+    hits = []
+    for config_path in PI_WEB_SEARCH_PATHS:
+        try:
+            current = json.loads(config_path.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(current, dict):
+            continue
+        for path, retired_value in RETIRED_PI_WEB_SEARCH:
+            node = current
+            for key in path[:-1]:
+                if not isinstance(node, dict):
+                    break
+                node = node.get(key)
+            if isinstance(node, dict) and node.get(path[-1]) == retired_value:
+                hits.append(config_path)
                 break
-            node = node.get(key)
-        if isinstance(node, dict) and node.get(path[-1]) == retired_value:
-            return True
-    return False
+    return hits
 
 
-def reconcile_pi_web_search(ctx):
-    """Drop retired keys from ``~/.pi/web-search.json`` (pi-web-access's own store).
-
-    The mirror image of ``seed_pi_settings``' retirement half, for the one key this
-    repo used to write there. See RETIRED_PI_WEB_SEARCH for what and why.
-
-    The file is deleted outright if retirement empties it, since in that case it
-    exists only because this repo wrote it; a file holding anything else — a search
-    provider key, a curator preference — is left in place with the rest intact.
-    """
-    if not PI_WEB_SEARCH.exists():
+def _reconcile_one_web_search(ctx, config_path):
+    """Drop retired keys from one pi-web-access config file."""
+    if not config_path.exists():
         return
     try:
-        current = json.loads(PI_WEB_SEARCH.read_text())
+        current = json.loads(config_path.read_text())
     except ValueError:
         current = None
     if not isinstance(current, dict):
         # Not ours to interpret, and pi-web-access will complain about it loudly
         # enough on its own. seed_pi_settings moves such a file aside because it
         # has something to write; here there is nothing left to write.
-        logger.warning("%s is not a JSON object; leaving it alone", PI_WEB_SEARCH)
+        logger.warning("%s is not a JSON object; leaving it alone", config_path)
         return
 
     removed = []
@@ -1093,17 +1098,32 @@ def reconcile_pi_web_search(ctx):
         return
     if ctx.dry_run:
         logger.info("[DRY-RUN] would drop retired key(s) %s from %s%s",
-                    ", ".join(removed), PI_WEB_SEARCH,
+                    ", ".join(removed), config_path,
                     " and delete the now-empty file" if not current else "")
         return
     for key in removed:
-        logger.info("removing retired key %r from %s", key, PI_WEB_SEARCH)
+        logger.info("removing retired key %r from %s", key, config_path)
     if not current:
-        PI_WEB_SEARCH.unlink()
-        logger.info("%s is empty after retirement; removed it", PI_WEB_SEARCH)
+        config_path.unlink()
+        logger.info("%s is empty after retirement; removed it", config_path)
         return
-    PI_WEB_SEARCH.write_text(json.dumps(current, indent=2) + "\n")
-    PI_WEB_SEARCH.chmod(0o600)
+    config_path.write_text(json.dumps(current, indent=2) + "\n")
+    config_path.chmod(0o600)
+
+
+def reconcile_pi_web_search(ctx):
+    """Drop retired keys from pi-web-access's store, in both places it can live.
+
+    The mirror image of ``seed_pi_settings``' retirement half, for the one key this
+    repo used to write there. See RETIRED_PI_WEB_SEARCH for what and why, and
+    PI_WEB_SEARCH_PATHS for why there are two paths rather than one.
+
+    A file is deleted outright if retirement empties it, since in that case it
+    exists only because this repo wrote it; a file holding anything else — a search
+    provider key, a curator preference — is left in place with the rest intact.
+    """
+    for config_path in PI_WEB_SEARCH_PATHS:
+        _reconcile_one_web_search(ctx, config_path)
 
 
 def _hide_rule_key(rule):
@@ -1643,9 +1663,10 @@ class PiAgent(Agent):
       plus ``packages`` reconciled. **This is the one place ADR-0011's "never write
       an agent's config file" is relaxed**, on the owner's call and with the rule's
       actual protection kept: the contract is *seed*, not *own*.
-    - ``~/.pi/web-search.json`` → the ``web_search`` rename this repo wrote while
-      ``pi-web-search`` was declared is now retired out of it again
-      (RETIRED_PI_WEB_SEARCH). pi-web-access's own store otherwise; not owned.
+    - pi-web-access's ``web-search.json`` → the ``web_search`` rename this repo
+      wrote while ``pi-web-search`` was declared is now retired out of it again
+      (RETIRED_PI_WEB_SEARCH), in both locations it can live
+      (PI_WEB_SEARCH_PATHS). Its own store otherwise; not owned.
     - ``~/.pi/agent/npm/package.json`` ← ``allowScripts`` only, the install-script
       review npm 11.19 blocks on. Seeded before ``packages`` is declared so the
       first extension install can build node-pty (PI_NPM_PROJECT_SEED).
@@ -1748,10 +1769,10 @@ class PiAgent(Agent):
         add("config", "{} <- {} preference key(s), seeded leaf-by-leaf and never "
                       "overwriting a value pi or the owner already set".format(
                           PI_SETTINGS, len(PI_SETTINGS_SEED)))
-        if _pi_web_search_has_retired_keys():
+        for config_path in _pi_web_search_retired_paths():
             add("config", "{} -> drop the retired `web_search` rename this repo wrote "
                           "while pi-web-search was declared; pi-web-access now owns that "
-                          "tool name outright".format(PI_WEB_SEARCH))
+                          "tool name outright".format(config_path))
         escaped = _pi_npm_lockfile_escaped_count()
         if escaped:
             add("config", "{} -> delete it; {} entr(y/ies) have escaped the npm root "

@@ -349,9 +349,10 @@ single source if applying it needs no human, so they run unattended with stdin o
   makes this safe. Two more files ride that contract. `allowScripts` in
   `~/.pi/agent/npm/package.json` — npm 11.19 blocks dependency install scripts by
   default, which on Linux leaves node-pty unbuilt; seed it *before* `packages` is
-  declared or the first extension install misses it. And `~/.pi/web-search.json`
-  (pi-web-access's own store — note the path is *not* under `~/.pi/agent/`), where
-  the repo now only **retires** the `web_search` rename it used to write while
+  declared or the first extension install misses it. And pi-web-access's
+  `web-search.json` (under `PI_CODING_AGENT_DIR`, so `~/.pi/agent/`, falling back
+  to `~/.pi/` where that variable does not reach — the repo checks both), where it
+  now only **retires** the `web_search` rename it used to write while
   `pi-web-search` was still declared: seeding is add-only, so a value the repo
   stops believing in needs an explicit retirement or it never leaves a host.
 - **Legacy ADRs 0001–0006** — describe the retired Python pipeline; ADR-0007
