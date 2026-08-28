@@ -14,7 +14,6 @@ let
   # someone runs `mise use -g <tool>@<version>` there.
   tools = {
     aws-cli = "latest";
-    "github:can1357/oh-my-pi" = "latest";
     go = "latest";
     just = "latest";
     node = "lts";

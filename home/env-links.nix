@@ -188,10 +188,17 @@ in
       # --- agents (ADR-0011: all three rewrite their own config at runtime, so
       # none of these can be an HM store link) ---
 
-      # Cross-agent instruction + loose-skills root (ADR-0011 plane ①):
-      # ~/.agents/AGENTS.md is the single instruction source both Codex and omp
-      # read, and ~/.agents/skills the shared loose-skills dir. Mutable: skills
-      # are added and edited in place.
+      # Cross-agent instruction + loose-skills root (ADR-0011 plane ①), and since
+      # ADR-0012 the shared MCP source and memory store too:
+      #   AGENTS.md       the single instruction source Codex and pi both read
+      #   skills/         the shared loose-skills dir
+      #   mcp.json        the tool-agnostic MCP source pi-mcp-adapter reads
+      #   memory/         the knowledge-graph store ALL THREE agents share
+      #   memory-archive/ the exported mnemopi banks (read by hand, not loaded)
+      # Mutable throughout: skills are edited in place and the memory store is
+      # written by the agents. This entry is why the memory plane is cross-machine
+      # at all — the target is on the shared state volume, so one store follows the
+      # owner between hosts with no service and no credential.
       ".agents" = { kind = "dir"; mode = "755"; };
 
       # Claude Code: ONE whole-dir link (ADR-0009 grilling Q2) so config and
@@ -213,13 +220,27 @@ in
       # they are part of the persistent volume rather than HM-managed.
       ".codex" = { kind = "dir"; mode = "700"; };
 
-      # oh-my-pi (omp): whole-dir, replacing pi (ADR-0011 update log 2026-08-06).
-      # ~/.omp/agent/config.yml is rewritten by /settings and by omp's config
-      # writer, and ~/.omp/agent/mcp.json by its /mcp commands; the dir also
-      # holds sessions, the auth store (agent.db) and — since the memory backend
-      # is omp-native mnemopi (ADR-0011 update log 2026-08-20) — mnemopi's memory
-      # SQLite store under omp's agent memories dir. 700 for the latter two.
-      ".omp" = { kind = "dir"; mode = "700"; };
+      # pi: whole-dir, replacing omp (ADR-0012). Same reasoning as .codex and
+      # .claude — ~/.pi/agent/settings.json is rewritten by /settings, /model,
+      # /theme and `pi install`, and the dir also holds auth.json, trust.json,
+      # sessions, pi-memory's local store, and the npm/ + git/ trees the extensions
+      # are installed into, so it has to persist as a unit. Two files land inside
+      # it that are easy to miss: pi-acp writes a hard-coded ~/.pi/pi-acp/, and
+      # pi-web-access writes ~/.pi/web-search.json (note: NOT under ~/.pi/agent/).
+      # 700 — it holds OAuth material.
+      #
+      # NOTE the retirement asymmetry: dropping the old ".omp" entry only removes
+      # the $HOME symlink. The 1.1 GB target under stateRoot is untouched, and
+      # deleting it is a deliberate manual act — do the mnemopi bank export first
+      # (scripts/export-mnemopi-banks.py), since that store is the only thing in
+      # the omp tree that cannot be re-derived.
+      ".pi" = { kind = "dir"; mode = "700"; };
+
+      # pi-lens keeps its global config OUTSIDE ~/.pi, so the whole-dir entry
+      # above does not cover it and without this it dies with every container
+      # recreation. 700 rather than 755 only because there is no reason for it to
+      # be readable; it holds no secret today.
+      ".pi-lens" = { kind = "dir"; mode = "700"; };
 
       # --- shell / machine state ---
 
