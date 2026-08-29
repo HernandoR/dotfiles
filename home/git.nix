@@ -153,6 +153,17 @@ in
 
       init.defaultBranch = "main";
 
+      # Serve GitHub https credentials through gh, which holds the per-host
+      # token (GITHUB_TOKEN or its own login) — no credential is projected
+      # here, only the delegation. Without a helper, `git credential fill`
+      # returns nothing and pi-claude-marketplace's private-repo clone
+      # (isomorphic-git, https-only, so SSH is not an alternative) falls into
+      # its GitHub Device Flow, which in a headless `pi -p` run polls forever
+      # with nobody to authorize — measured as pi hanging at startup on this
+      # host over troph-team/mewtant-plugins. Scoped to github.com: other
+      # hosts keep whatever they had.
+      credential."https://github.com".helper = "!gh auth git-credential";
+
       # Agent-first key discovery with an on-disk fallback (scripts above).
       gpg.ssh = {
         defaultKeyCommand = "${sshSigningKeyCommand}";
