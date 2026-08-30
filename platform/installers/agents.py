@@ -264,6 +264,43 @@ PLUGINS = (
     # to add it from. Recording the exception beats silently dropping it.
 )
 
+# --- the loose-skills track (`npx skills`) -----------------------------------
+# Skill collections that are NOT Claude-plugin marketplaces — nothing to `claude
+# plugin install` — arrive through the vendor-neutral skills CLI
+# (vercel-labs/skills) instead. A global install writes ONE canonical copy per
+# skill into ~/.agents/skills/<name> — exactly SHARED_SKILLS, the Tier-B
+# env-linked root this repo already declares — and symlinks it into each named
+# agent's own skills dir. Codex and pi read ~/.agents/skills natively (their
+# per-agent dirs are links onto the same root, so their symlink step degrades
+# to a copy-in-place); Claude gets real per-skill links in ~/.claude/skills.
+#
+# This track is for skills-only sources. Anything that is ALSO a plugin
+# (agent-skillset, astral-sh, …) stays on the marketplace track above — a loose
+# copy in the shared root would shadow the plugin copy for every agent that
+# reads ~/.agents/skills natively.
+
+
+class SkillPackage:
+    """One skills-CLI package (`npx skills add <source>`), installed globally
+    for the agents named. ``source`` is what the CLI accepts: an ``owner/repo``
+    GitHub shorthand or a git URL."""
+
+    def __init__(self, source, agents, note=""):
+        self.source = source
+        self.agents = tuple(agents)
+        self.note = note
+
+
+# dotfiles agent id -> skills-CLI agent name (`--agent`).
+SKILLS_CLI_AGENT_NAMES = {"claude": "claude-code", "codex": "codex", "pi": "pi"}
+
+SKILL_PACKAGES = (
+    SkillPackage("dagster-io/skills", agents=("claude", "codex", "pi"),
+                 note="Dagster's agent skills (one skill today: dagster-expert, the "
+                      "dg-CLI/asset/pipeline guidance) — a skills-only repo with no "
+                      "plugin marketplace to install it from"),
+)
+
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
 # Claude via `claude mcp add`, Codex via `codex mcp add`, and pi via SHARED_MCP
 # (pi has no native MCP at all, so pi-mcp-adapter reads that file for it).
@@ -765,6 +802,18 @@ def _npm(ctx):
             logger.warning("npm not resolvable via PATH or `mise which npm`; skipping pi")
     _NPM.append(npm)
     return npm
+
+
+def _npx(ctx):
+    """Path to the npx of the mise-managed node runtime, or None. Same PATH gap
+    and same resolution order as ``_npm`` — see its docstring."""
+    npx = shutil.which("npx") or _mise_which(ctx, "npx")
+    if not npx:
+        if ctx.dry_run:
+            return "npx"
+        logger.warning("npx not resolvable via PATH or `mise which npx`; "
+                       "skipping the skills-CLI projection")
+    return npx
 
 
 def ensure_node_on_path(ctx):
@@ -1796,6 +1845,35 @@ class PiAgent(Agent):
 # --- orchestration -----------------------------------------------------------
 
 
+def install_skill_packages(ctx, ids):
+    """Project SKILL_PACKAGES onto the selected agents via `npx skills`.
+
+    One CLI call per package, naming every selected agent it targets, at global
+    (user) scope with all skills and no prompts. Re-running clean-recreates each
+    canonical skill dir in place, so this is as idempotent as the marketplace
+    projections. check=False for the same reason theirs are: a network failure
+    must not abort the run.
+    """
+    if not SKILL_PACKAGES:
+        return
+    ensure_node_on_path(ctx)
+    npx = _npx(ctx)
+    if not npx:
+        return
+    for pkg in SKILL_PACKAGES:
+        targets = [SKILLS_CLI_AGENT_NAMES[i] for i in ids
+                   if i in SKILLS_CLI_AGENT_NAMES and i in pkg.agents]
+        if not targets:
+            continue
+        # --agent is VARIADIC: it consumes every following non-flag argument as
+        # one more agent name and does NOT split on commas — verified in the
+        # CLI's own parser, and "claude-code,codex,pi" as one token dies with
+        # `Invalid agents`. So the names are passed as separate arguments.
+        ctx.run_command([npx, "-y", "skills", "add", pkg.source, "--global",
+                         "--agent", *targets, "--skill", "*", "-y"],
+                        check=False, stdin_devnull=True)
+
+
 def provision(ctx, ids, codegraph_installer):
     """Install every selected agent and project the manifest onto it.
 
@@ -1822,6 +1900,11 @@ def provision(ctx, ids, codegraph_installer):
     # round and codegraph's text ended up orphaned in AGENTS.md.backup.
     for agent in agents:
         agent.project(ctx)
+
+    # The loose-skills track, AFTER projection so the per-agent skills links
+    # onto SHARED_SKILLS already exist and the CLI's symlink step lands on the
+    # shared root instead of creating a real dir the links would then displace.
+    install_skill_packages(ctx, ids)
 
     # codegraph installs its own MCP server into the agents it knows, which is
     # why MCP_SERVERS marks it delegated. Only the agents actually selected are
@@ -1851,6 +1934,13 @@ def plan_items(ctx, ids, add):
         SHARED_INSTRUCTIONS, SHARED_SKILLS))
     for agent in (Agent.get(i) for i in ids):
         agent.plan(ctx, add)
+    for pkg in SKILL_PACKAGES:
+        targets = [SKILLS_CLI_AGENT_NAMES[i] for i in ids
+                   if i in SKILLS_CLI_AGENT_NAMES and i in pkg.agents]
+        if targets:
+            add("config", "skills package {} -> npx skills add --global (agents: {}; "
+                          "canonical copies land in {})".format(
+                              pkg.source, ", ".join(targets), SHARED_SKILLS))
     # pi is not a `codegraph install --target` id, so a pi-only run installs the
     # binary and wires nothing — say that rather than printing an empty list.
     targets = [i for i in ids if i in CODEGRAPH_TARGETS]
@@ -1877,6 +1967,9 @@ def main():
     print("\nPlugins")
     for plugin in PLUGINS:
         print("  {:36} -> {}".format(plugin.qualified, ",".join(plugin.agents)))
+    print("\nSkills packages (npx skills add --global)")
+    for pkg in SKILL_PACKAGES:
+        print("  {:36} -> {}".format(pkg.source, ",".join(pkg.agents)))
     print("\nMCP servers")
     for server in MCP_SERVERS:
         where = "delegated to its own installer" if server.delegated else "projected by CLI"
