@@ -15,7 +15,7 @@ system-level software.
 ./platform/bootstrap.sh --network CN            # enable China mirrors
 ./platform/bootstrap.sh --host dotfiles-debian  # pick a flake host explicitly
 ./platform/bootstrap.sh --system docker,cuda    # + Linux system components
-./platform/bootstrap.sh --agents claude         # only Claude Code (default: claude,codex,omp)
+./platform/bootstrap.sh --agents claude         # only Claude Code (default: claude,codex,pi)
 ./platform/bootstrap.sh --agents none           # no agent tooling (was --no-claude)
 ```
 
@@ -56,41 +56,44 @@ components.
 | `lib.sh` | shared helpers (OS/host detection, Lix install, plan + clearance) |
 | `nix-cn.sh` | flakes + CN mirror gating (system nix.conf, sudo) + persist `~/.config/dotfiles/network-env` |
 | `setup.py` | post-HM half: `chsh` → mise runtimes → coding agents → system components |
-| `installers/agents.py` | ADR-0011: the capability manifest (marketplaces, plugins, MCP servers) + one `Agent` class per agent that projects it with that agent's own CLI (omp reads MCP natively from `~/.omp/agent/mcp.json`) |
+| `installers/agents.py` | ADR-0011: the capability manifest (marketplaces, plugins, MCP servers, pi extensions) + one `Agent` class per agent; Claude/Codex project through their own CLIs, pi through declarative files this repo owns (ADR-0012) |
 | `installers/components.py` | the `OptionalComponent` registry (docker, cuda, nvidia, llvm, brew) + CodeGraph |
 | `installers/managers.py` | install backends (`apt`, `dnf`, `zypper`, `pacman`, `apk`, `brew`, `scripts`), keyed by OS family, and their specs |
 | `installers/context.py` | `Ctx`: privilege detection, `run_command`, dry-run, clearance |
 
-## The agent toolchain (ADR-0011)
+## The agent toolchain (ADR-0011 + ADR-0012)
 
 `setup_agents` installs the selected agents and projects the manifest in
-`installers/agents.py` onto each with that agent's own CLI. All of it is
-non-interactive and runs on every bootstrap — a single source that needs a human to
-apply is not a single source. Install channels: claude and codex keep their own
-official installers; omp is managed by mise from
-`github:can1357/oh-my-pi` (declared in `home/mise.nix`) because compiling the
-Nix source build takes too long, while its config is not — `~/.omp` is a
-Tier-B out-of-store staging link and every capability is either
-projected here or written by omp itself, never by an HM-generated config file.
-What lands where:
+`installers/agents.py` onto each. All of it is non-interactive and runs on every
+bootstrap — a single source that needs a human to apply is not a single source.
+Install channels: claude and codex keep their own official installers; pi is a
+mise npm tool (`home/mise.nix`). pi's config root `~/.pi/agent` is a Tier-B
+out-of-store env link (ADR-0009), and its `settings.json` is **seeded, never
+owned** (ADR-0012): the `packages` array is reconciled to the manifest, every
+other key is written only when absent, so `/model`, `/theme` and hand edits
+survive re-projection. What lands where:
 
 | Plane | Where it lives | How it is applied |
 |---|---|---|
-| instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` + `~/.omp/agent/AGENTS.md` symlinks; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
-| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` + `OMP_MEMORY_BACKEND` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add`, `codex mcp add`, an add-only merge into `~/.omp/agent/mcp.json` (omp is a first-class MCP client; the pi extension set retired — omp covers MCP, sub-agents, browser and Claude-plugin skills natively), and `omp config set memory.backend` |
-| preference | each agent's own config | **never touched** — all three rewrite it at runtime |
+| instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` + `~/.pi/agent/AGENTS.md` symlinks; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
+| capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` / `PI_PACKAGES` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add` + `codex mcp add`; pi has no MCP or marketplace CLI, so it gets three declarative files this repo owns: `~/.agents/mcp.json`, `~/.pi/agent/claude-plugins.json`, and the `packages` array in its settings |
+| preference | each agent's own config | never overwritten — Claude's and Codex's are never written from `platform/` at all; pi's is seeded leaf-by-leaf, only where a key is absent (ADR-0012) |
 
-Loose skills live in `~/.agents/skills` (Codex and omp read it natively;
-`~/.codex/skills` and `~/.omp/agent/skills` link to it). Links are re-asserted
-after any delegated installer (`codegraph`) that appends to a linked file and
-writes it back. Memory is **omp-native**: `memory.backend = mnemopi` is projected
-with `omp config set` (a bundled local SQLite store inside `~/.omp`, no daemon and
-no port), which replaced the agentmemory daemon + MCP shim and its Home Manager
-unit. Claude and Codex keep whatever their own settings say — memory is preference
-plane for them, so it is per machine and not projected from here.
-Select agents with `--agents` (`claude,codex,omp` / `all` / `none`) or
-`DOTFILE_AGENTS`. Projection is **add-only**: dropping an entry from the manifest
-does not uninstall it from a machine that already applied it.
+Loose skills live in `~/.agents/skills` (Codex and pi read it natively;
+`~/.codex/skills` and `~/.pi/agent/skills` link to it); marketplace-managed
+skills reach pi through `pi-claude-marketplace`, an independent marketplace
+client that clones from git itself. Links are re-asserted after any delegated
+installer (`codegraph`) that appends to a linked file and writes it back.
+Memory is **two layers**: the shared MCP knowledge graph at
+`~/.agents/memory/memory.jsonl` (declared once in `MCP_SERVERS`, reaching all
+three agents — no service, no credential, no egress), and `pi-memory` for pi
+alone. Claude's built-in memory stays off by the owner's decision — preference
+plane, never projected from here.
+Select agents with `--agents` (`claude,codex,pi` / `all` / `none`) or
+`DOTFILE_AGENTS`. Projection is **add-only**: dropping a manifest entry does not
+uninstall it from a machine that already applied it — except the names listed in
+`RETIRED_MCP_SERVERS` / `RETIRED_PI_PACKAGES`, which the files this repo writes
+whole do drop (a retired server could otherwise never leave a host).
 
 ## Post-login setup (Smithery + Lark)
 

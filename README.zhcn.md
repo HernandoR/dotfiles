@@ -86,7 +86,7 @@ exec ~/.nix-profile/bin/zsh -l
 | `--network CN`    | 为 Nix、pypi/uv 和 rustup 启用中国（CERNET）镜像。 |
 | `--system <list>` | 安装可选的 Linux 系统组件（`all` = 全部）。        |
 | `--host NAME`     | 强制使用指定的 flake host，而非自动检测。          |
-| `--agents <list>` | 要装哪些 coding agent：`claude,codex,omp` / `all`（默认）/ `none`。 |
+| `--agents <list>` | 要装哪些 coding agent：`claude,codex,pi` / `all`（默认）/ `none`。 |
 | `--no-claude`     | 已废弃，等价于 `--agents none`。                   |
 
 | 环境变量                    | 效果                                                                                                                                                                                                                                                                                                                            |
@@ -505,17 +505,23 @@ host，并把 post-HM 的步骤也重跑一遍（`./bootstrap.sh --dry-run --ver
 
 ## Coding agents
 
-三个 agent——**Claude Code**、**Codex CLI** 和 **omp**（oh-my-pi）——都由仓库里的
-同一份清单（`platform/installers/agents.py`）provision，并用各自的 CLI 应用。agent
-*拥有什么*（marketplace、插件、MCP 服务器）是那份可评审的表；agent *是什么*
-（模型、主题、审批策略）留在它自己的配置里——那些文件由 agent 在运行时自行重写，
-这里绝不去碰。跨 agent 的指令只有一份，放在 `~/.agents/AGENTS.md`：Codex 和 omp
-直接读它，Claude 通过薄壳 `~/.claude/CLAUDE.md` 导入。omp 取代了 pi
-（ADR-0011 update log，2026-08-06），并由 mise 从
-`github:can1357/oh-my-pi` 安装（声明在 `home/mise.nix`）。这样可以避免 Nix
-源码构建耗时过长；它的配置刻意不由 Home Manager 管理——`~/.omp` 只是符号链接的
-staging 根，插件通过 omp 自己的接口安装。设计记录：
-[ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)。
+三个 agent——**Claude Code**、**Codex CLI** 和 **pi**——都由仓库里的同一份清单
+（`platform/installers/agents.py`）provision。agent *拥有什么*（marketplace、
+插件、MCP 服务器、pi 扩展）是那份可评审的表；agent *是什么*（模型、主题、
+审批策略）留在它自己的配置里。Claude 和 Codex 用各自的 CLI 投影能力
+（`claude plugin …`、`claude mcp add`、`codex mcp add`）；pi 没有 MCP 和
+marketplace CLI，所以它拿到的是本仓库拥有的声明式文件——`~/.agents/mcp.json`、
+`~/.pi/agent/claude-plugins.json`，以及 settings 里的 `packages` 数组。pi 的
+`settings.json` 是**种子（seed）而非所有（own）**（ADR-0012）：`packages`
+按清单对齐，其他每个键只在缺失时写入，所以 `/model`、`/theme` 和手工改动都能
+在重新投影中存活。跨 agent 的指令只有一份，放在 `~/.agents/AGENTS.md`：Codex 和
+pi 通过符号链接读它，Claude 通过薄壳 `~/.claude/CLAUDE.md` 导入。pi 取代了第三
+槽位的 omp（ADR-0012，2026-08-28），选它是为了互操作性；它是一个 mise npm 工具
+（`home/mise.nix`），`~/.pi/agent` 是 Tier-B 的 out-of-store env link（ADR-0009）。
+共享记忆是一个 MCP 知识图谱（`~/.agents/memory/memory.jsonl`），三个 agent 都能
+访问，无服务、无出站流量；pi 另有本地的 `pi-memory` 层。设计记录：
+[ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)、
+[ADR-0012](docs/plans/adr-0012-third-slot-upstream-pi-2026-08-28.md)。
 
 ```bash
 python3 platform/installers/agents.py    # 看清单：谁拥有什么
@@ -537,8 +543,8 @@ dotfiles-postsetup    # 需要 TTY；成功后自删除
 
 它会询问是否认证 [Smithery](https://smithery.ai/) 并把你的 namespace MCP 端点加到
 Claude，然后安装 Lark CLI——每一步都可跳过，任一步失败都不影响其余。marketplace、
-插件、MCP 服务器和 omp 的原生 MCP 配置**不在**这里：它们在 bootstrap 期间就已
-无人值守地应用完了。
+插件、MCP 服务器、共享记忆存储和 pi 的声明式文件**不在**这里：它们在 bootstrap
+期间就已无人值守地应用完了。
 细节：[platform/README.md](platform/README.md#post-login-setup-smithery--lark)。
 
 ## 中国镜像

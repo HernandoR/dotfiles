@@ -92,7 +92,7 @@ exec ~/.nix-profile/bin/zsh -l
 | `--network CN`    | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
 | `--system <list>` | Install opt-in Linux system components (`all` = every one). |
 | `--host NAME`     | Force a named flake host instead of auto-detecting.         |
-| `--agents <list>` | Which coding agents to provision: `claude,codex,omp` / `all` (default) / `none`. |
+| `--agents <list>` | Which coding agents to provision: `claude,codex,pi` / `all` (default) / `none`. |
 | `--no-claude`     | Deprecated alias for `--agents none`.                       |
 
 | Env var                     | Effect                                                                                                                                                                                                                                                                                                                                                               |
@@ -542,20 +542,27 @@ bootstrap drive it — it detects the host and re-runs the post-HM steps too
 
 ## Coding agents
 
-Three agents — **Claude Code**, **Codex CLI** and **omp** (oh-my-pi) — are
-provisioned from one in-repo manifest (`platform/installers/agents.py`) and applied
-with each agent's own CLI. What the agents *have* (marketplaces, plugins, MCP
-servers) is a reviewed table there; what each agent *is* (model, theme, approval
-policy) stays in its own config, which the agents rewrite at runtime and nothing
-here touches. Cross-agent instructions live once, in `~/.agents/AGENTS.md`, which
-Codex and omp read directly and Claude imports from its thin `~/.claude/CLAUDE.md`
-shell. omp replaces the pi agent (ADR-0011 update log, 2026-08-06) and is
-installed by mise from `github:can1357/oh-my-pi` (`home/mise.nix`). This avoids
-the long compile time of the Nix source build while keeping its config outside
-Home Manager — `~/.omp` is a symlinked staging root and plugins go through
-omp's own interface.
-Design record:
-[ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md).
+Three agents — **Claude Code**, **Codex CLI** and **pi** — are provisioned from
+one in-repo manifest (`platform/installers/agents.py`). What the agents *have*
+(marketplaces, plugins, MCP servers, pi extensions) is a reviewed table there;
+what each agent *is* (model, theme, approval policy) stays in its own config,
+which the agents rewrite at runtime. Claude and Codex get their capabilities
+through their own CLIs (`claude plugin …`, `claude mcp add`, `codex mcp add`);
+pi has no MCP or marketplace CLI, so it gets declarative files this repo owns —
+`~/.agents/mcp.json`, `~/.pi/agent/claude-plugins.json`, and the `packages`
+array in its settings. pi's `settings.json` is **seeded, never owned**
+(ADR-0012): `packages` is reconciled to the manifest, every other key is written
+only when absent, so `/model`, `/theme` and hand edits survive re-projection.
+Cross-agent instructions live once, in `~/.agents/AGENTS.md`, which Codex and pi
+reach by symlink and Claude imports from its thin `~/.claude/CLAUDE.md` shell.
+pi replaces omp in the third slot (ADR-0012, 2026-08-28), chosen for
+interoperability; it is a mise npm tool (`home/mise.nix`) and `~/.pi/agent` is a
+Tier-B out-of-store env link (ADR-0009). Shared memory is an MCP knowledge graph
+at `~/.agents/memory/memory.jsonl`, reaching all three agents with no service and
+no egress; pi additionally has the local `pi-memory` layer.
+Design records:
+[ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md),
+[ADR-0012](docs/plans/adr-0012-third-slot-upstream-pi-2026-08-28.md).
 
 ```bash
 python3 platform/installers/agents.py    # what the agents have, and who gets what
@@ -578,8 +585,9 @@ dotfiles-postsetup    # needs a TTY; self-removes on success
 
 It offers to authenticate [Smithery](https://smithery.ai/) and add your namespace's
 MCP endpoint to Claude, then installs the Lark CLI — each step skippable, nothing
-fatal. Marketplaces, plugins, MCP servers and omp's native MCP config are *not*
-here: they are applied unattended during the bootstrap. Details:
+fatal. Marketplaces, plugins, MCP servers, the shared memory store and pi's
+declarative files are *not* here: they are applied unattended during the
+bootstrap. Details:
 [platform/README.md](platform/README.md#post-login-setup-smithery--lark).
 
 ## China mirrors
