@@ -11,7 +11,8 @@ zsh + Starship（catppuccin_mocha）+ fzf-tab 的使用体验被完整保留。
 
 设计记录见 [ADR-0007](docs/plans/adr-0007-nix-home-manager-migration-2026-07-09.md)
 （意图）与 [RFC-0001](docs/rfc/rfc-0001-nix-home-manager-migration-2026-07-09.md)
-（讨论过程）；[AGENTS.md](AGENTS.md) 是贡献者/agent 指南。
+（讨论过程）；[AGENTS.md](AGENTS.md) 只收录 coding agent 必须遵守的短规则——
+其余（布局、约定、护栏、如何添加任何东西）都在 README 里。
 
 > **警告：** 这些是我的个人配置。请先 fork 本仓库并审阅代码，再运行它——不要盲目套用别人的配置。
 > bootstrap 可能会安装 Nix、更改你的登录 shell，并安装系统软件。请先阅读
@@ -58,13 +59,14 @@ cd dotfiles
 
 ## bootstrap 做了什么
 
-以 Home Manager 切换为界一分为二：
+整个运行是一个 Python 进程（`platform/bootstrap.py`；仓库根的 `bootstrap.sh` 只负责
+确保 `python3` 存在然后 exec 它），以 Home Manager 切换为界一分为二：
 
-1. **HM 之前（shell）：** 检测权限（root / sudo / 无）→ 安装前置依赖 →
+1. **HM 之前：** 检测权限（root / sudo / 无）→ 安装前置依赖 →
    **安装 Lix** → 配置 Nix（+ 可选的 CERNET 镜像）→
    **构建并激活 Home Manager**（使用 `-b backup`；`home/env-links.nix` 里那些
    指向 store 之外的 `$HOME` 链接也是在这一步落地的）。
-2. **HM 之后（通过 `uv` 运行 Python）：** 把登录 shell 设为 Nix 的 zsh（`chsh`）→
+2. **HM 之后（`platform/setup.py`，同一进程）：** 把登录 shell 设为 Nix 的 zsh（`chsh`）→
    安装各个 coding agent 并把能力清单投影到每一个上
    （[ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)）
    → 写入需要人参与的那部分 → 安装任意可选的 Linux 系统组件。
@@ -167,7 +169,7 @@ mise use -g <tool>@<ver>     # 仅当 home/mise.nix 新增了工具时需要—�
 （`just` 由 mise 提供，那时还不在 PATH 上）直接用原始命令。
 
 **用哪个 host？** 如果 `flake.nix` 里定义了你的 hostname 就用它，否则用 OS/架构
-的默认值（`platform/lib.sh:211`）。其他用户——包括 root——走非纯（impure）的
+的默认值（`platform/bootstrap.py` `detect_named_host`）。其他用户——包括 root——走非纯（impure）的
 `generic` 回退 host：`home-manager switch --flake .#generic -b backup --impure`。
 `just show-host` 会打印你这里解析出的 host；`just host=<name> switch`（或
 `DF_HOST=<name>`）可以覆盖它。
@@ -218,13 +220,13 @@ mise up                              # mise 工具，在声明的范围内升级
 ### 重跑 bootstrap
 
 只有当改动落在**命令式那一半**时才需要：`platform/` 自身、登录 shell 没设置成功，
-或要装新的 `--system` 组件。重跑是幂等的——nix 已存在时跳过 Lix（`platform/lib.sh:312`），
-`nix.conf` 的每一行都先去重再追加（`platform/nix-cn.sh:59`），generation 没变化时
+或要装新的 `--system` 组件。重跑是幂等的——nix 已存在时跳过 Lix（`platform/bootstrap.py`
+`install_lix`），`nix.conf` 的每一行都先去重再追加（`_missing_conf_lines`），generation 没变化时
 复用而不新建（"No change so reusing latest profile generation"），`chsh`、
 `mise install`、brew 也都在已完成时 no-op。有四点要知道：
 
 - **要带上第一次运行时的同一套参数。** 不传 `--network CN` 时，这次运行会
-  **删除** `~/.config/dotfiles/network-env`（`platform/nix-cn.sh:94`），你 shell 里的
+  **删除** `~/.config/dotfiles/network-env`（`configure_nix`），你 shell 里的
   pypi/uv + rustup 镜像会静默消失。
 - **残留的 `.backup` 会让激活中止。** 如果 Home Manager 新接管的某个文件已存在为
   真实文件，而上次留下的 `<name>.backup` 还在，激活会以
@@ -491,7 +493,7 @@ mise which node                # 实际解析到哪个 shim/二进制
 | 同上，但只有某一个环境要                 | `home/env-branch.nix`（共享分支上为空；env 分支唯一会改的文件，因此 rebase 永不冲突）    |
 | 新机器                                  | `flake.nix:17` 的 `hosts` attrset                                     |
 
-有两个约定值得保持（见 [AGENTS.md](AGENTS.md)）：优先使用上游的 `programs.*` 选项
+有两个约定值得保持（见 README 的 Contributing 节）：优先使用上游的 `programs.*` 选项
 而不是自己拼配置；大段内容用原样嵌入文件（`builtins.readFile` /
 `source ${./file}`），不要转义进 nix 字符串。不要调整 `home/shell.nix` 里 zsh
 插件的顺序——completions → fzf-tab → autosuggestions → 语法高亮放最后，
@@ -557,7 +559,7 @@ Claude，然后安装 Lark CLI——每一步都可跳过，任一步失败都�
 
 ```text
 Justfile          日常 Home Manager 命令的 `just` 配方
-bootstrap.sh      精简入口 → platform/bootstrap.sh
+bootstrap.sh      shell 启动器：确保 python3 存在 → exec platform/bootstrap.py
 flake.nix         Inputs（nixpkgs + home-manager）、hosts、homeConfigurations
 home/             Home Manager 模块——声明式的用户环境
   packages.nix    所有用户级 CLI 工具
@@ -565,7 +567,7 @@ home/             Home Manager 模块——声明式的用户环境
   starship.nix    + starship.toml（catppuccin_mocha 主题）
   git.nix, tmux.nix, mise.nix, zsh/
 platform/         命令式层（见 platform/README.md）
-  bootstrap.sh    编排器；lib.sh；nix-cn.sh；setup.py；installers/
+  bootstrap.py    编排器（计划、清场、Lix、nix、HM 切换）；setup.py；installers/
 docs/plans/       ADR（0007 为准）
 docs/rfc/         RFC（0001 = 迁移日志）
 ```

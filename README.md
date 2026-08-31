@@ -9,7 +9,9 @@ The zsh + Starship (catppuccin_mocha) + fzf-tab experience is preserved.
 
 Design is recorded in [ADR-0007](docs/plans/adr-0007-nix-home-manager-migration-2026-07-09.md)
 (intent) and [RFC-0001](docs/rfc/rfc-0001-nix-home-manager-migration-2026-07-09.md)
-(discussion trail); [AGENTS.md](AGENTS.md) is the contributor/agent guide.
+(discussion trail); [AGENTS.md](AGENTS.md) holds the short must-follow rules for
+coding agents — everything else (layout, conventions, guardrails, how to add
+anything) is in this file.
 
 > **Warning:** These are my personal settings. Fork the repo and review the code
 > before running it — don't blindly apply someone else's configuration. The
@@ -64,11 +66,14 @@ the prompt on a terminal too (the plan is still printed). Design record:
 
 Split around the Home Manager switch:
 
-1. **Pre-HM (shell):** detect privilege (root / sudo / none) → install
+The whole run is one Python process (`platform/bootstrap.py`; the root
+`bootstrap.sh` only guarantees a `python3` and execs it):
+
+1. **Pre-HM:** detect privilege (root / sudo / none) → install
    prerequisites → **install Lix** → configure Nix (+ optional CERNET mirror) →
    **build & activate Home Manager** with `-b backup` (this is also where the
    out-of-store `$HOME` links from `home/env-links.nix` are placed).
-2. **Post-HM (Python via `uv`):** set the login shell to the Nix zsh (`chsh`) →
+2. **Post-HM (`platform/setup.py`, same process):** set the login shell to the Nix zsh (`chsh`) →
    install the coding agents and project the capability manifest onto each
    ([ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md))
    → write the interactive remainder → install any opt-in Linux system
@@ -179,7 +184,7 @@ reach for the raw command when you want a variation, or before the first switch
 has put `just` on PATH (it comes from mise).
 
 **Which host?** Your hostname if `flake.nix` defines it, else the OS/arch default
-(`platform/lib.sh:211`). Any other user — including root — uses the impure
+(`platform/bootstrap.py` `detect_named_host`). Any other user — including root — uses the impure
 `generic` fallback: `home-manager switch --flake .#generic -b backup --impure`.
 `just show-host` prints what resolves for you; `just host=<name> switch` (or
 `DF_HOST=<name>`) overrides it.
@@ -236,13 +241,13 @@ Commit the changed `flake.lock` together with the change that needed it.
 Only needed when the change is in the **imperative half**: `platform/` itself, a
 login shell that never got set, or a new `--system` component. Re-runs are
 idempotent — Lix is skipped when nix exists
-(`platform/lib.sh:312`), `nix.conf` lines are deduplicated before appending
-(`platform/nix-cn.sh:59`), an unchanged generation is reused rather than created
+(`platform/bootstrap.py` `install_lix`), `nix.conf` lines are deduplicated before
+appending (`_missing_conf_lines`), an unchanged generation is reused rather than created
 ("No change so reusing latest profile generation"), and `chsh`, `mise install`
 and brew all no-op when already done. Four things to know:
 
 - **Pass the same flags as the first run.** Without `--network CN` the run
-  *deletes* `~/.config/dotfiles/network-env` (`platform/nix-cn.sh:94`), silently
+  *deletes* `~/.config/dotfiles/network-env` (`configure_nix`), silently
   dropping the pypi/uv + rustup mirrors from your shell.
 - **A leftover `.backup` aborts activation.** If a file Home Manager newly wants
   to own already exists for real and `<name>.backup` is still there from last
@@ -528,7 +533,8 @@ old version.
 | the same, for one environment only              | `home/env-branch.nix` (empty on shared branches; the only file an env branch edits, so its rebases never conflict)  |
 | a new machine                                   | the `hosts` attrset in `flake.nix:17`                                       |
 
-Two conventions worth keeping (see [AGENTS.md](AGENTS.md)): prefer an upstream
+Two conventions worth keeping (see
+[Contributing](#contributing--conventions-and-guardrails)): prefer an upstream
 `programs.*` option over hand-rolled config, and embed verbatim files
 (`builtins.readFile` / `source ${./file}`) instead of escaping large blobs into
 nix strings. Don't reorder the zsh plugin list in `home/shell.nix` — completions
@@ -597,11 +603,105 @@ Everything mirror-related is gated on one switch. With `--network CN` (or
 system `nix.conf` and the zsh exports pypi/uv + rustup mirrors. Unset = upstream
 defaults.
 
+## Contributing — conventions and guardrails
+
+Design changes start as an RFC in `docs/rfc/` and settle into an ADR in
+`docs/plans/` (see the indexes there); read the governing ADR before reshaping
+what it governs. ADR-0007 owns the two-layer model, 0009 config ownership, 0010
+the plan/clearance, 0011 + 0012 the agent toolchain. ADRs 0001–0006 and 0008
+describe the retired Python pipeline — don't cite them as current design.
+
+### Conventions
+
+- **Nix:** modules take `{ pkgs, lib, config, ... }`; prefer upstream
+  `programs.*` options over hand-rolled config; embed verbatim files
+  (`builtins.readFile` / `source ${./file}`) to dodge nix-string escaping (see
+  `git-aliases.conf`, `zsh/*.zsh`, `starship.toml`).
+- **Python (`platform/`):** stdlib only; commands via `ctx.run_command` (strips
+  the sudo prefix when root, honors dry-run); argument lists over `shell=True`;
+  download-then-execute, never `curl | bash`; module logger
+  `logging.getLogger("dotfiles")`.
+- **The plan is part of the step** (ADR-0010): anything that installs, needs
+  privilege, or displaces a file must register itself in the plan next to the
+  code that performs it (`plan_prereqs`/`plan_nix` sit beside
+  `ensure_prereqs`/`install_lix`; `setup.build_plan` shares its read-only
+  decision helpers with the apply path). A step that runs without appearing in
+  the plan defeats the clearance.
+- **OS identifiers:** `"darwin"`, `"debian"`, `"ubuntu"`, `"amzn"`, `"fedora"`,
+  `"rhel"`, `"suse"`, `"arch"`, `"alpine"`, `"unknown"` — one *family* per id
+  (`installers/context.py` `Ctx._detect_os`). Exact `/etc/os-release` `ID` wins
+  over `ID_LIKE` (Amazon Linux claims `ID_LIKE=fedora` — true for dnf, false for
+  the rest), and an unrecognised Linux stays `"unknown"`, **never** guessed as
+  `debian`: a family with no backend must be skipped, and it can only be skipped
+  if it is named honestly. Never hardcode a package manager — route through
+  `_PKG_MANAGERS` (`platform/bootstrap.py`) pre-HM and
+  `PackageManager.supported_os` (`installers/managers.py`) post-HM.
+- **Commits:** Conventional-Commits `type(scope): subject`; history is English.
+
+### Don't touch / be careful with
+
+- **`home.stateVersion`** — pinned to the first-built release; don't bump
+  casually.
+- **`DRY_RUN`** — never export this name around a Home Manager activation:
+  `activate` treats it as set-or-unset and would silently dry-run the whole
+  switch. The Python layer keeps dry-run in `ctx.dry_run`, not the environment.
+- **fzf-tab ordering** (`home/shell.nix`) — completions → fzf-tab →
+  autosuggestions → syntax-highlighting-last is correctness-critical;
+  `autosuggestion.enable = false` is intentional (loaded as a plugin after
+  fzf-tab). Don't "simplify" it.
+- **CERNET / mirror wiring** — deliberate, gated on `DOTFILE_NETWORK_ENV=CN`;
+  don't hardcode mirrors unconditionally.
+- **The `~/.claude/CLAUDE.md` shell** — Claude-only lines plus the
+  `@~/.agents/AGENTS.md` import; anything another agent would also want goes in
+  `~/.agents/AGENTS.md`.
+- **Agent config files** (`~/.claude/settings.json`, `~/.codex/config.toml`,
+  `~/.pi/agent/settings.json`) — all rewritten by the agents at runtime, so none
+  may ever be a Home Manager store link. Claude's and Codex's are never written
+  from `platform/` at all; pi's is the single exception (ADR-0012) and only
+  under seed semantics — `packages` reconciled, every other key written **only
+  when absent**. If you find yourself overwriting a key pi already has, you have
+  broken the contract that makes this safe.
+
+### Adding a new X
+
+User tools, runtimes and system components: see
+[Adding software](#adding-software-tutorial). Beyond those:
+
+- **A CLI tool nixpkgs doesn't have** → a derivation in `home/pkgs/<tool>.nix`,
+  pulled in via `callPackage` from `home/packages.nix`. **`git add` the new
+  file** — the flake copies only tracked files, so an untracked derivation fails
+  eval with "path … does not exist".
+- **A marketplace / plugin / MCP server / pi extension** → one entry in the
+  matching table in `platform/installers/agents.py`, stating which agents it
+  targets and why. A marketplace MUST target every agent its plugins do, or
+  `pi-claude-marketplace` reports `<marketplace not declared>`; a `PI_PACKAGES`
+  spec MUST carry the `npm:` prefix (anything unprefixed is parsed as a local
+  path, and a missing local path is skipped silently). Verify with
+  `python3 platform/installers/agents.py` and `python3 platform/setup.py
+  --plan`. Never install one by hand on a machine — that is the drift ADR-0011
+  exists to stop.
+- **A fourth agent** → subclass `Agent` in `agents.py` (`id`, `binary`,
+  `install`, `project`, `plan`) and add its id to the entries it should receive.
+- **A system component** → subclass `OptionalComponent` in `components.py`;
+  declarative `installs = {...}` or an imperative `install(self, ctx)`.
+  Auto-registers; verify with `uv run platform/installers/components.py`.
+- **A new install backend** → subclass `PackageManager` in `managers.py`
+  (`id`, `supported_os`, `priority`, `install`).
+- **A new machine** → a `hosts` entry in `flake.nix` (name = hostname for
+  auto-detection), or rely on the impure `generic` fallback.
+
+### Verification
+
+There is no test framework. Verify with `./bootstrap.sh --dry-run --verbose`
+(the whole plan, nothing executed), `nix flake check` (every named host), and
+container runs (Debian/Ubuntu/NixOS — see RFC-0001). `python3 -m py_compile
+platform/bootstrap.py platform/setup.py` catches syntax slips early.
+
 ## Repository layout
 
 ```text
 Justfile          `just` recipes for the day-to-day Home Manager commands
-bootstrap.sh      Thin entry → platform/bootstrap.sh
+bootstrap.sh      Shell launcher: ensure python3 → exec platform/bootstrap.py
 flake.nix         Inputs (nixpkgs + home-manager), hosts, homeConfigurations
 home/             Home Manager modules — the declarative user environment
   packages.nix    All user-level CLI tools
@@ -609,7 +709,7 @@ home/             Home Manager modules — the declarative user environment
   starship.nix    + starship.toml (catppuccin_mocha theme)
   git.nix, tmux.nix, mise.nix, zsh/
 platform/         Imperative layer (see platform/README.md)
-  bootstrap.sh    Orchestrator; lib.sh; nix-cn.sh; setup.py; installers/
+  bootstrap.py    Orchestrator (plan, clearance, Lix, nix, HM switch); setup.py; installers/
 docs/plans/       ADRs (0007 governs)
 docs/rfc/         RFCs (0001 = migration log)
 ```
