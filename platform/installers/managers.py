@@ -1,9 +1,16 @@
 """Package-manager backends for optional components (see ADR-0003).
 
 A :class:`PackageManager` is an *install backend* keyed by ``id`` (``apt``,
-``brew``, ``scripts``). Given a per-manager ``spec`` it knows how to install
-that thing on the OSes it supports. The orchestrator (``DotfilesManager``)
-selects the backend; a component never chooses its own.
+``dnf``, ``zypper``, ``pacman``, ``apk``, ``brew``, ``scripts``). Given a
+per-manager ``spec`` it knows how to install that thing on the OSes it supports.
+The orchestrator (``DotfilesManager``) selects the backend; a component never
+chooses its own.
+
+``supported_os`` is the registry that keeps this half honest: it is keyed by the
+OS *family* ``Ctx._detect_os`` reports, and a family no backend claims simply has
+no backend — ``select_manager`` returns ``None`` and the component is skipped.
+Nothing may hardcode a package-manager binary outside this module; that is how an
+Amazon Linux host once got handed ``apt-get``.
 
 Each manager defines (and accepts) its own spec type. A bare string is
 shorthand for that manager's primary parameter -- a package name for ``apt`` /
@@ -12,6 +19,7 @@ shorthand for that manager's primary parameter -- a package name for ``apt`` /
 
 import logging
 import pathlib
+import shutil
 import tempfile
 
 
@@ -122,6 +130,55 @@ class AptManager(PackageManager):
                 deb_path.unlink(missing_ok=True)
         else:
             ctx.run_command(["apt", "install", "-y", spec], with_sudo=True)
+
+
+class _SystemManager(PackageManager):
+    """Shared shape for the non-apt native package managers: one install command
+    template, one OS-family list. They exist so a component can *declare* an
+    install for those families instead of the orchestrator silently falling back
+    to apt — which on Amazon Linux meant running `apt-get` that is not there.
+    A family with no entry here has no backend, and a component whose installs
+    do not cover the running family is skipped by Component.applicable()."""
+
+    command = ()  # argv prefix; the package name is appended
+    priority = 100
+
+    def install(self, ctx, spec):
+        if not isinstance(spec, str):
+            raise TypeError(f"{self.id} takes a package name, got {type(spec).__name__}")
+        ctx.run_command([*self.command, spec], with_sudo=True)
+
+
+class DnfManager(_SystemManager):
+    # AL2023 / Fedora / RHEL>=8 ship dnf, and on AL2 / RHEL7 `yum` is the same
+    # front end; dnf is a symlink to yum where only yum exists, so one id covers
+    # the family. Amazon Linux is `amzn` on purpose: its ID_LIKE says fedora,
+    # which is true for dnf and false for everything else it inherits.
+    id = "dnf"
+    supported_os = ("amzn", "fedora", "rhel")
+    command = ("dnf", "install", "-y")
+
+    def install(self, ctx, spec):
+        binary = "dnf" if shutil.which("dnf") else "yum"
+        ctx.run_command([binary, "install", "-y", spec], with_sudo=True)
+
+
+class ZypperManager(_SystemManager):
+    id = "zypper"
+    supported_os = ("suse",)
+    command = ("zypper", "--non-interactive", "install")
+
+
+class PacmanManager(_SystemManager):
+    id = "pacman"
+    supported_os = ("arch",)
+    command = ("pacman", "-Sy", "--noconfirm")
+
+
+class ApkManager(_SystemManager):
+    id = "apk"
+    supported_os = ("alpine",)
+    command = ("apk", "add", "--no-cache")
 
 
 class BrewManager(PackageManager):

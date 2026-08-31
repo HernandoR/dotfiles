@@ -190,7 +190,13 @@ has_init_system() {
   esac
 }
 
-# detect_os -> darwin | debian | ubuntu | unknown
+# detect_os -> darwin | debian | ubuntu | fedora | rhel | amzn | suse | arch |
+#              alpine | unknown
+# Honest identification, never a guess: an unrecognised Linux is "unknown", NOT
+# "debian". The old debian fallback is how an Amazon Linux host ended up running
+# `apt-get update` (sudo: apt-get: command not found) — a family this repo has no
+# apt for must be *skipped*, and it can only be skipped if it is named correctly.
+# Keep the family ids in step with installers/context.py::_detect_os.
 detect_os() {
   case "$(uname -s)" in
     Darwin) echo darwin; return ;;
@@ -200,12 +206,47 @@ detect_os() {
   if [ -r /etc/os-release ]; then
     # shellcheck disable=SC1091
     . /etc/os-release
-    case "${ID:-}${ID_LIKE:-}" in
+    # ID first (exact distro), then ID_LIKE (its family) — ID_LIKE on Amazon
+    # Linux says "fedora", which is close enough for dnf but not for anything
+    # else, so the exact id wins.
+    case "${ID:-}" in
+      ubuntu|pop|linuxmint|elementary) echo ubuntu; return ;;
+      debian|raspbian) echo debian; return ;;
+      amzn) echo amzn; return ;;
+      fedora) echo fedora; return ;;
+      rhel|centos|rocky|almalinux|ol) echo rhel; return ;;
+      opensuse*|sles) echo suse; return ;;
+      arch|manjaro|endeavouros) echo arch; return ;;
+      alpine) echo alpine; return ;;
+    esac
+    case " ${ID_LIKE:-} " in
       *ubuntu*) echo ubuntu; return ;;
       *debian*) echo debian; return ;;
+      *fedora*|*rhel*|*centos*) echo rhel; return ;;
+      *suse*) echo suse; return ;;
+      *arch*) echo arch; return ;;
     esac
   fi
   echo unknown
+}
+
+# os_pkg_manager OS -> the native package-manager command for that OS family, or
+# "" when this repo has no backend for it. The single map both plan_prereqs and
+# ensure_prereqs read, so the plan cannot promise an install the run then fails
+# to perform (and vice versa). Its python sibling is the PackageManager registry
+# in installers/managers.py, keyed the same way by OS family.
+os_pkg_manager() {
+  case "$1" in
+    debian|ubuntu) echo apt-get ;;
+    fedora|rhel|amzn)
+      # AL2023/Fedora/RHEL9 ship dnf; AL2 and RHEL7 only yum.
+      if command -v dnf >/dev/null 2>&1; then echo dnf; else echo yum; fi ;;
+    suse) echo zypper ;;
+    arch) echo pacman ;;
+    alpine) echo apk ;;
+    darwin) echo brew ;;
+    *) echo "" ;;
+  esac
 }
 
 # detect_named_host OS -> a named flake host by hostname, else by OS+arch.
@@ -227,38 +268,76 @@ nix_host_exists() {
   grep -qE "\"$1\"[[:space:]]*=" "${REPO_DIR:-.}/flake.nix" 2>/dev/null
 }
 
-# plan_prereqs OS — the plan sibling of ensure_prereqs: same condition, no
-# action. Keep the two in step when either changes.
-plan_prereqs() {
+# prereq_packages OS — the package names for curl/git/xz on that OS family, or
+# "" when there is no known mapping. Second half of the registry above: the
+# manager says *how*, this says *what*.
+prereq_packages() {
   case "$1" in
-    debian|ubuntu)
-      if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
-        plan_install "prerequisites via apt-get: curl git xz-utils ca-certificates" 1
-      fi
-      ;;
-    darwin)
-      command -v git >/dev/null 2>&1 || plan_install "Xcode command line tools (for git)" 1
-      ;;
+    debian|ubuntu) echo "curl git xz-utils ca-certificates" ;;
+    fedora|rhel|amzn) echo "curl git xz ca-certificates" ;;
+    suse) echo "curl git xz ca-certificates" ;;
+    arch) echo "curl git xz ca-certificates" ;;
+    alpine) echo "curl git xz ca-certificates" ;;
+    *) echo "" ;;
   esac
 }
 
+# prereqs_missing — true when curl or git is absent (the only two this prelude
+# actually needs before nix exists). Shared by the plan and the run so they
+# cannot disagree.
+prereqs_missing() {
+  ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1
+}
+
+# plan_prereqs OS — the plan sibling of ensure_prereqs: same conditions, same
+# registry, no action. Keep the two in step when either changes.
+plan_prereqs() {
+  local os="$1" pm pkgs
+  if [ "$os" = darwin ]; then
+    command -v git >/dev/null 2>&1 || plan_install "Xcode command line tools (for git)" 1
+    return
+  fi
+  prereqs_missing || return 0
+  pm="$(os_pkg_manager "$os")"
+  pkgs="$(prereq_packages "$os")"
+  if [ -n "$pm" ] && [ -n "$pkgs" ] && [ "$pm" != brew ]; then
+    plan_install "prerequisites via $pm: $pkgs" 1
+  else
+    plan_fact "skipping" "prerequisite install: no package-manager backend for '$os' (install curl/git/xz yourself)"
+  fi
+}
+
 # ensure_prereqs OS — the few tools needed before nix exists. Needs privilege;
-# the caller guards on have_priv.
+# the caller guards on have_priv. Everything is routed through the os_pkg_manager
+# registry: an OS family with no backend (Amazon Linux before this had one, and
+# anything still unknown) is SKIPPED with a warning rather than being handed to
+# apt-get, which is not there and fails the whole bootstrap.
 ensure_prereqs() {
-  local os="$1"
-  case "$os" in
-    debian|ubuntu)
-      if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
-        log "installing prerequisites (curl git xz)"
-        run "$SUDO apt-get update -qq"
-        run "$SUDO apt-get install -y -qq curl git xz-utils ca-certificates"
-      fi
+  local os="$1" pm pkgs
+  if [ "$os" = darwin ]; then
+    command -v git >/dev/null 2>&1 || run "xcode-select --install || true"
+    command -v curl >/dev/null 2>&1 || die "curl is required"
+    return
+  fi
+  prereqs_missing || return 0
+  pm="$(os_pkg_manager "$os")"
+  pkgs="$(prereq_packages "$os")"
+  if [ -z "$pm" ] || [ -z "$pkgs" ] || [ "$pm" = brew ]; then
+    warn "no package-manager backend for OS '$os': skipping the prereq install."
+    warn "install curl, git and xz yourself if the nix install below fails."
+    return
+  fi
+  log "installing prerequisites via $pm (curl git xz)"
+  case "$pm" in
+    apt-get)
+      run "$SUDO apt-get update -qq"
+      run "$SUDO apt-get install -y -qq $pkgs"
       ;;
-    darwin)
-      command -v git >/dev/null 2>&1 || run "xcode-select --install || true"
-      command -v curl >/dev/null 2>&1 || die "curl is required"
-      ;;
-    *) warn "unknown OS; assuming curl/git/xz are present" ;;
+    dnf|yum) run "$SUDO $pm install -y $pkgs" ;;
+    zypper)  run "$SUDO zypper --non-interactive install $pkgs" ;;
+    pacman)  run "$SUDO pacman -Sy --noconfirm $pkgs" ;;
+    apk)     run "$SUDO apk add --no-cache $pkgs" ;;
+    *)       warn "unhandled package manager '$pm'; skipping the prereq install" ;;
   esac
 }
 

@@ -58,7 +58,7 @@ components.
 | `setup.py` | post-HM half: `chsh` → mise runtimes → coding agents → system components |
 | `installers/agents.py` | ADR-0011: the capability manifest (marketplaces, plugins, MCP servers) + one `Agent` class per agent that projects it with that agent's own CLI (omp reads MCP natively from `~/.omp/agent/mcp.json`) |
 | `installers/components.py` | the `OptionalComponent` registry (docker, cuda, nvidia, llvm, brew) + CodeGraph |
-| `installers/managers.py` | install backends (`apt`, `brew`, `scripts`) and their specs |
+| `installers/managers.py` | install backends (`apt`, `dnf`, `zypper`, `pacman`, `apk`, `brew`, `scripts`), keyed by OS family, and their specs |
 | `installers/context.py` | `Ctx`: privilege detection, `run_command`, dry-run, clearance |
 
 ## The agent toolchain (ADR-0011)

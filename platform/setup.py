@@ -212,16 +212,26 @@ def run_system(ctx, spec):
         return
     # Each component declares its own supported_os; Component.run() skips the
     # non-applicable ones (e.g. Linux docker/cuda on macOS, macOS brew on Linux).
-    selected = OptionalComponent.resolve(spec)
+    selected = [n for n in OptionalComponent.resolve(spec)
+                if OptionalComponent.get(n).applicable(ctx)]
     # Required components (e.g. software-properties -> add-apt-repository, a
     # prerequisite for the apt-based components) are always installed first on
     # their applicable OS, whatever the spec selected. `--system none` never
     # reaches here (main() blanks the spec), so it remains a full opt-out.
     required = [n for n in OptionalComponent.required_names()
                 if OptionalComponent.get(n).applicable(ctx) and n not in selected]
+    # Both halves are filtered by applicable() *before* the log line, so what is
+    # announced is what runs — the same filter build_plan() uses, which is what
+    # keeps the cleared plan and the run in step on an OS family (amzn, suse, …)
+    # that no component targets.
     names = required + selected
     if not names:
-        logger.info("no valid system components in '%s' (have: %s, all)", spec, ", ".join(OptionalComponent.names()))
+        # Includes the honest "this OS family has no backend here" case: on e.g.
+        # Amazon Linux nothing declares an install, so nothing runs. That is the
+        # designed outcome — before OS detection stopped guessing "debian", this
+        # path handed software-properties to an apt-get that does not exist.
+        logger.info("no system component applies to %s from '%s' (have: %s, all)",
+                    ctx.os_type, spec, ", ".join(OptionalComponent.names()))
         return
     logger.info("system components: %s", ", ".join(names))
     for name in names:

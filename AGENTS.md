@@ -289,7 +289,20 @@ single source if applying it needs no human, so they run unattended with stdin o
   `ctx.run_command` (strips leading `sudo` when root, honors `--dry-run`);
   argument lists over `shell=True`; download-then-execute (the `scripts`
   backend), never `curl | bash`; module logger `logging.getLogger("dotfiles")`.
-- **OS identifiers:** `"darwin"`, `"debian"`, `"ubuntu"`.
+- **OS identifiers:** `"darwin"`, `"debian"`, `"ubuntu"`, `"amzn"`, `"fedora"`,
+  `"rhel"`, `"suse"`, `"arch"`, `"alpine"`, `"unknown"` — one *family* per id,
+  produced by two implementations that must stay in step (`platform/lib.sh:193`
+  `detect_os` and `platform/installers/context.py:129` `Ctx._detect_os`). Exact
+  `/etc/os-release` `ID` wins over `ID_LIKE` (Amazon Linux claims
+  `ID_LIKE=fedora`, true for dnf and false for the rest), and an unrecognised
+  Linux stays `"unknown"` — **never** guessed as `debian`. That guess is what
+  ran `apt-get` on an Amazon Linux host; a family with no backend must be
+  skipped, and it can only be skipped if it is named honestly.
+- **Never hardcode a package manager.** `platform/lib.sh:222` `os_pkg_manager` +
+  `prereq_packages` map family → command/packages for the shell prelude;
+  `PackageManager.supported_os` (`platform/installers/managers.py`) is the same
+  map for the post-HM half. A family absent from both has no backend: log a skip,
+  do not "force push" apt at it.
 - **Commits:** Conventional-Commits `type(scope): subject`; history is English.
 
 ## Adding a new X

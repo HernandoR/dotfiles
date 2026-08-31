@@ -125,21 +125,50 @@ class Ctx:
         cannot escalate (that command is expected to be gated off via priv)."""
         return os.geteuid() != 0 and shutil.which("sudo") is not None
 
-    @staticmethod
-    def _detect_os():
+    # /etc/os-release ID -> the OS family this repo keys its backends on. Exact
+    # ids win over ID_LIKE (Amazon Linux says ID_LIKE=fedora, which is true for
+    # dnf and false for everything else), and an unrecognised Linux stays
+    # "unknown" rather than being guessed as debian: a family with no apt must be
+    # SKIPPED, and it can only be skipped if it is named honestly. Keep in step
+    # with platform/lib.sh::detect_os.
+    _OS_IDS = {
+        "ubuntu": "ubuntu", "pop": "ubuntu", "linuxmint": "ubuntu", "elementary": "ubuntu",
+        "debian": "debian", "raspbian": "debian",
+        "amzn": "amzn",
+        "fedora": "fedora",
+        "rhel": "rhel", "centos": "rhel", "rocky": "rhel", "almalinux": "rhel", "ol": "rhel",
+        "sles": "suse",
+        "arch": "arch", "manjaro": "arch", "endeavouros": "arch",
+        "alpine": "alpine",
+    }
+    _OS_LIKE = (
+        ("ubuntu", "ubuntu"), ("debian", "debian"),
+        ("fedora", "rhel"), ("rhel", "rhel"), ("centos", "rhel"),
+        ("suse", "suse"), ("arch", "arch"),
+    )
+
+    @classmethod
+    def _detect_os(cls):
         if sys.platform == "darwin":
             return "darwin"
+        fields = {}
         try:
             for line in pathlib.Path("/etc/os-release").read_text().splitlines():
-                if line.startswith("ID_LIKE=") and "debian" in line:
-                    return "debian"
-                if line.startswith("ID=") and "ubuntu" in line:
-                    return "ubuntu"
-                if line.startswith("ID=") and "debian" in line:
-                    return "debian"
-        except FileNotFoundError:
+                key, _, value = line.partition("=")
+                if _:
+                    fields[key.strip()] = value.strip().strip('"\'').lower()
+        except OSError:
             pass
-        return "unknown" if sys.platform != "linux" else "debian"
+        os_id = fields.get("ID", "")
+        if os_id in cls._OS_IDS:
+            return cls._OS_IDS[os_id]
+        if os_id.startswith("opensuse"):
+            return "suse"
+        like = fields.get("ID_LIKE", "")
+        for needle, family in cls._OS_LIKE:
+            if needle in like:
+                return family
+        return "unknown"
 
     @property
     def sudo(self):
