@@ -4,24 +4,16 @@
 # exists so it is one name instead of a remembered incantation. `just` itself
 # comes from mise (home/mise.nix).
 #
-# The flake host is resolved the way platform/bootstrap.sh resolves it. Override
+# The flake host is resolved the way platform/bootstrap.py resolves it. Override
 # it per run — `just host=dotfiles-debian switch` — or via DF_HOST in the
 # environment.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-# Host selection. Mirrors platform/bootstrap.sh:91-102 (named hosts assume the
-# owner; any other user, including root, gets the impure `generic` fallback) by
-# reusing the same lib.sh helpers. Keep the two in step when either changes.
-host := env('DF_HOST',
-    ```
-    . platform/lib.sh
-    if [ "$(id -un)" = lz ]; then
-      detect_named_host "$(detect_os)"
-    else
-      echo generic
-    fi
-    ```)
+# Host selection: ask the bootstrap itself (select_host in platform/bootstrap.py
+# — named hosts assume the owner; any other user, including root, gets the
+# impure `generic` fallback), so the two can never drift.
+host := env('DF_HOST', `python3 platform/bootstrap.py --print-host`)
 
 # `generic` reads $USER/$HOME at eval time (flake.nix:55), so it only
 # materializes under --impure.

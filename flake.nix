@@ -50,7 +50,7 @@
       # Named hosts are pure and reproducible. `generic` is an impure fallback
       # for arbitrary users (including root): it reads $USER/$HOME at eval time,
       # so it only materializes under `--impure` and stays invisible to a pure
-      # `nix flake check`. platform/bootstrap.sh falls back to it when no named
+      # `nix flake check`. platform/bootstrap.py falls back to it when no named
       # host matches the current machine/user.
       homeConfigurations =
         (builtins.mapAttrs mkHome hosts)

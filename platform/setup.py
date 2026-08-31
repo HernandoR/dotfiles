@@ -4,9 +4,10 @@
 # ///
 """platform/setup.py — post-Home-Manager imperative steps (ADR-0007).
 
-Run by platform/bootstrap.sh via `uv run` *after* `home-manager switch`, when
-uv/python are available on the HM profile. Home Manager already owns the user
-environment; this handles the imperative remainder:
+Normally imported by platform/bootstrap.py, which runs these steps in-process
+*after* `home-manager switch`; also runnable standalone (`uv run
+platform/setup.py`) to redo just the post-HM half. Home Manager already owns
+the user environment; this handles the imperative remainder:
 
     login shell (chsh) · agent toolchain (ADR-0011) · Linux system SW
 
@@ -16,12 +17,10 @@ prepended only when non-root with a sudo binary; root runs bare and privileged
 steps are skipped entirely when there is no way to escalate (`priv == none`).
 
 Clearance: `build_plan()` describes every step *before* anything runs — what is
-installed, from which network, which config is written or linked. On an
-interactive run the plan is printed and cleared once (`Ctx.require_clearance`);
-`--plan` prints it and exits; `--plan-items` emits it as TSV for
-platform/bootstrap.sh, which merges both halves into one document and asks for
-the single clearance itself (then exports $DF_ASSUME_YES so this script does not
-re-ask).
+installed, from which network, which config is written or linked. bootstrap.py
+calls it directly and merges it into the single full-run plan (ADR-0010). On a
+standalone interactive run the plan is printed and cleared once
+(`Ctx.require_clearance`); `--plan` prints it and exits.
 """
 import argparse
 import logging
@@ -321,8 +320,8 @@ def build_plan(ctx, system_spec, agent_ids):
     section in {"install", "config", "backup"} — "backup" being anything that
     displaces a file the user already has. Pure description: it reads the filesystem
     and the environment but changes nothing, so it is safe to run before
-    clearance (and from platform/bootstrap.sh *before* the Home Manager switch,
-    via --plan-items)."""
+    clearance (and from platform/bootstrap.py *before* the Home Manager
+    switch)."""
     items = []
 
     def add(section, text, privileged=False):
@@ -336,8 +335,8 @@ def build_plan(ctx, system_spec, agent_ids):
             + (", ".join(tools) if tools else "the tools declared in home/mise.nix"),
         )
     # The agent half describes itself (installers/agents.py owns the manifest, so
-    # it also owns the wording) — the same reason nix-cn.sh and this script each
-    # emit their own plan rows instead of one place guessing about the others.
+    # it also owns the wording) — the same reason every layer emits its own plan
+    # rows instead of one place guessing about the others.
     agents.plan_items(ctx, agent_ids, add)
     if agent_ids:
         add("config", f"interactive agent extras (Smithery/Lark) -> {DEFERRED_AGENT_SETUP} (run later via dotfiles-postsetup)")
@@ -371,8 +370,8 @@ def build_plan(ctx, system_spec, agent_ids):
 
 
 def render_plan(items, ctx=None, network=None):
-    """Print the plan as the shell half does (platform/lib.sh plan_line), so a
-    standalone run of this script and a full bootstrap read the same."""
+    """Print the plan the way bootstrap.py's Plan.render does, so a standalone
+    run of this script and a full bootstrap read the same."""
     out = []
     if ctx is not None:
         out.append("\033[1;34m==>\033[0m Plan — nothing has run yet")
@@ -383,7 +382,7 @@ def render_plan(items, ctx=None, network=None):
         ("install", "\033[1mwill install\033[0m"),
         ("config", "\033[1mwill write / link\033[0m"),
         # Last, and highlighted: the only part that touches data the user already
-        # has (see platform/lib.sh print_plan for the shell half's ordering).
+        # has (see bootstrap.py Plan.render for the full run's ordering).
         ("backup", "\033[1;33mwill move your existing files aside (renamed, never deleted)\033[0m"),
     )
     for section, title in sections:
@@ -417,14 +416,12 @@ def main():
                     help="skip the interactive clearance (also: DF_ASSUME_YES=1)")
     ap.add_argument("--plan", action="store_true",
                     help="print the plan and exit; change nothing")
-    ap.add_argument("--plan-items", action="store_true",
-                    help="print the plan as TSV (section<TAB>text<TAB>priv) for bootstrap.sh")
     args = ap.parse_args()
 
-    # --plan/--plan-items describe only; keep them side-effect free by construction.
-    # Their output IS the result, so demote the log stream (component resolution
+    # --plan describes only; keep it side-effect free by construction. Its
+    # output IS the result, so demote the log stream (component resolution
     # logs at INFO) to keep stray lines out of the plan the user is reading.
-    planning = args.plan or args.plan_items
+    planning = args.plan
     if planning:
         logger.setLevel(logging.ERROR)
     ctx = Ctx(dry_run=args.dry_run or planning, assume_yes=True if args.yes else None)
@@ -449,17 +446,11 @@ def main():
     agent_ids = agents.Agent.resolve(agent_spec)
 
     # A standalone interactive run shows the plan and takes the one-shot clearance
-    # itself. Under platform/bootstrap.sh clearance is already granted
-    # ($DF_ASSUME_YES=1, exported after the merged plan was cleared), so nothing
-    # is asked twice — and the plan is not even built, keeping the automated path
-    # free of describe-only work.
+    # itself. Under platform/bootstrap.py the steps are imported and run in-process
+    # (this main() never executes), so nothing is asked twice by construction.
     needs_clearance = not (ctx.assume_yes or ctx.dry_run) and ctx.interactive
     if planning or needs_clearance:
         plan = build_plan(ctx, system_spec, agent_ids)
-        if args.plan_items:
-            for section, text, priv in plan:
-                print(f"{section}\t{text}\t{1 if priv else 0}")
-            return
         render_plan(plan, ctx=ctx)
         if args.plan:
             return

@@ -25,9 +25,9 @@ class Ctx:
         self.options = options or {}
         self.os_type = self._detect_os()
         # One-shot clearance (see require_clearance): already granted when the
-        # caller says so, or when $DF_ASSUME_YES=1 — which platform/bootstrap.sh
-        # exports once the user has cleared the plan, so this process does not
-        # ask a second time for the same run.
+        # caller says so, or when $DF_ASSUME_YES=1 — which platform/bootstrap.py
+        # exports once the user has cleared the plan, so a nested process does
+        # not ask a second time for the same run.
         self.assume_yes = (
             os.environ.get(ASSUME_YES_ENV, "") == "1" if assume_yes is None else bool(assume_yes)
         )
@@ -130,7 +130,8 @@ class Ctx:
     # dnf and false for everything else), and an unrecognised Linux stays
     # "unknown" rather than being guessed as debian: a family with no apt must be
     # SKIPPED, and it can only be skipped if it is named honestly. Keep in step
-    # with platform/lib.sh::detect_os.
+    # (This is the single OS-detection implementation; platform/bootstrap.py
+    # imports Ctx rather than reimplementing it.)
     _OS_IDS = {
         "ubuntu": "ubuntu", "pop": "ubuntu", "linuxmint": "ubuntu", "elementary": "ubuntu",
         "debian": "debian", "raspbian": "debian",

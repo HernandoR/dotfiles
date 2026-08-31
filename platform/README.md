@@ -8,15 +8,22 @@ system-level software.
 
 ## Entry point
 
+The layer is **Python-first**: `bootstrap.sh` (repo root) is the only shell in
+the bootstrap, and its only job is to guarantee a `python3` (installing one with
+the native package manager when a bare container lacks it) and exec
+`platform/bootstrap.py`, which owns everything else — the plan, the clearance,
+prereqs, Lix, nix config, the Home Manager switch, and the post-HM steps
+(imported from `setup.py` and run in the same process).
+
 ```bash
 ./bootstrap.sh                     # auto-detect host; full bootstrap
-./platform/bootstrap.sh --dry-run  # print every action without executing
-./platform/bootstrap.sh --yes      # skip the clearance prompt (CI-style run)
-./platform/bootstrap.sh --network CN            # enable China mirrors
-./platform/bootstrap.sh --host dotfiles-debian  # pick a flake host explicitly
-./platform/bootstrap.sh --system docker,cuda    # + Linux system components
-./platform/bootstrap.sh --agents claude         # only Claude Code (default: claude,codex,pi)
-./platform/bootstrap.sh --agents none           # no agent tooling (was --no-claude)
+./bootstrap.sh --dry-run           # print every action without executing
+./bootstrap.sh --yes               # skip the clearance prompt (CI-style run)
+./bootstrap.sh --network CN             # enable China mirrors
+./bootstrap.sh --host dotfiles-debian   # pick a flake host explicitly
+./bootstrap.sh --system docker,cuda     # + Linux system components
+./bootstrap.sh --agents claude          # only Claude Code (default: claude,codex,pi)
+./bootstrap.sh --agents none            # no agent tooling (was --no-claude)
 ```
 
 ## Plan + clearance (ADR-0010)
@@ -28,21 +35,17 @@ root/sudo, and a final highlighted section listing every existing file that gets
 moved aside (`*.backup`). There are deliberately no
 per-step prompts.
 
-Each script describes its own steps so the plan cannot drift from the run:
+Each step registers what it *would* do before anything runs, so the plan cannot
+drift from the run: the pre-HM planners (`plan_prereqs`, `plan_nix`,
+`plan_nix_config`) live next to the code that performs them in `bootstrap.py`,
+and the post-HM half comes from `setup.build_plan()` — the same function a
+standalone `setup.py --plan` prints. `bootstrap.py` merges both halves into one
+`Plan`, renders it, and calls `require_clearance`. No terminal (CI, container,
+cron) or `--yes` / `DF_ASSUME_YES=1` or `--dry-run` → no prompt. A yes sets
+`assume_yes` on the shared `Ctx` and exports `DF_ASSUME_YES=1`, so nothing asks
+twice.
 
-| Producer | Emits |
-|---|---|
-| `lib.sh` `plan_fact`/`plan_install`/`plan_config`/`plan_backup` | facts + the pre-HM shell steps (`plan_prereqs`, `plan_nix`) |
-| `nix-cn.sh --plan` | `section<TAB>text<TAB>priv` for the network marker + system `nix.conf` |
-| `setup.py --plan-items` | the same TSV for the post-HM half (login shell, mise, the coding agents, system components) |
-
-`bootstrap.sh` merges them with `plan_import_tsv`, prints with `print_plan`, and
-calls `require_clearance`. No terminal (CI, container, cron) or `--yes` /
-`DF_ASSUME_YES=1` or `--dry-run` → no prompt. A yes exports `DF_ASSUME_YES=1`, so
-`setup.py` (which asks for its own clearance when run standalone) does not ask
-twice. `setup.py --plan` prints the post-HM half on its own.
-
-`bootstrap.sh` runs, in order: prerequisites → install Lix → configure nix
+`bootstrap.py` runs, in order: prerequisites → install Lix → configure nix
 (flakes; CERNET mirror only when `DOTFILE_NETWORK_ENV=CN`) → `home-manager
 switch -b backup` (which also places the ADR-0009 Tier-B out-of-store links from
 `home/env-links.nix`) → login shell → the coding-agent toolchain → optional system
@@ -52,10 +55,9 @@ components.
 
 | File | Role |
 |---|---|
-| `bootstrap.sh` | orchestrator / entry point (pre-HM shell half) |
-| `lib.sh` | shared helpers (OS/host detection, Lix install, plan + clearance) |
-| `nix-cn.sh` | flakes + CN mirror gating (system nix.conf, sudo) + persist `~/.config/dotfiles/network-env` |
-| `setup.py` | post-HM half: `chsh` → mise runtimes → coding agents → system components |
+| `../bootstrap.sh` | the only shell: ensure `python3`, exec `bootstrap.py` |
+| `bootstrap.py` | the orchestrator — plan + clearance, prereqs, Lix, nix config (+CN), HM switch, then the post-HM steps in-process |
+| `setup.py` | the post-HM steps (`chsh` → mise runtimes → coding agents → system components); also runnable standalone via `uv run` |
 | `installers/agents.py` | ADR-0011: the capability manifest (marketplaces, plugins, MCP servers, pi extensions) + one `Agent` class per agent; Claude/Codex project through their own CLIs, pi through declarative files this repo owns (ADR-0012) |
 | `installers/components.py` | the `OptionalComponent` registry (docker, cuda, nvidia, llvm, brew) + CodeGraph |
 | `installers/managers.py` | install backends (`apt`, `dnf`, `zypper`, `pacman`, `apk`, `brew`, `scripts`), keyed by OS family, and their specs |
