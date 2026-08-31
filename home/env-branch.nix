@@ -13,7 +13,7 @@
 # inventory at once, so this one line is all it takes.
 { config, ... }:
 {
-  envLinks.stateRoot = "/home/ubuntu/dotfile_home";
+  envLinks.stateRoot = "/home/ec2-user/dotfile_home";
 
   envLinks.entries = {
     # jcc: intranet-only tool. Its config holds a bearer token and an internal
