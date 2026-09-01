@@ -89,24 +89,24 @@ exec ~/.nix-profile/bin/zsh -l
 
 ## Flags & environment variables
 
-| Flag              | Effect                                                      |
+| Flag | Effect |
 | ----------------- | ----------------------------------------------------------- |
-| `--dry-run`       | Print every command without executing it (no clearance prompt — nothing to clear). |
-| `--verbose`       | Echo each command as it runs.                               |
-| `--yes` / `-y`    | Skip the clearance prompt (the plan is still printed). Same as `DF_ASSUME_YES=1`. |
-| `--network CN`    | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
+| `--dry-run` | Print every command without executing it (no clearance prompt — nothing to clear). |
+| `--verbose` | Echo each command as it runs. |
+| `--yes` / `-y` | Skip the clearance prompt (the plan is still printed). Same as `DF_ASSUME_YES=1`. |
+| `--network CN` | Enable China (CERNET) mirrors for Nix, pypi/uv, and rustup. |
 | `--system <list>` | Install opt-in Linux system components (`all` = every one). |
-| `--host NAME`     | Force a named flake host instead of auto-detecting.         |
+| `--host NAME` | Force a named flake host instead of auto-detecting. |
 | `--agents <list>` | Which coding agents to provision: `claude,codex,pi` / `all` (default) / `none`. |
-| `--no-claude`     | Deprecated alias for `--agents none`.                       |
+| `--no-claude` | Deprecated alias for `--agents none`. |
 
-| Env var                     | Effect                                                                                                                                                                                                                                                                                                                                                               |
+| Env var | Effect |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DF_ASSUME_YES=1`           | Skip the interactive clearance (same as `--yes`); exported automatically once you have cleared the plan, so the nested steps never re-ask.                                                                                                                                                                                                                             |
-| `DOTFILE_NETWORK_ENV=CN`    | Same as `--network CN` (also read by the zsh env for pypi/rustup).                                                                                                                                                                                                                                                                                                   |
-| `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins.                                                                                                                                                                                                                                                                                                                 |
-| `DOTFILE_AGENTS`            | Fallback for `--agents` (e.g. `claude` or `none`); the flag wins.                                                                                                                                                                                                                                                                                                     |
-| `DOTFILE_FLAKE_CACHE`       | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI).                                                                                                                                                                                                                                                                                                 |
+| `DF_ASSUME_YES=1` | Skip the interactive clearance (same as `--yes`); exported automatically once you have cleared the plan, so the nested steps never re-ask. |
+| `DOTFILE_NETWORK_ENV=CN` | Same as `--network CN` (also read by the zsh env for pypi/rustup). |
+| `DOTFILE_SYSTEM_COMPONENTS` | Fallback for `--system` (e.g. `all`); the flag wins. |
+| `DOTFILE_AGENTS` | Fallback for `--agents` (e.g. `claude` or `none`); the flag wins. |
+| `DOTFILE_FLAKE_CACHE` | Dir with `seed-paths.txt` to seed flake inputs from (CN/offline/CI). |
 
 ## Trying it on a new machine (and how to recover)
 
@@ -286,15 +286,15 @@ applied.
 What Home Manager cannot own on a non-NixOS host, installed after the switch and
 selected with `--system <list>` / `DOTFILE_SYSTEM_COMPONENTS`:
 
-| Name                  | Description                                                                    | OS             |
+| Name | Description | OS |
 | --------------------- | ------------------------------------------------------------------------------ | -------------- |
-| `software-properties` | `add-apt-repository` support **(required on Linux — always installed)**        | debian, ubuntu |
-| `docker`              | Docker Engine (rootful)                                                        | debian, ubuntu |
-| `docker-rootless`     | Docker (rootless)                                                              | debian, ubuntu |
-| `cuda`                | CUDA Toolkit 12.6                                                              | debian, ubuntu |
-| `nvidia`              | NVIDIA driver + container toolkit                                              | debian, ubuntu |
-| `llvm`                | LLVM 18 (+ `update-alternatives`)                                              | debian, ubuntu |
-| `brew`                | Homebrew — the package manager only (no formulae/casks) **(default on macOS)** | darwin         |
+| `software-properties` | `add-apt-repository` support **(required on Linux — always installed)** | debian, ubuntu |
+| `docker` | Docker Engine (rootful) | debian, ubuntu |
+| `docker-rootless` | Docker (rootless) | debian, ubuntu |
+| `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
+| `nvidia` | NVIDIA driver + container toolkit | debian, ubuntu |
+| `llvm` | LLVM 18 (+ `update-alternatives`) | debian, ubuntu |
+| `brew` | Homebrew — the package manager only (no formulae/casks) **(default on macOS)** | darwin |
 
 The selector takes names, alias groups and `all`; `docker` + `docker-rootless`
 together resolve to rootless. Unset means the `default` group — `brew` on macOS,
@@ -319,13 +319,13 @@ the file) and a mirror choice defaulting to `DOTFILE_NETWORK_ENV`.
 
 Where a new tool is written down depends on which layer owns it:
 
-| What you want                                                   | Write it in                                                              | Scope                                     |
+| What you want | Write it in | Scope |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------- |
-| A CLI tool that exists in nixpkgs                               | `home/packages.nix`                                                      | every host, on every switch               |
-| A runtime, or a tool that only ships via npm/cargo/go/gh-release | `home/mise.nix` (the `tools` attrset)                                    | new hosts on bootstrap; existing ones need `mise use -g` |
-| Something only one project needs                                | that project's `mise.toml`, **or** its own `flake.nix` devShell          | that directory tree                       |
-| A daemon/driver/apt-level thing (docker, cuda, llvm, …)          | `platform/installers/components.py` + `--system`                         | see [Component classification](#component-classification) |
-| A one-off experiment                                            | nothing — `nix shell nixpkgs#<pkg>`                                      | the current shell only                    |
+| A CLI tool that exists in nixpkgs | `home/packages.nix` | every host, on every switch |
+| A runtime, or a tool that only ships via npm/cargo/go/gh-release | `home/mise.nix` (the `tools` attrset) | new hosts on bootstrap; existing ones need `mise use -g` |
+| Something only one project needs | that project's `mise.toml`, **or** its own `flake.nix` devShell | that directory tree |
+| A daemon/driver/apt-level thing (docker, cuda, llvm, …) | `platform/installers/components.py` + `--system` | see [Component classification](#component-classification) |
+| A one-off experiment | nothing — `nix shell nixpkgs#<pkg>` | the current shell only |
 
 **Nothing user-level is installed imperatively.** Home Manager installs its
 `home-manager-path` into the same profile `~/.nix-profile` points at, so a
@@ -521,17 +521,17 @@ old version.
 
 ### Editing the Home Manager config
 
-| Want to change                                  | File                                                                       |
+| Want to change | File |
 | ----------------------------------------------- | -------------------------------------------------------------------------- |
-| zsh options/plugins, `PATH`, session variables  | `home/shell.nix`                                                           |
-| zsh functions, aliases, fzf-tab tweaks          | `home/zsh/functions.zsh`, `home/zsh/fzf-tab.zsh` (sourced verbatim)        |
-| the prompt                                      | `home/starship.toml` (read by `home/starship.nix`)                          |
-| git settings                                    | `home/git.nix`; aliases in `home/git-aliases.conf`                          |
-| tmux                                            | `home/tmux.conf` (+ `home/tmux.nix`)                                       |
-| mise settings (live), mise tool seed             | `home/mise.nix`                                                            |
-| links to writable, out-of-store paths           | `home/env-links.nix` (ADR-0009 Tier B — the set every environment wants)  |
-| the same, for one environment only              | `home/env-branch.nix` (empty on shared branches; the only file an env branch edits, so its rebases never conflict)  |
-| a new machine                                   | the `hosts` attrset in `flake.nix:17`                                       |
+| zsh options/plugins, `PATH`, session variables | `home/shell.nix` |
+| zsh functions, aliases, fzf-tab tweaks | `home/zsh/functions.zsh`, `home/zsh/fzf-tab.zsh` (sourced verbatim) |
+| the prompt | `home/starship.toml` (read by `home/starship.nix`) |
+| git settings | `home/git.nix`; aliases in `home/git-aliases.conf` |
+| tmux | `home/tmux.conf` (+ `home/tmux.nix`) |
+| mise settings (live), mise tool seed | `home/mise.nix` |
+| links to writable, out-of-store paths | `home/env-links.nix` (ADR-0009 Tier B — the set every environment wants) |
+| the same, for one environment only | `home/env-branch.nix` (empty on shared branches; the only file an env branch edits, so its rebases never conflict) |
+| a new machine | the `hosts` attrset in `flake.nix:17` |
 
 Two conventions worth keeping (see
 [Contributing](#contributing--conventions-and-guardrails)): prefer an upstream
@@ -636,6 +636,13 @@ describe the retired Python pipeline — don't cite them as current design.
   if it is named honestly. Never hardcode a package manager — route through
   `_PKG_MANAGERS` (`platform/bootstrap.py`) pre-HM and
   `PackageManager.supported_os` (`installers/managers.py`) post-HM.
+- **Markdown:** the rules live in `.markdownlint-cli2.jsonc`, so agents and
+  editors stop inventing their own. Tables are **compact** — one space around
+  every pipe, `| --- |` separators — never hand-aligned padding, which silently
+  rots the moment a cell's content changes and which markdownlint cannot fix
+  automatically. Run `npx markdownlint-cli2 --fix <file>` if a table drifts.
+  `docs/` ADRs/RFCs are records: they are linted but deliberately not
+  retro-formatted, so don't reflow one just to make the linter quiet.
 - **Commits:** Conventional-Commits `type(scope): subject`; history is English.
 
 ### Don't touch / be careful with

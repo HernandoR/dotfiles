@@ -54,7 +54,7 @@ components.
 ## Files
 
 | File | Role |
-|---|---|
+| --- | --- |
 | `../bootstrap.sh` | the only shell: ensure `python3`, exec `bootstrap.py` |
 | `bootstrap.py` | the orchestrator — plan + clearance, prereqs, Lix, nix config (+CN), HM switch, then the post-HM steps in-process |
 | `setup.py` | the post-HM steps (`chsh` → mise runtimes → coding agents → system components); also runnable standalone via `uv run` |
@@ -76,7 +76,7 @@ other key is written only when absent, so `/model`, `/theme` and hand edits
 survive re-projection. What lands where:
 
 | Plane | Where it lives | How it is applied |
-|---|---|---|
+| --- | --- | --- |
 | instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` + `~/.pi/agent/AGENTS.md` symlinks; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
 | capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` / `PI_PACKAGES` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add` + `codex mcp add`; pi has no MCP or marketplace CLI, so it gets three declarative files this repo owns: `~/.agents/mcp.json`, `~/.pi/agent/claude-plugins.json`, and the `packages` array in its settings |
 | preference | each agent's own config | never overwritten — Claude's and Codex's are never written from `platform/` at all; pi's is seeded leaf-by-leaf, only where a key is absent (ADR-0012) |

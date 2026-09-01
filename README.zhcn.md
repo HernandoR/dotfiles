@@ -80,24 +80,24 @@ exec ~/.nix-profile/bin/zsh -l
 
 ## 参数与环境变量
 
-| 参数              | 效果                                               |
+| 参数 | 效果 |
 | ----------------- | -------------------------------------------------- |
-| `--dry-run`       | 打印每条命令但不执行（不会征求许可——没有要许可的东西）。 |
-| `--verbose`       | 执行时回显每条命令。                               |
-| `--yes` / `-y`    | 跳过许可提问（计划仍会打印）。等同于 `DF_ASSUME_YES=1`。 |
-| `--network CN`    | 为 Nix、pypi/uv 和 rustup 启用中国（CERNET）镜像。 |
-| `--system <list>` | 安装可选的 Linux 系统组件（`all` = 全部）。        |
-| `--host NAME`     | 强制使用指定的 flake host，而非自动检测。          |
+| `--dry-run` | 打印每条命令但不执行（不会征求许可——没有要许可的东西）。 |
+| `--verbose` | 执行时回显每条命令。 |
+| `--yes` / `-y` | 跳过许可提问（计划仍会打印）。等同于 `DF_ASSUME_YES=1`。 |
+| `--network CN` | 为 Nix、pypi/uv 和 rustup 启用中国（CERNET）镜像。 |
+| `--system <list>` | 安装可选的 Linux 系统组件（`all` = 全部）。 |
+| `--host NAME` | 强制使用指定的 flake host，而非自动检测。 |
 | `--agents <list>` | 要装哪些 coding agent：`claude,codex,pi` / `all`（默认）/ `none`。 |
-| `--no-claude`     | 已废弃，等价于 `--agents none`。                   |
+| `--no-claude` | 已废弃，等价于 `--agents none`。 |
 
-| 环境变量                    | 效果                                                                                                                                                                                                                                                                                                                            |
+| 环境变量 | 效果 |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DF_ASSUME_YES=1`           | 跳过交互许可（等同于 `--yes`）；你许可计划之后它会被自动导出，因此后续步骤不会重复提问。                                                                                                                                                                                                                                         |
-| `DOTFILE_NETWORK_ENV=CN`    | 等同于 `--network CN`（zsh 环境也会读取它用于 pypi/rustup）。                                                                                                                                                                                                                                                                   |
-| `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。                                                                                                                                                                                                                                                                                     |
-| `DOTFILE_AGENTS`            | `--agents` 的回退值（如 `claude` 或 `none`）；参数优先。                                                                                                                                                                                                                                                                          |
-| `DOTFILE_FLAKE_CACHE`       | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。                                                                                                                                                                                                                                                               |
+| `DF_ASSUME_YES=1` | 跳过交互许可（等同于 `--yes`）；你许可计划之后它会被自动导出，因此后续步骤不会重复提问。 |
+| `DOTFILE_NETWORK_ENV=CN` | 等同于 `--network CN`（zsh 环境也会读取它用于 pypi/rustup）。 |
+| `DOTFILE_SYSTEM_COMPONENTS` | `--system` 的回退值（如 `all`）；参数优先。 |
+| `DOTFILE_AGENTS` | `--agents` 的回退值（如 `claude` 或 `none`）；参数优先。 |
+| `DOTFILE_FLAKE_CACHE` | 含 `seed-paths.txt` 的目录，用于给 flake 输入做种（CN/离线/CI）。 |
 
 ## 在新机器上试用（以及如何恢复）
 
@@ -261,15 +261,15 @@ mise up                              # mise 工具，在声明的范围内升级
 Home Manager 在非 NixOS 主机上无法拥有的那部分，在 switch 之后安装，用
 `--system <list>` / `DOTFILE_SYSTEM_COMPONENTS` 选择：
 
-| 名称                  | 描述                                                                | OS             |
+| 名称 | 描述 | OS |
 | --------------------- | ------------------------------------------------------------------- | -------------- |
-| `software-properties` | `add-apt-repository` 支持 **（Linux 必需 —— 始终安装）**            | debian, ubuntu |
-| `docker`              | Docker Engine（rootful）                                            | debian, ubuntu |
-| `docker-rootless`     | Docker（rootless）                                                  | debian, ubuntu |
-| `cuda`                | CUDA Toolkit 12.6                                                   | debian, ubuntu |
-| `nvidia`              | NVIDIA 驱动 + container toolkit                                     | debian, ubuntu |
-| `llvm`                | LLVM 18（+ `update-alternatives`）                                  | debian, ubuntu |
-| `brew`                | Homebrew —— 仅包管理器本身（不含 formulae/casks）**（macOS 默认）** | darwin         |
+| `software-properties` | `add-apt-repository` 支持 **（Linux 必需 —— 始终安装）** | debian, ubuntu |
+| `docker` | Docker Engine（rootful） | debian, ubuntu |
+| `docker-rootless` | Docker（rootless） | debian, ubuntu |
+| `cuda` | CUDA Toolkit 12.6 | debian, ubuntu |
+| `nvidia` | NVIDIA 驱动 + container toolkit | debian, ubuntu |
+| `llvm` | LLVM 18（+ `update-alternatives`） | debian, ubuntu |
+| `brew` | Homebrew —— 仅包管理器本身（不含 formulae/casks）**（macOS 默认）** | darwin |
 
 选择器接受组件名、别名组和 `all`；同时选了 `docker` 和 `docker-rootless` 时保留
 rootless。不指定即使用 `default` 组——macOS 上是 `brew`，Linux 上没有可选组件——
@@ -293,13 +293,13 @@ uv run platform/installers/components.py   # 列出全部可选组件
 
 一个新工具该写在哪里，取决于它归哪一层管：
 
-| 你想要的                                          | 写进哪里                                                        | 作用范围                                       |
+| 你想要的 | 写进哪里 | 作用范围 |
 | ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
-| nixpkgs 里已有的 CLI 工具                         | `home/packages.nix`                                             | 所有主机，每次 switch 都应用                   |
-| 运行时，或只在 npm/cargo/go/gh-release 发布的工具 | `home/mise.nix`（`tools` attrset）                              | 新机器 bootstrap 时生效；已有机器要 `mise use -g` |
-| 只有某一个项目需要的东西                          | 该项目自己的 `mise.toml`，**或**该项目自己的 `flake.nix` devShell | 该目录树                                       |
-| 守护进程/驱动/apt 层面的东西（docker、cuda、llvm…）| `platform/installers/components.py` + `--system`                | 见 [组件分类](#组件分类)                       |
-| 只想试一下                                        | 什么都不写 —— `nix shell nixpkgs#<pkg>`                          | 仅当前 shell                                   |
+| nixpkgs 里已有的 CLI 工具 | `home/packages.nix` | 所有主机，每次 switch 都应用 |
+| 运行时，或只在 npm/cargo/go/gh-release 发布的工具 | `home/mise.nix`（`tools` attrset） | 新机器 bootstrap 时生效；已有机器要 `mise use -g` |
+| 只有某一个项目需要的东西 | 该项目自己的 `mise.toml`，**或**该项目自己的 `flake.nix` devShell | 该目录树 |
+| 守护进程/驱动/apt 层面的东西（docker、cuda、llvm…） | `platform/installers/components.py` + `--system` | 见 [组件分类](#组件分类) |
+| 只想试一下 | 什么都不写 —— `nix shell nixpkgs#<pkg>` | 仅当前 shell |
 
 **用户级的东西一律不用命令式安装。** Home Manager 会把它的 `home-manager-path`
 安装进 `~/.nix-profile` 指向的那个 profile，所以在旁边额外 `nix profile install` /
@@ -482,16 +482,16 @@ mise which node                # 实际解析到哪个 shim/二进制
 
 ### 修改 Home Manager 配置
 
-| 想改什么                                | 文件                                                                 |
+| 想改什么 | 文件 |
 | --------------------------------------- | -------------------------------------------------------------------- |
-| zsh 选项/插件、`PATH`、session 变量     | `home/shell.nix`                                                     |
-| zsh 函数、别名、fzf-tab 细节            | `home/zsh/functions.zsh`、`home/zsh/fzf-tab.zsh`（原样 source）      |
-| 提示符                                  | `home/starship.toml`（由 `home/starship.nix` 读取）                   |
-| git 配置                                | `home/git.nix`；别名在 `home/git-aliases.conf`                        |
-| tmux                                    | `home/tmux.conf`（+ `home/tmux.nix`）                                 |
-| 指向 store 之外可写路径的链接            | `home/env-links.nix`（ADR-0009 Tier B —— 每个环境都要的那一份）    |
-| 同上，但只有某一个环境要                 | `home/env-branch.nix`（共享分支上为空；env 分支唯一会改的文件，因此 rebase 永不冲突）    |
-| 新机器                                  | `flake.nix:17` 的 `hosts` attrset                                     |
+| zsh 选项/插件、`PATH`、session 变量 | `home/shell.nix` |
+| zsh 函数、别名、fzf-tab 细节 | `home/zsh/functions.zsh`、`home/zsh/fzf-tab.zsh`（原样 source） |
+| 提示符 | `home/starship.toml`（由 `home/starship.nix` 读取） |
+| git 配置 | `home/git.nix`；别名在 `home/git-aliases.conf` |
+| tmux | `home/tmux.conf`（+ `home/tmux.nix`） |
+| 指向 store 之外可写路径的链接 | `home/env-links.nix`（ADR-0009 Tier B —— 每个环境都要的那一份） |
+| 同上，但只有某一个环境要 | `home/env-branch.nix`（共享分支上为空；env 分支唯一会改的文件，因此 rebase 永不冲突） |
+| 新机器 | `flake.nix:17` 的 `hosts` attrset |
 
 有两个约定值得保持（见 README 的 Contributing 节）：优先使用上游的 `programs.*` 选项
 而不是自己拼配置；大段内容用原样嵌入文件（`builtins.readFile` /

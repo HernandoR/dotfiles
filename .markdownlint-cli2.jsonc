@@ -1,0 +1,55 @@
+// markdownlint config for this repo.
+//
+// Why it exists: without it, every agent/linter falls back to its own defaults,
+// and pi-lens kept auto-rewriting `|---|` table separators to `| --- |` on
+// every touch — a change nobody had decided on, which then looked like noise
+// and got discarded, repeatedly. The choice belongs in the repo, once.
+//
+// Scope decision: the ADRs and RFCs in docs/ are *records*. Reformatting a
+// thousand lines of settled history to please a linter dirties `git blame` for
+// no benefit, so they are linted with the same rules but were not retro-fixed;
+// only the actively-edited docs (the READMEs, AGENTS.md) were made consistent.
+{
+  "config": {
+    // Prose here is hand-wrapped at ~80 but tables and links routinely exceed
+    // it. Reflowing them would hurt readability more than the rule helps.
+    "MD013": false,
+
+    // The ADR/RFC template repeats headings ("Context", "Decision") across
+    // sections of one document; only sibling duplicates are a real problem.
+    "MD024": { "siblings_only": true },
+
+    // Both READMEs use inline HTML (<br>, <details>) for tables and collapsible
+    // sections that pure Markdown cannot express.
+    "MD033": false,
+
+    // README.md and README.zhcn.md genuinely differ here: the English text uses
+    // _underscore_ emphasis in a few places, the Chinese one asterisks. Neither
+    // is wrong and normalising would touch prose for style points only.
+    "MD049": false,
+
+    // Table pipe spacing — the rule that started this. Left at its default
+    // (`any`), MD060 infers a style per table from the FIRST row, so
+    // `| File | Role |` over `|---|---|` reads as internally inconsistent and
+    // gets "fixed" differently depending on which row the tool anchors to.
+    //
+    // `compact` is pinned deliberately over the prettier-looking `aligned`:
+    // aligned tables must be re-padded by hand every time a cell's content
+    // changes (an edit to one cell silently misaligns the whole table — which
+    // is exactly how the READMEs' tables broke), and markdownlint documents
+    // aligned violations as NOT auto-fixable, while compact ones are. CJK
+    // width in README.zhcn.md makes hand-alignment worse still. So: one space
+    // around every pipe, `markdownlint-cli2 --fix` repairs any drift.
+    "MD060": { "style": "compact" }
+  },
+
+  // bkp/ is a vendored snapshot of the pre-Nix dotfiles (including upstream
+  // files like the alacritty themes README) — not ours to restyle. output/ and
+  // .venv/ are build artifacts.
+  "ignores": [
+    "bkp/**",
+    "output/**",
+    ".venv/**",
+    "**/node_modules/**"
+  ]
+}
