@@ -416,12 +416,21 @@ PI_PACKAGES = (
     PiPackage("npm:@plannotator/pi-extension",
               note="plan mode, which pi also refuses. Set `model: null` in its config or it "
                    "overrides the session model with its bundled claude-sonnet-4-5 default"),
-    PiPackage("npm:pi-background-tasks",
-              note="background bash. Its Fusion routes admit only subscription OAuth and "
-                   "reject metered API keys before child creation — satisfied, these hosts "
-                   "use OAuth. Also installs a provider that rewrites Anthropic request "
-                   "metadata; audit that on first use"),
+    PiPackage("npm:pi-token-usage-statistics",
+              note="per-session token/cost ledger under ~/.pi/agent/token-usage-statistics. "
+                   "Read-only over pi's own usage events, no egress and no config file. "
+                   "Adopted by hand on the reference host and found in its settings.json "
+                   "on 2026-09-03 — the same drift ADR-0011 exists to absorb"),
     # Deliberately NOT here, each for a stated reason:
+    # - pi-background-tasks: declared until 2026-09-03 as the background-bash slot.
+    #   The owner removed it by hand (settings.json.bak-20260902 still lists it,
+    #   the live file does not), so the manifest follows the host rather than
+    #   re-seeding a package that was deliberately dropped. Its price was never
+    #   small: a provider that rewrites Anthropic request metadata, Fusion routes
+    #   gated on subscription OAuth, and the tightest enumerated peer range in the
+    #   set (`^0.81‖^0.82‖^0.83‖^0.84`). The background-bash slot is left empty
+    #   rather than refilled. Retired via RETIRED_PI_PACKAGES so hosts already
+    #   carrying it drop it too.
     # - pi-web-search: declared until 2026-08-28 as "the ONLY candidate reaching
     #   Anthropic's native Messages-API search, so no extra credential". Dropped on
     #   the owner's call once the provider set was pinned to Anthropic now, Codex
@@ -512,6 +521,7 @@ RETIRED_PI_PACKAGES = (
     "npm:pi-tinyfish",
     "npm:pi-claude-marketplace@0.13.0",
     "npm:pi-web-search",
+    "npm:pi-background-tasks",
 )
 
 # The plane-③ preset (ADR-0012). Seeded LEAF BY LEAF and add-only: a key already
@@ -571,7 +581,11 @@ RETIRED_PI_PACKAGES = (
 # and silently breaks `pi update --self` (see PI_NPM_PREFIX).
 PI_SETTINGS_SEED = {
     "defaultProvider": "anthropic",
-    "defaultModel": "claude-opus-5",
+    # Re-pinned from the reference host on 2026-09-03: the main session runs on
+    # Fable, sub-agents default to Opus, and only the two judgement roles (oracle,
+    # reviewer) are lifted above that. Seeded, so a host that already chose
+    # otherwise with /model keeps its choice.
+    "defaultModel": "claude-fable-5-1",
     "defaultThinkingLevel": "medium",
     "enabledModels": ["anthropic/claude-*"],
     "modelThinkingLevels": {"anthropic/claude-haiku-4-5": "low"},
@@ -598,12 +612,12 @@ PI_SETTINGS_SEED = {
     # unknown key). This is where omp's modelRoles land.
     "subagents": {
         "defaultProvider": "anthropic",
-        "defaultModel": "anthropic/claude-sonnet-5",
+        "defaultModel": "anthropic/claude-opus-5",
         "defaultThinking": "medium",
         "maxThinking": "max",
         "agentOverrides": {
-            "oracle": {"model": "anthropic/claude-opus-5", "thinking": "high"},
-            "reviewer": {"model": "anthropic/claude-sonnet-5", "thinking": "high"},
+            "oracle": {"model": "anthropic/claude-fable-5-1", "thinking": "high"},
+            "reviewer": {"model": "anthropic/claude-opus-5", "thinking": "high"},
             "worker": {"model": "anthropic/claude-sonnet-5", "thinking": "medium"},
             "delegate": {"model": "anthropic/claude-sonnet-5", "thinking": "medium"},
             "researcher": {"model": "anthropic/claude-sonnet-5", "thinking": "medium"},
@@ -688,6 +702,33 @@ PI_HIDE_PROVIDERS_SEED = (
     {"provider": "amazon-bedrock"},
     {"provider": "huggingface"},
 )
+
+# pi's own models.json, and the half of the provider fence pi-hide-providers
+# cannot do (see PI_HIDE_PROVIDERS_SEED: "the COLD-START model pick is not
+# filtered"). Found on the reference host on 2026-09-03 and adopted.
+#
+# The trick: a provider-level `apiKey` that names an environment variable which
+# is never set. pi's own value resolution (docs/models.md, "Missing environment
+# variables make the value unresolved") turns that into
+# `configuredRequestAuthStatus() -> { configured: false }`, and
+# `ModelRuntime.getProviderAuthStatus()` RETURNS that before it ever consults the
+# ambient-environment check — so `HF_TOKEN` and the pod's AWS role, which are what
+# turn these two providers on in the first place, stop counting as credentials
+# for pi while staying available to `hf` and `aws` inside its bash tool. Nothing
+# in ~/.pi is touched and no real key is written anywhere.
+#
+# The variable names are deliberately ones nothing exports (`PI_DISABLE_<ID>`);
+# setting one would re-enable the provider with that value as its key, which is
+# also the documented escape hatch. Same provider set as the hide rules, for the
+# same reason: only the providers pi turns on from ambient environment rather
+# than from a login. Reconciled per provider — a `providers.<id>` block already
+# on the host (a real custom endpoint, say) is never overwritten, and `models`
+# entries are not this repo's to touch.
+PI_MODELS = PI_AGENT_DIR / "models.json"
+PI_MODELS_SEED = {
+    "amazon-bedrock": {"apiKey": "$PI_DISABLE_AMAZON_BEDROCK"},
+    "huggingface": {"apiKey": "$PI_DISABLE_HUGGINGFACE"},
+}
 
 # The install-script review npm 11.19 demands, decided once here instead of being
 # re-asked on every pi startup. pi installs extensions with
@@ -1231,6 +1272,51 @@ def seed_pi_hide_providers(ctx):
                 ", ".join(r["provider"] for r in missing))
 
 
+def seed_pi_models(ctx):
+    """Seed the provider blocks in ``~/.pi/agent/models.json`` (PI_MODELS_SEED).
+
+    Add-only per provider: a ``providers.<id>`` object the host already has is
+    theirs, whatever it says, and every other key in the file (``models``, a
+    provider the manifest never named) rides through untouched. Like
+    ``hide-providers.json``, nothing is ever removed — an unset-variable
+    ``apiKey`` on a provider that is not present costs nothing.
+    """
+    if ctx.dry_run:
+        logger.info("[DRY-RUN] would ensure %d provider fence(s) in %s",
+                    len(PI_MODELS_SEED), PI_MODELS)
+        return
+    current = {}
+    if PI_MODELS.exists():
+        try:
+            current = json.loads(PI_MODELS.read_text())
+        except ValueError:
+            current = None
+        if not isinstance(current, dict):
+            backup = PI_MODELS.with_name(PI_MODELS.name + ".backup")
+            logger.warning("%s is not a JSON object; moving it to %s", PI_MODELS, backup)
+            shutil.move(str(PI_MODELS), str(backup))
+            current = {}
+
+    providers = current.get("providers")
+    if not isinstance(providers, dict):
+        if "providers" in current:
+            # The host replaced the object with something else. Their call.
+            logger.warning("%s: `providers` is not an object; leaving it alone", PI_MODELS)
+            return
+        providers = {}
+    missing = {pid: dict(block) for pid, block in PI_MODELS_SEED.items()
+               if pid not in providers}
+    if not missing:
+        logger.info("%s already fences every provider the manifest names", PI_MODELS)
+        return
+    providers.update(missing)
+    current["providers"] = providers
+    PI_MODELS.parent.mkdir(parents=True, exist_ok=True)
+    PI_MODELS.write_text(json.dumps(current, indent=2) + "\n")
+    logger.info("fenced %d provider(s) in %s: %s", len(missing), PI_MODELS,
+                ", ".join(sorted(missing)))
+
+
 def _pi_npm_lockfile_escaped_count():
     """How many ``package-lock.json`` entries have escaped the npm root, for the
     plan. 0 when the file is absent, unreadable or healthy.
@@ -1722,6 +1808,9 @@ class PiAgent(Agent):
     - ``~/.pi/agent/hide-providers.json`` ← the hide rules that keep providers pi
       turns on from ambient environment out of the model picker, since pi itself has
       no provider allowlist (PI_HIDE_PROVIDERS_SEED). Reconciled, not add-only.
+    - ``~/.pi/agent/models.json`` ← an unresolvable ``apiKey`` per ambient-env
+      provider (PI_MODELS_SEED), which closes the cold-start gap the hide rules
+      leave open. Per-provider add-only; the host's own blocks are never touched.
 
     Nothing here runs ``pi install``: pi installs its own missing packages at
     startup from the seeded array.
@@ -1767,6 +1856,7 @@ class PiAgent(Agent):
         seed_pi_npm_project(ctx)
         seed_pi_settings(ctx)
         seed_pi_hide_providers(ctx)
+        seed_pi_models(ctx)
         reconcile_pi_web_search(ctx)
 
     def relink(self, ctx):
@@ -1833,6 +1923,10 @@ class PiAgent(Agent):
                       "HF_TOKEN) rather than from a login".format(
                           PI_HIDE_PROVIDERS,
                           ", ".join(r["provider"] for r in PI_HIDE_PROVIDERS_SEED)))
+        add("config", "{} <- an unresolvable apiKey for {}; makes pi count them as "
+                      "unconfigured even with HF_TOKEN / an AWS role in the environment, "
+                      "which the hide rules alone cannot".format(
+                          PI_MODELS, ", ".join(sorted(PI_MODELS_SEED))))
         add("config", "{} <- allowScripts for {}; npm 11.19 blocks dependency install "
                       "scripts by default, which silently leaves node-pty unbuilt on "
                       "Linux".format(

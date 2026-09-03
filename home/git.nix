@@ -115,6 +115,14 @@ in
       "*.py merge=mergiraf"
     ];
 
+    # Global excludes. `.claude/worktrees/` is where Claude Code puts the
+    # worktrees it creates, and — through home/worktrunk.nix — where `wt` puts
+    # its too. A nested worktree is a `.git` file plus a full checkout, so
+    # without this every repo shows an untracked `.claude/` the moment either
+    # tool is used in it. Claude writes the same rule into a repo's
+    # .git/info/exclude on first use; this covers repos it has not touched yet.
+    ignores = [ ".claude/worktrees/" ];
+
     # RFC42 freeform config (HM renamed userName/userEmail/extraConfig → settings).
     settings = {
       user = {

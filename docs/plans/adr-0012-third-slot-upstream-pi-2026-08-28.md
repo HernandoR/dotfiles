@@ -377,7 +377,8 @@ dependencies and tool-name collisions more than by preference.
 | `pi-hide-providers` | 0.1.15 | `disabledProviders` | the provider fence pi has none of; monkey-patches `ModelRuntime` — risk named in the update log |
 | `pi-lens` | 4.1.2 | native LSP + diagnostics | no CI; pins `pi-tui ^0.84.1`; rewrites source |
 | `@plannotator/pi-extension` | 0.27.9 | plan mode | set `model: null`; needs a browser |
-| `pi-background-tasks` | 2.4.2 | background bash | Fusion is OAuth-only — satisfied, these hosts use OAuth |
+| ~~`pi-background-tasks`~~ | 2.4.2 | background bash | **retired 2026-09-03** — dropped by hand on the reference host; see the update log |
+| `pi-token-usage-statistics` | 0.2.0 | — (omp had a `/usage` view) | per-session token/cost ledger, no egress, no config; adopted 2026-09-03 |
 
 Three constraints that are decisions, not details:
 
@@ -678,3 +679,37 @@ its body and point here instead, rather than being left half-current.
 
   Verified with `just build` (changes nothing in `$HOME`); activation is `just
   switch`, which is the owner's to run.
+
+- **2026-09-03 — the manifest catches up with the reference host.** Three
+  differences between `PI_SETTINGS_SEED` and the live `~/.pi/agent`, all
+  resolved in the host's favour because every one was a deliberate hand edit
+  under plane ③ or a plane-② choice ADR-0011 exists to absorb.
+
+  - **`pi-background-tasks` is retired, `pi-token-usage-statistics` declared.**
+    The host's `settings.json.bak-20260902` still lists the former and the live
+    file does not; the latter was installed by hand. The manifest follows: the
+    package moves to `RETIRED_PI_PACKAGES` so it leaves every host, and the
+    ledger extension joins `PI_PACKAGES`. The background-bash slot stays empty
+    on purpose — its occupant carried a request-metadata-rewriting provider and
+    the tightest peer range in the set, and nothing is refilled into the slot
+    until something earns it.
+  - **The model preset is re-pinned**: `defaultModel` Fable 5.1, sub-agent
+    default Opus 5, oracle Fable / reviewer Opus (both `high`). Still seeded
+    leaf-by-leaf, so no host that chose otherwise with `/model` is touched.
+  - **`models.json` joins the projected set**, as `PI_MODELS_SEED`. The host had
+    found the answer to the cold-start gap the 2026-08-28 entry left open: a
+    provider-level `apiKey` naming an environment variable nothing sets
+    (`$PI_DISABLE_HUGGINGFACE`, `$PI_DISABLE_AMAZON_BEDROCK`). pi's value
+    resolution marks that "unresolved", `configuredRequestAuthStatus()` returns
+    `{ configured: false }`, and `getProviderAuthStatus()` returns *that* before
+    it reaches the ambient-environment check — so `HF_TOKEN` and the AWS role
+    stop being credentials for pi without being unset for `hf` and `aws` inside
+    its bash tool. Per-provider add-only: a `providers.<id>` block the host wrote
+    is never overwritten. This closes the "not by this package" caveat under
+    `PI_HIDE_PROVIDERS_SEED`; the hide rules stay for the picker, this fences
+    the initial pick.
+
+  Also found, not fixed here: a stray `~/.pi/.pi/tasks/session-*/` tree on the
+  reference host — the `~/.pi/<agentdir>` spelling doubled by some extension
+  resolving its task dir relative to the symlink. Left in place; it is state,
+  not config, and the writer has not been identified.

@@ -7,6 +7,7 @@
     ./git.nix
     ./tmux.nix
     ./mise.nix
+    ./worktrunk.nix
     ./direnv.nix
     # Mutable out-of-store $HOME links (ADR-0009 Tier B): mechanism + the set
     # every environment wants…

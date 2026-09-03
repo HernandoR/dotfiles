@@ -79,7 +79,7 @@ survive re-projection. What lands where:
 | --- | --- | --- |
 | instruction | `~/.agents/AGENTS.md` (the only source) | `~/.codex/AGENTS.md` + `~/.pi/agent/AGENTS.md` symlinks; `@~/.agents/AGENTS.md` import in the thin `~/.claude/CLAUDE.md` shell |
 | capability | `MARKETPLACES` / `PLUGINS` / `MCP_SERVERS` / `PI_PACKAGES` | `claude plugin …` + `codex plugin …` (both have marketplaces), `claude mcp add` + `codex mcp add`; pi has no MCP or marketplace CLI, so it gets three declarative files this repo owns: `~/.agents/mcp.json`, `~/.pi/agent/claude-plugins.json`, and the `packages` array in its settings |
-| preference | each agent's own config | never overwritten — Claude's and Codex's are never written from `platform/` at all; pi's is seeded leaf-by-leaf, only where a key is absent (ADR-0012) |
+| preference | each agent's own config | never overwritten — Claude's and Codex's are never written from `platform/` at all; pi's is seeded leaf-by-leaf, only where a key is absent (ADR-0012); the two provider fences, `hide-providers.json` and `models.json`, are seeded per rule / per provider the same way |
 
 Loose skills live in `~/.agents/skills` (Codex and pi read it natively;
 `~/.codex/skills` and `~/.pi/agent/skills` link to it); marketplace-managed
