@@ -297,7 +297,9 @@ selected with `--system <list>` / `DOTFILE_SYSTEM_COMPONENTS`:
 | `brew` | Homebrew — the package manager only (no formulae/casks) **(default on macOS)** | darwin |
 
 The selector takes names, alias groups and `all`; `docker` + `docker-rootless`
-together resolve to rootless. Unset means the `default` group — `brew` on macOS,
+together resolve to rootless. Neither works inside a Kubernetes pod (SageMaker
+HyperPod/Studio: no systemd, no `CAP_SYS_ADMIN`, masked `/proc`) — use
+[scripts/docker-rootless-pod/](scripts/docker-rootless-pod/README.md) there. Unset means the `default` group — `brew` on macOS,
 nothing optional on Linux — and `software-properties` still runs on Debian/Ubuntu
 unless you pass `--system none`, which opts out of everything.
 
@@ -719,6 +721,8 @@ platform/         Imperative layer (see platform/README.md)
   bootstrap.py    Orchestrator (plan, clearance, Lix, nix, HM switch); setup.py; installers/
 docs/plans/       ADRs (0007 governs)
 docs/rfc/         RFCs (0001 = migration log)
+scripts/          Standalone helpers outside the bootstrap (see each script's header/README)
+  docker-rootless-pod/  Docker in a SageMaker/EKS pod: rootless + gVisor (README explains why)
 ```
 
 ## Notes

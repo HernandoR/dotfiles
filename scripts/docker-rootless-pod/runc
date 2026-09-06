@@ -1,0 +1,35 @@
+#!/bin/sh
+# Shim: every "runc" invocation (containerd shim, BuildKit executor) runs gVisor instead.
+# runc cannot work in this pod: masked /proc paths forbid a new procfs mount in a userns.
+#   --network=host  : hostinet, so Docker's embedded DNS (127.0.0.11 iptables redirect) works
+#   --overlay2=none : write rootfs changes to disk so build/commit layers are captured
+# BuildKit quirks: it passes "run --keep" (not implemented by runsc; dropped here), and then
+# calls "delete" on a container that "run" already destroyed (treated as success here).
+# Set RUNC_WRAPPER_LOG=/path to trace invocations.
+RUNSC="/root/.local/share/docker-rootless-bin/runsc --ignore-cgroups --overlay2=none --network=host"
+LOG=${RUNC_WRAPPER_LOG:-}
+sub=""; id=""; expect_val=0
+i=0; n=$#
+while [ $i -lt $n ]; do
+  a=$1; shift; i=$((i+1))
+  if [ $expect_val = 1 ]; then expect_val=0
+  else
+    case "$a" in
+      --keep) continue ;;
+      --log|--log-format|--root|--criu|--rootless) expect_val=1 ;;   # global flags taking a separate value
+      -*) ;;
+      *) [ -z "$sub" ] && sub=$a; id=$a ;;
+    esac
+  fi
+  set -- "$@" "$a"
+done
+[ -n "$LOG" ] && echo "$(date +%T) sub=$sub id=$id :: $*" >> "$LOG"
+if [ "$sub" = "delete" ]; then
+  $RUNSC "$@"; rc=$?
+  if [ $rc -ne 0 ] && ! $RUNSC list -quiet 2>/dev/null | grep -qx "$id"; then
+    [ -n "$LOG" ] && echo "$(date +%T) delete rc=$rc but $id already gone -> 0" >> "$LOG"
+    exit 0
+  fi
+  exit $rc
+fi
+exec $RUNSC "$@"

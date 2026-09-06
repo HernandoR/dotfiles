@@ -1,0 +1,32 @@
+{
+  "data-root": "/local/hernando/docker",
+  "ipv6": true,
+  "fixed-cidr-v6": "fd00:d0c:e5:0::/64",
+  "default-address-pools": [
+    {
+      "base": "172.17.0.0/16",
+      "size": 24
+    },
+    {
+      "base": "fd00:d0c:e5:1::/64",
+      "size": 80
+    }
+  ],
+  "default-network-opts": {
+    "bridge": {
+      "com.docker.network.enable_ipv6": "true"
+    }
+  },
+  "runtimes": {
+    "runsc": {
+      "path": "/root/.local/share/docker-rootless-bin/runsc",
+      "runtimeArgs": [
+        "--ignore-cgroups",
+        "--overlay2=none",
+        "--network=host"
+      ]
+    }
+  },
+  "ip-forward": false,
+  "default-runtime": "runsc"
+}

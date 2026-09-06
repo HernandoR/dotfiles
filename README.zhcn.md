@@ -272,7 +272,9 @@ Home Manager 在非 NixOS 主机上无法拥有的那部分，在 switch 之后�
 | `brew` | Homebrew —— 仅包管理器本身（不含 formulae/casks）**（macOS 默认）** | darwin |
 
 选择器接受组件名、别名组和 `all`；同时选了 `docker` 和 `docker-rootless` 时保留
-rootless。不指定即使用 `default` 组——macOS 上是 `brew`，Linux 上没有可选组件——
+rootless。两者在 Kubernetes pod 内都不可用（SageMaker HyperPod/Studio：没有 systemd、
+没有 `CAP_SYS_ADMIN`、`/proc` 被屏蔽）——那里请用
+[scripts/docker-rootless-pod/](scripts/docker-rootless-pod/README.md)。不指定即使用 `default` 组——macOS 上是 `brew`，Linux 上没有可选组件——
 而 Debian/Ubuntu 上的 `software-properties` 仍会安装，除非用 `--system none`
 完全退出。
 
@@ -570,6 +572,8 @@ platform/         命令式层（见 platform/README.md）
   bootstrap.py    编排器（计划、清场、Lix、nix、HM 切换）；setup.py；installers/
 docs/plans/       ADR（0007 为准）
 docs/rfc/         RFC（0001 = 迁移日志）
+scripts/          bootstrap 之外的独立辅助脚本（说明见各脚本头部 / README）
+  docker-rootless-pod/  在 SageMaker/EKS pod 里跑 Docker：rootless + gVisor（README 解释原因）
 ```
 
 ## 说明
