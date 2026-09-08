@@ -246,6 +246,92 @@ in
 
       # --- shell / machine state ---
 
+      # The two machine-local shell escape hatches, sourced by home/shell.nix
+      # from .zshenv and again from .zprofile. Entries rather than plain
+      # `[ -r ] && source` targets for two reasons: the file exists from the
+      # first activation, so it is discoverable and its header can say what it
+      # is for; and the contents are per-machine by definition, which is exactly
+      # what does NOT survive a container recreation unless it lives in
+      # stateRoot. Seeded as comment-only files — sourcing one changes nothing
+      # until someone writes to it.
+      #
+      # ~/.exports is 600, not 644: per-host tokens are the main thing it is for.
+      ".exports" = {
+        kind = "file";
+        mode = "600";
+        seed = ''
+          # ~/.exports — machine-local environment variables. Yours to edit; the
+          # dotfiles repo only creates this file and keeps it out of the store.
+          #
+          # Sourced by every zsh, from .zshenv and again from .zprofile — the
+          # second pass runs after Home Manager's own exports, so overriding a
+          # variable the flake sets works here.
+          #
+          # Real content belongs in the repo when it is not machine-specific:
+          # home/shell.nix (programs.zsh.sessionVariables) for anything portable.
+          #
+          #   export SOME_API_TOKEN="…"
+          #   export MANPAGER="less -R"
+        '';
+      };
+      ".path" = {
+        kind = "file";
+        mode = "644";
+        seed = ''
+          # ~/.path — machine-local PATH additions. Yours to edit; the dotfiles
+          # repo only creates this file and keeps it out of the store.
+          #
+          # Sourced by every zsh, from .zshenv and again from .zprofile — the
+          # second pass runs after Home Manager prepends `home.sessionPath`, so
+          # what you prepend here ends up in front of it. `typeset -U path`
+          # means the two passes re-order rather than duplicate.
+          #
+          # A path every machine should have belongs in `home.sessionPath`
+          # (home/shell.nix) instead.
+          #
+          #   export PATH="$HOME/some/tool/bin:$PATH"
+        '';
+      };
+
+      # The interactive-only pair, sourced last from .zshrc (home/shell.nix). Not
+      # env vars but arbitrary shell — a proxy toggle, a host-only function — so
+      # they stay separate from the two above rather than being folded into
+      # them. Linked for the same reason: what is in them is per-machine, and a
+      # container recreation would otherwise take it. 600 like ~/.exports; a
+      # proxy URL carries credentials often enough, and ~/.extra is by
+      # convention where the things too sensitive to commit go.
+      ".extra" = {
+        kind = "file";
+        mode = "600";
+        seed = ''
+          # ~/.extra — machine-local shell code, sourced LAST by interactive zsh.
+          # Yours to edit; the dotfiles repo only creates this file.
+          #
+          # Interactive only, and after everything else in .zshrc — so this is
+          # where something has to go to beat an alias, a function or a PATH
+          # entry that this repo or Homebrew set. Non-interactive shells never
+          # read it: variables belong in ~/.exports, paths in ~/.path.
+          #
+          #   alias deploy="…"
+          #   unalias ls
+        '';
+      };
+      ".proxy" = {
+        kind = "file";
+        mode = "600";
+        seed = ''
+          # ~/.proxy — machine-local proxy settings, sourced by interactive zsh
+          # just before ~/.extra. Yours to edit; the dotfiles repo only creates
+          # this file.
+          #
+          # Split out from ~/.extra only because turning a proxy on and off is
+          # the one escape-hatch edit frequent enough to want its own file.
+          #
+          #   export {http,https,all}_proxy="http://127.0.0.1:7890"
+          #   export no_proxy="localhost,127.0.0.1,::1"
+        '';
+      };
+
       # SSH material is per-host secret data. SSH checks permissions on the link
       # TARGET, so this is safe only while the target stays 700 and its keys 600
       # (ADR-0006 rationale, carried forward through ADR-0008).

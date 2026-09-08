@@ -507,6 +507,31 @@ mise which node                # 实际解析到哪个 shim/二进制
 host，并把 post-HM 的步骤也重跑一遍（`./bootstrap.sh --dry-run --verbose`，然后
 `./bootstrap.sh --yes`）。
 
+### 机器本地的逃生口
+
+只对*这台机器*成立的东西——某台主机专用的 token、装在 nix 之外的工具路径——不该进
+仓库。下面这些文件就是为此留在 store 之外的，仓库都不跟踪它们：
+
+| 文件 | 由谁 source | 用来放什么 |
+| --- | --- | --- |
+| `~/.path` | 每个 zsh：`.zshenv`，`.zprofile` 里再来一次 | `PATH` 追加。你 prepend 的目录会排在 `home.sessionPath` *前面* |
+| `~/.exports` | 每个 zsh：`.zshenv`，`.zprofile` 里再来一次 | 环境变量，包括覆盖 flake 已经设好的那些 |
+| `~/.config/env.d/*` | 每个 zsh：`.zshenv` | 同上，适合「一个关注点一个文件」而不是一个长文件 |
+| `~/.proxy`、`~/.extra` | 只有交互式 zsh：`.zshrc`，最后 | 任意 shell 代码——函数、别名，任何需要真 shell 的东西 |
+
+这四个文件都会在第一次 activation 时创建，带一段自我说明的注释头；并且和
+`~/.ssh`、`~/.zsh_history` 一样，它们是指向 `envLinks.stateRoot` 的 ADR-0009
+Tier B 链接，所以容器重建后内容还在。`~/.config/env.d/` 是例外：存在就 source，
+没有谁会去创建它。
+
+source 两次是故意的。Home Manager 把自己的环境拆在 `.zshenv` 和 `.zprofile` 两
+处，而 login shell 会跳过 `.zshenv` 那一半——只在 `.zshenv` 里 source 一次的话，
+恰好会在终端打开的那种 shell 里被悄悄覆盖掉。`typeset -U path` 则保证第二次
+source 不会把 `PATH` 条目重复一遍：重复 prepend 只会把它挪到最前面。
+
+经验法则：如果换台新机器它也成立，那它属于 `home/shell.nix`
+（`sessionVariables` / `sessionPath`），应该提交进仓库。
+
 ## Coding agents
 
 三个 agent——**Claude Code**、**Codex CLI** 和 **pi**——都由仓库里的同一份清单

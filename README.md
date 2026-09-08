@@ -548,6 +548,34 @@ Verify a package landed with `home-manager packages | grep hyperfine`. Or let th
 bootstrap drive it — it detects the host and re-runs the post-HM steps too
 (`./bootstrap.sh --dry-run --verbose`, then `./bootstrap.sh --yes`).
 
+### Machine-local escape hatches
+
+Anything true of *this machine only* — a per-host token, a path to a tool
+installed outside nix — does not belong in the repo. These files stay out of the
+store for it, and none of them is tracked here:
+
+| File | Sourced by | Use it for |
+| --- | --- | --- |
+| `~/.path` | every zsh: `.zshenv`, then again `.zprofile` | `PATH` additions. What you prepend lands *in front of* `home.sessionPath` |
+| `~/.exports` | every zsh: `.zshenv`, then again `.zprofile` | environment variables, including overrides of ones the flake sets |
+| `~/.config/env.d/*` | every zsh: `.zshenv` | the same, when one file per concern beats one long file |
+| `~/.proxy`, `~/.extra` | interactive zsh only: `.zshrc`, last | arbitrary shell — functions, aliases, anything needing a real shell |
+
+All four are created on the first activation, seeded with a header that explains
+them, and — like `~/.ssh` and `~/.zsh_history` — they are ADR-0009 Tier B links
+into `envLinks.stateRoot`, so what you put in them survives a container
+recreation. `~/.config/env.d/` is the exception: it is sourced if present, and
+nothing creates it.
+
+The two passes are deliberate. Home Manager splits its own environment across
+`.zshenv` and `.zprofile`, and a login shell skips the `.zshenv` half — so a
+single pass there would be silently overridden in exactly the shell a terminal
+opens. `typeset -U path` is what keeps the second pass from duplicating `PATH`
+entries; re-prepending an entry moves it to the front instead.
+
+Rule of thumb: if it would be true on a new machine too, it belongs in
+`home/shell.nix` (`sessionVariables` / `sessionPath`), committed.
+
 ## Coding agents
 
 Three agents — **Claude Code**, **Codex CLI** and **pi** — are provisioned from

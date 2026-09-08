@@ -1,4 +1,32 @@
 { pkgs, lib, config, ... }:
+let
+  # pnpm's home: where `pnpm add --global` puts bins (<PNPM_HOME>/bin) and where
+  # its content-addressable store lives (<PNPM_HOME>/store). Each platform's own
+  # pnpm default, so an already-populated store keeps being found.
+  pnpmHome =
+    if pkgs.stdenv.isDarwin then
+      "${config.home.homeDirectory}/Library/pnpm"
+    else
+      "${config.home.homeDirectory}/.local/share/pnpm";
+
+  # The two machine-local escape hatches (home/env-links.nix creates and persists
+  # them; their contents are the user's, never this repo's). Sourced TWICE, from
+  # .zshenv and again from .zprofile, because Home Manager splits its own env
+  # across the same two files: a login shell skips the .zshenv half and gets its
+  # vars — including the `home.sessionPath` PATH prepend — from .zprofile
+  # instead. Sourced only from .zshenv, an override here would be clobbered in
+  # exactly the shell a terminal opens. The second pass is what makes ~/.exports
+  # beat a variable the flake sets and ~/.path land in front of sessionPath.
+  #
+  # `typeset -U path PATH` (set in envExtra, before the first pass) is what keeps
+  # the double sourcing honest: re-prepending an entry that is already on PATH
+  # moves it to the front instead of duplicating it.
+  localEnv = ''
+    for f in "$HOME/.path" "$HOME/.exports"; do
+      [ -r "$f" ] && . "$f"
+    done
+  '';
+in
 {
   programs.fzf = {
     enable = true;
@@ -99,7 +127,15 @@
           [ -r "$f" ] && . "$f"
         done
       fi
+      # Keep PATH free of duplicates, so the second pass over ~/.path in
+      # .zprofile re-orders rather than repeats. Ties the PATH string to zsh's
+      # $path array, which is already the case; -U is the only change.
+      typeset -U path PATH
+      ${localEnv}
     '';
+
+    # Second pass, after Home Manager's own login-shell env (see `localEnv`).
+    profileExtra = localEnv;
 
     initContent = lib.mkMerge [
       # Before compinit: put zsh-completions on fpath.
@@ -130,7 +166,9 @@
         # iTerm2 shell integration (macOS), if installed.
         [ -e "$HOME/.iterm2_shell_integration.zsh" ] && source "$HOME/.iterm2_shell_integration.zsh"
 
-        # Machine-local, un-managed escape hatches.
+        # Machine-local escape hatches — last in .zshrc, so they can beat
+        # anything above them. home/env-links.nix creates and persists both; the
+        # `-r` guard stays for a $HOME activated before those entries existed.
         for f in "$HOME/.proxy" "$HOME/.extra"; do
           [ -r "$f" ] && . "$f"
         done
@@ -158,8 +196,26 @@
     "${config.home.homeDirectory}/.local/bin"
     "${config.home.homeDirectory}/.nix-profile/bin" # HM-installed CLI tools
     "/nix/var/nix/profiles/default/bin" # `nix` on a multi-user install
+    "${pnpmHome}/bin" # `pnpm add --global` (see PNPM_HOME below)
     "${config.home.homeDirectory}/.pixi/bin"
     "${config.home.homeDirectory}/miniconda3/bin"
     "/usr/local/cuda/bin"
   ];
+
+  # pnpm refuses `pnpm add --global` unless PNPM_HOME is set AND its bin dir is
+  # on PATH — otherwise: "The configured global bin directory is not in PATH.
+  # Run `pnpm setup`". `pnpm setup` cannot help on this machine: all it does is
+  # export these two into ~/.zshrc, which Home Manager owns as a read-only store
+  # symlink. So declare what it would have written (the sessionPath entry above
+  # is the other half).
+  #
+  # `home.sessionVariables`, not `programs.zsh.sessionVariables`: pnpm is just as
+  # likely to run from a non-interactive shell (a script, an editor task) as from
+  # a login zsh, and a bare `pnpm add -g` there must not fail.
+  #
+  # pnpm itself comes from nixpkgs (home/packages.nix). mise's npm backend also
+  # shells out to pnpm (home/mise.nix) but passes its own --global-dir /
+  # --global-bin-dir per tool, so its installs are unaffected by this — this is
+  # only about globals a human installs by hand.
+  home.sessionVariables.PNPM_HOME = pnpmHome;
 }
