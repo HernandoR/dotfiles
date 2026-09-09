@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Signer wrapper for git's gpg.ssh.program. For literal keys Git always passes
+# -U ("key lives in the agent"), which fails on hosts that only have plain key
+# files. Try Git's exact invocation first; if agent signing fails and the
+# literal key matches an on-disk pair, re-sign with that pair instead.
+# Managed by chezmoi (home/dot_local/bin/).
+#
+# Git invokes: <program> -Y sign -n git -f <keyfile> [-U] <bufferfile>
+err=$(ssh-keygen "$@" 2>&1) && exit 0
+
+keyfile=
+prev=
+for a in "$@"; do
+  [ "$prev" = "-f" ] && keyfile=$a
+  prev=$a
+done
+
+if [ -n "$keyfile" ] && [ -r "$keyfile" ]; then
+  want=$(awk '{print $1, $2}' "$keyfile" 2>/dev/null)
+  for pub in "$HOME"/.ssh/id_*.pub; do
+    [ -r "$pub" ] || continue
+    if [ -n "$want" ] && [ "$want" = "$(awk '{print $1, $2}' "$pub")" ]; then
+      # Signing needs the private half; the .pub only served for matching.
+      priv=${pub%.pub}
+      [ -r "$priv" ] || continue
+      args=()
+      skip_next=0
+      for a in "$@"; do
+        if [ "$skip_next" = 1 ]; then
+          skip_next=0
+          args+=("$priv")
+          continue
+        fi
+        case "$a" in
+          -U) ;;
+          -f)
+            args+=(-f)
+            skip_next=1
+            ;;
+          *) args+=("$a") ;;
+        esac
+      done
+      exec ssh-keygen "${args[@]}"
+    fi
+  done
+fi
+
+printf '%s\n' "$err" >&2
+exit 1

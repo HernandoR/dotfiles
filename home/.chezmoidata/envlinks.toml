@@ -1,0 +1,194 @@
+# The $HOME env-link inventory (ADR-0013, carrying ADR-0009 Tier B forward).
+#
+# Each entry links a $HOME name to a *writable* target under the machine's
+# `stateRoot` (chezmoi data, set at `chezmoi init`) — a persistent volume that
+# outlives the machine, because $HOME does not survive container recreation.
+# scripts/env_links.py reads this file and: seeds a missing target (kind/mode/
+# seed apply on creation ONLY, never to a target that exists), repairs a
+# regular file left where a link belongs, then places the symlink. chezmoi
+# itself never touches these paths (they are not source entries), so `chezmoi
+# apply` can never replace one of them with a regular file.
+#
+# Two rules when adding an entry:
+#   1. Say WHY it is mutable — the "why" keeps the inventory auditable.
+#   2. `envs` restricts an entry to named environments (the old prod/* deltas);
+#      omit it for every environment.
+
+# --- agents (ADR-0011: all three rewrite their own config at runtime) ---------
+
+# Cross-agent instruction + loose-skills root (ADR-0011 plane 1), and since
+# ADR-0012 the shared MCP source and memory store too:
+#   AGENTS.md  skills/  mcp.json  memory/  memory-archive/
+# Written by the owner and the agents; being on the shared state volume is what
+# makes the memory plane cross-machine with no service and no credential.
+[envlinks.entries.".agents"]
+kind = "dir"
+mode = "755"
+
+# Claude Code: ONE whole-dir link so config and state travel together and
+# /model + /config persistence keeps working.
+[envlinks.entries.".claude"]
+kind = "dir"
+mode = "755"
+
+# Claude Code runtime state (onboarding, MCP auth cache) — mutable JSON holding
+# OAuth material, hence 600. Seeded with `{}`: Claude reads this at startup and
+# an EMPTY file is a parse error to it, which on a fresh machine takes its own
+# installer down (found on a clean devpod bootstrap, 2026-08-05).
+[envlinks.entries.".claude.json"]
+kind = "file"
+mode = "600"
+seed = "{}"
+
+# Codex CLI: whole-dir — config.toml is rewritten by /model, and the dir holds
+# auth.json, history and sessions. The AGENTS.md and skills links into ~/.agents
+# live *inside* it, so they are part of the persistent volume.
+[envlinks.entries.".codex"]
+kind = "dir"
+mode = "700"
+
+# pi: whole-dir (ADR-0012). settings.json is rewritten by /settings, /model,
+# /theme and `pi install`; the dir also holds auth.json, trust.json, sessions and
+# the npm/ + git/ trees extensions install into. 700 — OAuth material.
+[envlinks.entries.".pi"]
+kind = "dir"
+mode = "700"
+
+# pi-lens keeps its global config OUTSIDE ~/.pi, so it needs its own entry or it
+# dies with every container recreation.
+[envlinks.entries.".pi-lens"]
+kind = "dir"
+mode = "700"
+
+# --- shell / machine state ---------------------------------------------------
+
+# Machine-local escape hatches, sourced by zsh (home/private_dot_config/zsh/env.zsh.tmpl
+# and dot_zshrc.tmpl). Persisted because their contents are per-machine by
+# definition — exactly what does NOT survive a container recreation otherwise.
+# Seeded as comment-only files so sourcing one changes nothing until written.
+[envlinks.entries.".exports"]
+kind = "file"
+mode = "600"
+seed = """
+# ~/.exports — machine-local environment variables. Yours to edit; the
+# dotfiles repo only creates this file and keeps it out of the repo.
+#
+# Sourced by every zsh, from .zshenv and again from .zprofile — the second
+# pass runs after the repo's own exports, so overriding one works here.
+#
+# Real content belongs in the repo when it is not machine-specific:
+# home/private_dot_config/zsh/env.zsh.tmpl for anything portable.
+#
+#   export SOME_API_TOKEN="…"
+#   export MANPAGER="less -R"
+"""
+
+[envlinks.entries.".path"]
+kind = "file"
+mode = "644"
+seed = """
+# ~/.path — machine-local PATH additions. Yours to edit; the dotfiles repo
+# only creates this file and keeps it out of the repo.
+#
+# Sourced by every zsh, from .zshenv and again from .zprofile — the second
+# pass runs after the repo prepends its own dirs, so what you prepend here
+# ends up in front of them. `typeset -U path` means the two passes re-order
+# rather than duplicate.
+#
+# A path every machine should have belongs in home/private_dot_config/zsh/env.zsh.tmpl.
+#
+#   export PATH="$HOME/some/tool/bin:$PATH"
+"""
+
+[envlinks.entries.".extra"]
+kind = "file"
+mode = "600"
+seed = """
+# ~/.extra — machine-local shell code, sourced LAST by interactive zsh.
+# Yours to edit; the dotfiles repo only creates this file.
+#
+# Interactive only, and after everything else in .zshrc — so this is where
+# something has to go to beat an alias, a function or a PATH entry that this
+# repo or Homebrew set. Non-interactive shells never read it: variables
+# belong in ~/.exports, paths in ~/.path.
+#
+#   alias deploy="…"
+#   unalias ls
+"""
+
+[envlinks.entries.".proxy"]
+kind = "file"
+mode = "600"
+seed = """
+# ~/.proxy — machine-local proxy settings, sourced by interactive zsh just
+# before ~/.extra. Yours to edit; the dotfiles repo only creates this file.
+#
+#   export {http,https,all}_proxy="http://127.0.0.1:7890"
+#   export no_proxy="localhost,127.0.0.1,::1"
+"""
+
+# SSH material is per-host secret data. SSH checks permissions on the link
+# TARGET, so this is safe only while the target stays 700 and its keys 600.
+# env_links.py copies files from a real ~/.ssh into the target before linking
+# (never overwriting what the target already has).
+[envlinks.entries.".ssh"]
+kind = "dir"
+mode = "700"
+
+# Regenerable completion cache; persisted purely for zsh startup speed.
+[envlinks.entries.".zcompdump"]
+kind = "file"
+mode = "644"
+
+# Shell history must accumulate across container recreations.
+[envlinks.entries.".zsh_history"]
+kind = "file"
+mode = "600"
+
+# mise's global TOOL list: mise rewrites this file in place (`mise use -g`), so
+# it cannot be chezmoi-managed, and the versions it then holds must survive
+# container recreation. `seed_from = "mise"` renders the seed from
+# .chezmoidata/mise.toml — a fresh machine starts from the reviewed list, an
+# existing one keeps mise's own file.
+[envlinks.entries.".config/mise/config.toml"]
+kind = "file"
+mode = "644"
+seed_from = "mise"
+
+# --- environment-specific (the former prod/* branch deltas) -------------------
+
+# jcc: intranet-only tool. Its config holds a bearer token and an internal
+# endpoint, so it can neither be in the repo nor on shared history.
+[envlinks.entries.".jcc.yaml"]
+kind = "file"
+mode = "600"
+envs = ["mewtant", "ec2-wo-fsx"]
+
+# lark-cli: intranet Lark tooling — auth tokens, cache and logs, all mutable.
+[envlinks.entries.".lark-cli"]
+kind = "dir"
+mode = "700"
+envs = ["mewtant", "ec2-wo-fsx"]
+
+# Remote-IDE server trees: these hosts are only reached over SSH from a local
+# editor, so every container recreation re-downloads the server otherwise.
+# VS Code Remote: ~760MB; 700 because data/ holds the connection token.
+[envlinks.entries.".vscode-server"]
+kind = "dir"
+mode = "700"
+envs = ["mewtant", "ec2-wo-fsx"]
+
+# Zed Remote — note the UNDERSCORE: Zed's own path is ~/.zed_server. Only the
+# remote-server binary, no credentials, hence 755.
+[envlinks.entries.".zed_server"]
+kind = "dir"
+mode = "755"
+envs = ["mewtant", "ec2-wo-fsx"]
+
+# --- plain links to targets OUTSIDE stateRoot (never seeded) -------------------
+# The jcc binary is distributed on /fsx, not through a package manager, so its
+# target is deliberately not seeded: an empty file would be worse than a
+# dangling link, which at least fails loudly when the binary is missing.
+[envlinks.links.".local/bin/jcc"]
+target = "/fsx/hernando/local/bin/jcc"
+envs = ["mewtant", "ec2-wo-fsx"]

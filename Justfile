@@ -1,198 +1,92 @@
-# dotfiles — the repeatable half of the Home Manager workflow.
+# dotfiles — the repeatable half of the chezmoi + zoi + mise workflow (ADR-0013).
 #
 # Every recipe here is a command the README already documents; the Justfile
-# exists so it is one name instead of a remembered incantation. `just` itself
-# comes from mise (home/mise.nix).
-#
-# The flake host is resolved the way platform/bootstrap.py resolves it. Override
-# it per run — `just host=dotfiles-debian switch` — or via DF_HOST in the
-# environment.
+# exists so it is one name instead of a remembered incantation. `just` itself is
+# a mise tool (home/.chezmoidata/mise.toml).
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-# Host selection: ask the bootstrap itself (select_host in platform/bootstrap.py
-# — named hosts assume the owner; any other user, including root, gets the
-# impure `generic` fallback), so the two can never drift.
-host := env('DF_HOST', `python3 platform/bootstrap.py --print-host`)
-
-# `generic` reads $USER/$HOME at eval time (flake.nix:55), so it only
-# materializes under --impure.
-impure := if host == "generic" { "--impure" } else { "" }
+repo := justfile_directory()
 
 # List every recipe.
 default:
     @just --list --unsorted
 
-# Print the resolved flake host and how it will be built.
-show-host:
-    @echo '{{ host }} {{ if impure == "--impure" { "(impure)" } else { "(pure)" } }}'
+# Apply the source tree to $HOME: files, zsh plugins, then the run_ scripts
+# (env links before; packages / fonts / mise / setup after, each only when its
+# inputs changed). A bare apply on a terminal gets setup.py's own clearance.
+apply *ARGS:
+    chezmoi --source '{{ repo }}' apply {{ ARGS }}
 
-# Build the activation package and print its store path. Changes nothing in $HOME.
-build:
-    @nix build --no-link --print-out-paths {{ impure }} '.#homeConfigurations."{{ host }}".activationPackage'
-
-# Build, then apply. Same path the bootstrap takes: activation comes from the
-# *locked* home-manager (no `home-manager/master` fetch) and works before the HM
-# CLI is on PATH. A real file where a symlink belongs is renamed to *.backup.
-[doc('Build the activation package and activate it (-b backup).')]
-switch:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    out="$(just host='{{ host }}' build)"
-    HOME_MANAGER_BACKUP_EXT=backup "$out"/activate
-    echo "activated: $out — run 'exec zsh -l' to pick up the new PATH/env"
-
-# Start over from the repo: move every $HOME path this generation would own into
-# one timestamped backup, then activate onto the cleared ground.
-#
-# `switch` renames a file in the way to <name>.backup, which scatters backups
-# through $HOME and — worse — collides with the .backup left by a previous cycle,
-# aborting the whole activation (ADR-0009 update log). Moving the paths away
-# first means HM finds nothing in the way at all, so nothing is renamed and
-# nothing can collide.
-#
-# Recoverable by construction: everything is MOVED, never deleted, into
-# ~/dotfiles_backup/<stamp>/ under its original $HOME-relative name. Note it does
-# not sweep pre-existing *.backup files — those are a previous cycle's business.
-#
-# An env-linked path (~/.claude, ~/.ssh, …) is a symlink, so moving it takes the
-# link and leaves the data in envLinks.stateRoot untouched; the activation just
-# relinks it.
-[doc('Back up every managed $HOME path to ~/dotfiles_backup/<stamp>/, then activate.')]
-reset-hard:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    out="$(just host='{{ host }}' build)"
-    dest="$HOME/dotfiles_backup/$(date +%Y_%m_%d_%H%M%S)"
-
-    # What HM will own: every leaf of the generation's home-files tree. Leaves are
-    # files and symlinks — a whole-dir env link is itself a symlink, so this never
-    # descends into one. `-print` + stripping "./" rather than GNU's `-printf`,
-    # which BSD/macOS find does not have.
-    present=()
-    while IFS= read -r p; do
-      rel="${p#./}"
-      if [ -e "$HOME/$rel" ] || [ -L "$HOME/$rel" ]; then present+=("$rel"); fi
-    done < <(cd "$out/home-files" && find . -mindepth 1 \( -type f -o -type l \) -print | sort)
-
-    # ADR-0009 recorded this hazard for a first bootstrap; this recipe is the other
-    # way to reach it. If ~/.ssh is still a REAL dir holding authorized_keys while
-    # the persistent target has none, moving it aside and linking to the empty
-    # target severs inbound SSH to the machine you are provisioning.
-    state="$(nix eval --raw {{ impure }} '.#homeConfigurations."{{ host }}".config.envLinks.stateRoot' 2>/dev/null || true)"
-    if [ -d "$HOME/.ssh" ] && [ ! -L "$HOME/.ssh" ] && [ -e "$HOME/.ssh/authorized_keys" ] \
-       && [ -n "$state" ] && [ ! -e "$state/.ssh/authorized_keys" ]; then
-      echo "refusing: ~/.ssh has authorized_keys but $state/.ssh does not." >&2
-      echo "seed the target first — mkdir -p '$state/.ssh' && cp -a ~/.ssh/. '$state/.ssh/' — or" >&2
-      echo "run this from a session that does not depend on SSH to this host." >&2
-      exit 1
-    fi
-
-    # One plan, one clearance (ADR-0010) — this is the only recipe that moves your
-    # files, so it says exactly which ones before touching any.
-    echo "==> reset-hard — nothing has moved yet"
-    echo "  host      {{ host }}"
-    echo "  activate  $out"
-    echo "  backup    $dest"
-    echo
-    if [ "${#present[@]}" -eq 0 ]; then
-      echo "  nothing to move — no managed path exists in \$HOME yet"
-    else
-      echo "  will move aside (${#present[@]}, renamed under the backup dir, never deleted):"
-      printf '    - ~/%s\n' "${present[@]}"
-    fi
-    echo
-    # Deliberately NOT bootstrap.sh's "no terminal -> proceed" rule. This is the
-    # one recipe that moves your files, and a non-interactive caller (script, CI,
-    # an agent) has no way to answer — so silence must mean stop, not yes. Say
-    # DF_ASSUME_YES=1 to mean it.
-    if [ "${DF_ASSUME_YES:-}" != "1" ]; then
-      if [ ! -t 0 ]; then
-        echo "refusing: not a terminal and DF_ASSUME_YES is unset — re-run with DF_ASSUME_YES=1 to proceed" >&2
-        exit 1
-      fi
-      read -r -p "? Move these and activate? [y/N] " ans
-      case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "aborted — nothing moved"; exit 1 ;; esac
-    fi
-
-    for rel in ${present[@]+"${present[@]}"}; do
-      mkdir -p "$dest/$(dirname "$rel")"
-      mv "$HOME/$rel" "$dest/$rel"
-    done
-    HOME_MANAGER_BACKUP_EXT=backup "$out"/activate
-    echo "activated: $out"
-    echo "previous state: $dest — run 'exec zsh -l' to pick up the new PATH/env"
-
-# What would change: build, then diff the closure against the live generation.
+# What would change: chezmoi's diff of every managed file against $HOME.
 diff:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    out="$(just host='{{ host }}' build)"
-    for p in "$HOME/.local/state/nix/profiles/home-manager" \
-             "/nix/var/nix/profiles/per-user/$USER/home-manager"; do
-      if [ -e "$p" ]; then exec nix store diff-closures "$p" "$out"; fi
-    done
-    echo "no live home-manager profile to diff against; built: $out" >&2
+    chezmoi --source '{{ repo }}' diff
 
-# Evaluate every named host. Pure, so the impure `generic` host is invisible here.
+# One line per managed path that differs from the source.
+status:
+    chezmoi --source '{{ repo }}' status
+
+# Every path chezmoi manages, plus the env links the scripts own.
+managed:
+    @chezmoi --source '{{ repo }}' managed
+    @echo "--- env links (scripts/env_links.py):"
+    @uv run --script scripts/env_links.py --plan | cut -f2 || true
+
+# Re-answer the machine questions (env, state root, network, agents, system).
+# Stored answers are the defaults; DOTFILE_* env vars override without asking.
+init:
+    chezmoi --source '{{ repo }}' init
+
+# Health of the three tools and of the source tree.
+doctor:
+    chezmoi --source '{{ repo }}' doctor || true
+    zoi doctor || true
+    mise doctor || true
+
+# The repo's verification: data files, scripts, a full render per environment.
 check:
-    nix flake check
+    uv run --script scripts/check.py
 
-# Update flake inputs. `just update nixpkgs` for one; no argument updates all.
-# Commit the changed flake.lock with the change that needed it.
-[doc('Update flake inputs — all of them, or just the ones named.')]
-update *INPUTS:
-    nix flake update {{ INPUTS }}
+# Seed / repair / place the mutable $HOME links (normally run by apply).
+env-links *ARGS:
+    uv run --script scripts/env_links.py {{ ARGS }}
 
-# Update inputs, apply, and move mise tools within their declared ranges.
-upgrade: update switch
-    mise up
+# Install whatever packages.toml declares and is missing (zoi first, then the
+# native manager, then mise) — normally run by apply when the list changes.
+packages *ARGS:
+    uv run --script scripts/packages.py {{ ARGS }}
 
 # Install whatever ~/.config/mise/config.toml declares but has not materialized.
 #
-# NOT how a tool added to home/mise.nix reaches this machine: that file is only
-# the seed for config.toml, which mise owns once it exists (ADR-0009). Add it
-# here with `mise use -g <tool>@<version>` — which installs it too — and this
-# recipe stays what it says, a catch-up for anything declared-but-missing.
+# NOT how a tool added to .chezmoidata/mise.toml reaches this machine: that file
+# is only the seed for config.toml, which mise owns once it exists. Add it here
+# with `mise use -g <tool>@<version>` — which installs it too.
 runtimes:
-    mise install
+    mise install -y
 
-# Home Manager release notes for the pending configuration.
-news:
-    home-manager news --flake '.#{{ host }}' {{ impure }}
+# Login shell, mise runtimes, agent toolchain, system components (scripts/setup.py).
+setup *ARGS:
+    uv run --script scripts/setup.py {{ ARGS }}
 
-# Packages the current generation put on PATH. `just packages ripgrep` to filter.
-packages *PATTERN:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z '{{ PATTERN }}' ]; then exec home-manager packages; fi
-    home-manager packages | grep -i -- '{{ PATTERN }}' \
-      || { echo "nothing matching '{{ PATTERN }}' in the current generation" >&2; exit 1; }
+# What the agents have, and who gets what (the ADR-0011 manifest).
+agents:
+    uv run --script scripts/agents.py
 
-# List generations, newest first.
-generations:
-    home-manager generations
+# Pull the repo, re-apply, and move packages / runtimes within their ranges.
+update:
+    git -C '{{ repo }}' pull --ff-only
+    just apply
+    zoi update --all --yes || true
+    mise up -y
 
-# Step back exactly one generation. No rebuild, no flake needed.
-rollback:
-    home-manager switch --rollback
-
-# Drop generations older than DAYS (the current one is always kept).
-expire DAYS='30':
-    home-manager expire-generations '-{{ DAYS }} days'
-
-# Reclaim store space from expired generations.
-gc:
-    nix-collect-garbage -d
-
-# Open a repl with this flake's attributes in scope (homeConfigurations, …).
-repl:
-    nix repl {{ impure }} .
-
-# Preview the full bootstrap — prints every step, runs nothing.
+# Preview the full bootstrap — prints the plan and every step, runs nothing.
 plan:
     ./bootstrap.sh --dry-run --verbose
 
-# Run the bootstrap. Needed only when the imperative half (platform/) changed.
+# Run the bootstrap (tools + init + apply). Idempotent; re-run after big changes.
 bootstrap *ARGS:
     ./bootstrap.sh {{ ARGS }}
+
+# Edit a managed file in the source tree (chezmoi resolves the source path).
+edit TARGET:
+    chezmoi --source '{{ repo }}' edit '{{ TARGET }}'

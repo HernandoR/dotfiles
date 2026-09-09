@@ -1,0 +1,11 @@
+# direnv: enter a project's environment on `cd`. New `.envrc` files are inert
+# until `direnv allow`. mise is activated globally in zsh, so direnv's `use mise`
+# is deliberately not used — it would be a second, racing copy of the same
+# activation.
+[global]
+# A first devShell build can take minutes; the default 5s warn_timeout turns
+# that into a "taking a while" warning on every cold entry.
+warn_timeout = "1m"
+# Suppress the "export +AR +AS +CC ..." wall a big environment produces on every
+# entry; the "direnv: loading" line still shows what happened.
+hide_env_diff = true

@@ -1,0 +1,16 @@
+# mise SETTINGS — policy about HOW mise installs; nobody changes this per
+# machine with a `mise` subcommand, so it stays declarative (chezmoi-managed and
+# re-applied on every `chezmoi apply`). The TOOLS half is
+# ~/.config/mise/config.toml, seeded once from home/.chezmoidata/mise.toml and
+# then mise's own.
+#
+# It lives in conf.d rather than config.toml because conf.d always OVERRIDES
+# config.toml (mise says so itself), which is what settings want and exactly
+# what tools do not. Named `zz-` on purpose: within conf.d the lexically FIRST
+# file wins, so any host-local conf.d file a user drops in still beats this one.
+[settings]
+experimental = true
+# Install npm-backed tools with pnpm instead of npm. mise does NOT auto-install
+# the chosen package manager — it must already be on PATH — so pnpm comes from
+# .chezmoidata/packages.toml, which is applied before `mise install` runs.
+npm.package_manager = "pnpm"

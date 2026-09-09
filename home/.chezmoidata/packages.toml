@@ -1,0 +1,336 @@
+# The user-level CLI toolset (ADR-0013). Installed by scripts/packages.py, which
+# a chezmoi run_onchange script runs whenever this file (or the script) changes;
+# `just packages` runs it by hand.
+#
+# zoi is the front door: every entry is handed to `zoi install --yes` as
+# `<manager>:<name>` for the native manager of this OS (brew on macOS, apt/dnf/
+# pacman/apk/zypper on Linux), or as a plain name when `zoi = "..."` names a
+# package in a zoi registry. Because zoi's native passthrough is best-effort
+# (measured 2026-09-09: `zoi install brew:cowsay` reported success and installed
+# nothing), packages.py verifies `bin` afterwards and falls back to the native
+# manager directly, then to `mise use -g <mise>` when the entry names a mise
+# tool — so a tool missing from apt (bottom, jj, difft, ...) still arrives.
+#
+# Keys per entry:
+#   name        display name
+#   bin         the executable to probe afterwards (default: name)
+#   zoi         a zoi registry package id, when one exists
+#   brew/apt/dnf/pacman/apk/zypper   the native names ("" = not packaged there)
+#   cask        macOS: install as a brew cask instead of a formula
+#   mise        fallback mise tool spec (`mise use -g <spec>@latest`)
+#   alias       { <bin> = "<other bin>" }: symlink ~/.local/bin/<bin> to a
+#               differently named native binary (Debian's fdfind -> fd)
+#   only        "linux" | "darwin" — restrict to one OS
+
+# --- GNU userland: `ls --color=auto`, `sed -i`, `grep --color` behave the same
+# on macOS as on Linux. macOS gets them from brew; env.zsh.tmpl puts the gnubin
+# dirs on PATH there. Linux ships them.
+[[packages]]
+name = "coreutils"
+bin = "ls"
+brew = "coreutils"
+apt = "coreutils"
+dnf = "coreutils"
+pacman = "coreutils"
+apk = "coreutils"
+zypper = "coreutils"
+
+[[packages]]
+name = "findutils"
+bin = "find"
+brew = "findutils"
+apt = "findutils"
+dnf = "findutils"
+pacman = "findutils"
+apk = "findutils"
+zypper = "findutils"
+
+[[packages]]
+name = "gnu-sed"
+bin = "sed"
+brew = "gnu-sed"
+apt = "sed"
+dnf = "sed"
+pacman = "sed"
+apk = "sed"
+zypper = "sed"
+
+[[packages]]
+name = "gnu-grep"
+bin = "grep"
+brew = "grep"
+apt = "grep"
+dnf = "grep"
+pacman = "grep"
+apk = "grep"
+zypper = "grep"
+
+# --- the shell and its prompt --------------------------------------------------
+[[packages]]
+name = "zsh"
+brew = "zsh"
+apt = "zsh"
+dnf = "zsh"
+pacman = "zsh"
+apk = "zsh"
+zypper = "zsh"
+
+[[packages]]
+name = "starship"
+brew = "starship"
+apt = ""
+dnf = ""
+pacman = "starship"
+apk = "starship"
+zypper = ""
+mise = "starship"
+
+[[packages]]
+name = "zoxide"
+brew = "zoxide"
+apt = "zoxide"
+dnf = "zoxide"
+pacman = "zoxide"
+apk = "zoxide"
+zypper = "zoxide"
+mise = "zoxide"
+
+[[packages]]
+name = "fzf"
+brew = "fzf"
+apt = "fzf"
+dnf = "fzf"
+pacman = "fzf"
+apk = "fzf"
+zypper = "fzf"
+mise = "fzf"
+
+[[packages]]
+name = "direnv"
+brew = "direnv"
+apt = "direnv"
+dnf = "direnv"
+pacman = "direnv"
+apk = "direnv"
+zypper = "direnv"
+mise = "direnv"
+
+[[packages]]
+name = "tmux"
+brew = "tmux"
+apt = "tmux"
+dnf = "tmux"
+pacman = "tmux"
+apk = "tmux"
+zypper = "tmux"
+
+[[packages]]
+name = "zellij"
+brew = "zellij"
+apt = ""
+dnf = ""
+pacman = "zellij"
+apk = "zellij"
+zypper = ""
+mise = "zellij"
+
+# eza: used by the fzf-tab / zoxide previews (falls back to ls when absent).
+[[packages]]
+name = "eza"
+brew = "eza"
+apt = "eza"
+dnf = "eza"
+pacman = "eza"
+apk = "eza"
+zypper = "eza"
+mise = "eza"
+
+# --- git and its helpers -------------------------------------------------------
+[[packages]]
+name = "git"
+brew = "git"
+apt = "git"
+dnf = "git"
+pacman = "git"
+apk = "git"
+zypper = "git"
+
+[[packages]]
+name = "git-lfs"
+brew = "git-lfs"
+apt = "git-lfs"
+dnf = "git-lfs"
+pacman = "git-lfs"
+apk = "git-lfs"
+zypper = "git-lfs"
+
+[[packages]]
+name = "gh"
+brew = "gh"
+apt = "gh"
+dnf = "gh"
+pacman = "github-cli"
+apk = "github-cli"
+zypper = "gh"
+mise = "gh"
+
+[[packages]]
+name = "jujutsu"
+bin = "jj"
+brew = "jj"
+apt = ""
+dnf = ""
+pacman = "jujutsu"
+apk = ""
+zypper = ""
+mise = "jj"
+
+# difftastic provides `difft`, the git external differ (~/.config/git/config).
+[[packages]]
+name = "difftastic"
+bin = "difft"
+brew = "difftastic"
+apt = ""
+dnf = ""
+pacman = "difftastic"
+apk = "difftastic"
+zypper = ""
+mise = "difftastic"
+
+# mergiraf: the syntax-aware merge driver (~/.config/git/attributes). No native
+# package on Linux yet; mise's cargo backend builds it (rust is a mise tool).
+[[packages]]
+name = "mergiraf"
+brew = "mergiraf"
+apt = ""
+dnf = ""
+pacman = ""
+apk = ""
+zypper = ""
+mise = "cargo:mergiraf"
+
+# --- everyday CLI -----------------------------------------------------------------
+[[packages]]
+name = "ripgrep"
+bin = "rg"
+brew = "ripgrep"
+apt = "ripgrep"
+dnf = "ripgrep"
+pacman = "ripgrep"
+apk = "ripgrep"
+zypper = "ripgrep"
+mise = "ripgrep"
+
+[[packages]]
+name = "fd"
+brew = "fd"
+apt = "fd-find"
+dnf = "fd-find"
+pacman = "fd"
+apk = "fd"
+zypper = "fd"
+mise = "fd"
+alias = { fd = "fdfind" }
+
+[[packages]]
+name = "jq"
+brew = "jq"
+apt = "jq"
+dnf = "jq"
+pacman = "jq"
+apk = "jq"
+zypper = "jq"
+mise = "jq"
+
+[[packages]]
+name = "tree"
+brew = "tree"
+apt = "tree"
+dnf = "tree"
+pacman = "tree"
+apk = "tree"
+zypper = "tree"
+
+[[packages]]
+name = "wget"
+brew = "wget"
+apt = "wget"
+dnf = "wget"
+pacman = "wget"
+apk = "wget"
+zypper = "wget"
+
+[[packages]]
+name = "rsync"
+brew = "rsync"
+apt = "rsync"
+dnf = "rsync"
+pacman = "rsync"
+apk = "rsync"
+zypper = "rsync"
+
+[[packages]]
+name = "vim"
+brew = "vim"
+apt = "vim"
+dnf = "vim-enhanced"
+pacman = "vim"
+apk = "vim"
+zypper = "vim"
+
+[[packages]]
+name = "bottom"
+bin = "btm"
+brew = "bottom"
+apt = ""
+dnf = ""
+pacman = "bottom"
+apk = "bottom"
+zypper = ""
+mise = "bottom"
+
+# skopeo: inspect/copy container images without a daemon.
+[[packages]]
+name = "skopeo"
+brew = "skopeo"
+apt = "skopeo"
+dnf = "skopeo"
+pacman = "skopeo"
+apk = "skopeo"
+zypper = "skopeo"
+
+# 1Password CLI (`op`). Linux needs 1Password's own apt/dnf repo, which this
+# repo does not add — install it by hand there.
+[[packages]]
+name = "1password-cli"
+bin = "op"
+brew = "1password-cli"
+cask = true
+apt = ""
+dnf = ""
+pacman = ""
+apk = ""
+zypper = ""
+
+# pnpm: mise installs npm-backed tools with pnpm (mise settings) and requires
+# it to already be on PATH — so it is a package, not a mise tool.
+[[packages]]
+name = "pnpm"
+brew = "pnpm"
+apt = ""
+dnf = ""
+pacman = "pnpm"
+apk = "pnpm"
+zypper = ""
+mise = "pnpm"
+
+# tmux copy/paste bindings use xclip on Linux (dot_tmux.conf).
+[[packages]]
+name = "xclip"
+only = "linux"
+brew = ""
+apt = "xclip"
+dnf = "xclip"
+pacman = "xclip"
+apk = "xclip"
+zypper = "xclip"

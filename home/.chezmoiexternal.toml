@@ -1,0 +1,32 @@
+# zsh plugins, fetched by chezmoi as archives (no package manager involved).
+# Load order is fixed in dot_zshrc.tmpl: completions on fpath -> compinit ->
+# fzf-tab -> autosuggestions -> ... -> syntax-highlighting LAST. Refreshed at
+# most weekly; `chezmoi apply --refresh-externals` forces it.
+
+[".local/share/zsh/plugins/fzf-tab"]
+    type = "archive"
+    url = "https://github.com/Aloxaf/fzf-tab/archive/refs/heads/master.tar.gz"
+    exact = true
+    stripComponents = 1
+    refreshPeriod = "168h"
+
+[".local/share/zsh/plugins/zsh-autosuggestions"]
+    type = "archive"
+    url = "https://github.com/zsh-users/zsh-autosuggestions/archive/refs/heads/master.tar.gz"
+    exact = true
+    stripComponents = 1
+    refreshPeriod = "168h"
+
+[".local/share/zsh/plugins/zsh-syntax-highlighting"]
+    type = "archive"
+    url = "https://github.com/zsh-users/zsh-syntax-highlighting/archive/refs/heads/master.tar.gz"
+    exact = true
+    stripComponents = 1
+    refreshPeriod = "168h"
+
+[".local/share/zsh/plugins/zsh-completions"]
+    type = "archive"
+    url = "https://github.com/zsh-users/zsh-completions/archive/refs/heads/master.tar.gz"
+    exact = true
+    stripComponents = 1
+    refreshPeriod = "168h"

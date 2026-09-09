@@ -1,0 +1,33 @@
+# Global mise tools — the SEED for ~/.config/mise/config.toml, not a live copy.
+#
+# mise owns that file at runtime (`mise use -g`, `mise up --bump`, `mise unuse`
+# all rewrite it), so the repo only writes it when it does not exist yet:
+# scripts/env_links.py renders this table into the seed of the
+# ".config/mise/config.toml" entry (see envlinks.toml). The accepted cost, kept
+# from ADR-0009: a tool added here reaches an already-bootstrapped host only via
+# `mise use -g <tool>@<version>` there.
+#
+# The SETTINGS half (how mise installs) is declarative and always applied:
+# home/private_dot_config/mise/conf.d/zz-dotfiles.toml.
+
+[mise.tools]
+aws-cli = "latest"
+go = "latest"
+just = "latest"
+node = "lts"
+# Lark CLI — `npx @larksuite/cli@latest install` runs in the post-login setup;
+# kept as a global npm tool so the runtime is present once node exists.
+"npm:@larksuite/cli" = "latest"
+# Smithery MCP CLI — called directly by the post-login setup. pnpm blocks
+# dependency lifecycle scripts by default and smithery ships a postinstall, so
+# exactly that package is allowed to build (mise passes --allow-build=<pkg>).
+"npm:@smithery/cli" = { version = "latest", allow_builds = ["@smithery/cli"] }
+pre-commit = "latest"
+rust = "stable"
+worktrunk = "latest"
+
+# Linux only: the docker CLI is the client half; the daemon is an opt-in system
+# component (`--system docker`, scripts/components.py). macOS never gets a
+# daemon from this repo, so the client would be dead weight there.
+[mise.linux_tools]
+docker-cli = "latest"

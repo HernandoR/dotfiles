@@ -1,0 +1,13 @@
+# Worktrunk (`wt`) user config — chezmoi-managed, read-only for wt: its runtime
+# state goes to ~/.config/worktrunk/approvals.toml and .git/wt/, never here.
+#
+# Where `wt switch --create` puts a worktree. Claude Code hard-codes
+# `<repo>/.claude/worktrees/<name>` for the worktrees it creates itself and
+# exposes no setting for the path, so the two tools meet on wt's side: this
+# template lands wt-created worktrees exactly where Claude-created ones are.
+# One directory to look in, one `wt list`.
+#
+# `split("/") | last` drops a `<user>/` or `feat/` prefix, because that is what
+# Claude does. Two branches differing only in prefix would collide on a path;
+# wt refuses the second rather than overwriting.
+worktree-path = "{{ repo_path }}/.claude/worktrees/{{ branch | split(\"/\") | last | sanitize }}"

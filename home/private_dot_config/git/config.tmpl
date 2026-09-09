@@ -1,0 +1,90 @@
+# ~/.config/git/config — managed by chezmoi (home/private_dot_config/git/config.tmpl).
+# Aliases live in ~/.config/git/aliases (included below); attributes and the
+# global ignore file are the XDG siblings git reads on its own.
+
+[user]
+	name = HernandoR
+	email = lzhen.dev@outlook.com
+
+[include]
+	path = ~/.config/git/aliases
+
+[apply]
+	whitespace = fix
+
+[branch]
+	sort = -committerdate
+
+[pull]
+	rebase = true
+
+[push]
+	default = simple
+	followTags = true
+	autoSetupRemote = true
+
+[init]
+	defaultBranch = main
+
+[color]
+	ui = auto
+[color "branch"]
+	current = yellow reverse
+	local = yellow
+	remote = green
+[color "diff"]
+	meta = yellow bold
+	frag = magenta bold
+	old = red
+	new = green
+[color "status"]
+	added = yellow
+	changed = green
+	untracked = cyan
+
+# Serve GitHub https credentials through gh, which holds the per-host token —
+# no credential lives here, only the delegation. Without a helper,
+# pi-claude-marketplace's private-repo clone falls into a GitHub Device Flow
+# that polls forever in a headless run. Scoped to github.com.
+[credential "https://github.com"]
+	helper = !gh auth git-credential
+
+# SSH commit signing, working both with an external agent (1Password et al.
+# via SSH_AUTH_SOCK) and with plain ~/.ssh/id_* key files. The two helpers are
+# ~/.local/bin/git-ssh-signing-key and ~/.local/bin/git-ssh-sign (chezmoi-managed).
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	defaultKeyCommand = {{ .chezmoi.homeDir }}/.local/bin/git-ssh-signing-key
+	program = {{ .chezmoi.homeDir }}/.local/bin/git-ssh-sign
+[commit]
+	gpgsign = true
+[tag]
+	gpgsign = true
+
+# difftastic as the external differ (`difft`, from packages.toml).
+[diff]
+	external = difft
+[diff "bin"]
+	textconv = hexdump -v -C
+
+# Syntax-aware merge driver (binary from packages.toml; file types in
+# ~/.config/git/attributes).
+[merge "mergiraf"]
+	name = mergiraf
+	driver = mergiraf merge --git %O %A %B -s %S -x %X -y %Y -p %P
+
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+
+[core]
+	whitespace = space-before-tab,-indent-with-non-tab,trailing-space
+	trustctime = false
+	precomposeunicode = false
+	untrackedCache = true
+
+[help]
+	autocorrect = 1

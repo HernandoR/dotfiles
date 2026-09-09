@@ -1,0 +1,26 @@
+#!/bin/sh
+# Nerd Fonts: FiraCode (all three families) and Fira Mono. Best-effort — a
+# missing font never fails an apply. Re-runs when this file changes.
+set -u
+export PATH="$HOME/.local/bin:$PATH"
+{{ if eq .chezmoi.os "darwin" -}}
+if command -v brew >/dev/null 2>&1; then
+  brew install --cask font-fira-code-nerd-font font-fira-mono-nerd-font || true
+else
+  echo "fonts: Homebrew missing — skipped (bootstrap installs it as the 'brew' system component)" >&2
+fi
+{{- else -}}
+# getnf (github.com/getnf/getnf) downloads font tarballs from the nerd-fonts
+# releases into ~/.local/share/fonts. Download-then-run, never curl | bash.
+if ! command -v getnf >/dev/null 2>&1; then
+  tmp="$(mktemp)"
+  if curl -fsSL https://raw.githubusercontent.com/getnf/getnf/main/install.sh -o "$tmp"; then
+    bash "$tmp" || echo "fonts: getnf installer failed — skipped" >&2
+  fi
+  rm -f "$tmp"
+fi
+if command -v getnf >/dev/null 2>&1; then
+  getnf -i FiraCode,FiraMono || true
+  command -v fc-cache >/dev/null 2>&1 && fc-cache -f >/dev/null 2>&1 || true
+fi
+{{- end }}

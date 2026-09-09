@@ -8,9 +8,10 @@
 | [ADR-0004](adr-0004-necessary-components-and-phase-separation-2026-06-25.md) | Necessary components and main-path phase separation | accepted | 2026-06-25 |
 | [ADR-0005](adr-0005-claude-post-setup-ownership-2026-06-29.md) | Claude config owned by a post-setup, excluded from linking | superseded (→ ADR-0011) | 2026-06-29 |
 | [ADR-0006](adr-0006-ssh-key-deployment-2026-06-29.md) | SSH keys deployed by copy, git-ignored in staging | superseded (→ ADR-0008) | 2026-06-29 |
-| [ADR-0007](adr-0007-nix-home-manager-migration-2026-07-09.md) | Migrate to Nix flake + standalone Home Manager | accepted | 2026-07-09 |
+| [ADR-0007](adr-0007-nix-home-manager-migration-2026-07-09.md) | Migrate to Nix flake + standalone Home Manager | superseded (→ ADR-0013) | 2026-07-09 |
 | [ADR-0008](adr-0008-external-home-dir-symlinking-2026-07-20.md) | JSON(C)-driven symlink map for external files/dirs into `$HOME` | superseded (→ ADR-0009) | 2026-07-20 |
-| [ADR-0009](adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md) | Config ownership tiers — env-specific HM module owns mutable links; declarative nixification deferred | accepted | 2026-07-26 |
+| [ADR-0009](adr-0009-config-ownership-tiers-hm-and-env-links-2026-07-26.md) | Config ownership tiers — env-specific HM module owns mutable links; declarative nixification deferred | superseded (→ ADR-0013; the rule survives) | 2026-07-26 |
 | [ADR-0010](adr-0010-plan-first-one-shot-clearance-2026-08-04.md) | Plan-first bootstrap with a single interactive clearance | accepted | 2026-08-04 |
 | [ADR-0011](adr-0011-multi-agent-toolchain-single-source-2026-08-04.md) | Multi-agent toolchain — one manifest projected by CLI; instructions single-sourced | accepted (memory + third slot → ADR-0012) | 2026-08-04 |
 | [ADR-0012](adr-0012-third-slot-upstream-pi-2026-08-28.md) | The third agent slot is upstream pi, chosen for interoperability and paid for in extensions | accepted | 2026-08-28 |
+| [ADR-0013](adr-0013-chezmoi-zoi-mise-uv-2026-09-09.md) | chezmoi owns the dotfiles, zoi fronts the packages, mise the runtimes; Python stays as `uv run` scripts | accepted | 2026-09-09 |

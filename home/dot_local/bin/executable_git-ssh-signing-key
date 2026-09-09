@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Key lookup for git's gpg.ssh.defaultKeyCommand. Git only accepts a literal
+# public key here (never a file path), so prefer whatever the agent offers
+# (1Password & co. via SSH_AUTH_SOCK) and otherwise emit the first on-disk
+# ~/.ssh/id_*.pub. Managed by chezmoi (home/dot_local/bin/).
+if [ -n "${SSH_AUTH_SOCK:-}" ]; then
+  key=$(ssh-add -L 2>/dev/null | head -n 1)
+  case "$key" in
+    ssh-* | sk-* | ecdsa-*)
+      printf 'key::%s\n' "$key"
+      exit 0
+      ;;
+  esac
+fi
+for pub in "$HOME"/.ssh/id_*.pub; do
+  [ -r "$pub" ] || continue
+  printf 'key::%s\n' "$(cat "$pub")"
+  exit 0
+done
+echo "git-ssh-signing-key: no agent key and no ~/.ssh/id_*.pub key pair found" >&2
+exit 1

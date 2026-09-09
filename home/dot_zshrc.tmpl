@@ -1,0 +1,112 @@
+# ~/.zshrc — interactive zsh (managed by chezmoi: home/dot_zshrc.tmpl).
+#
+# LOAD ORDER IS CORRECTNESS-CRITICAL (carried over unchanged from the previous
+# generation):
+#   completions on fpath -> compinit -> zoxide init -> fzf-tab -> autosuggestions
+#   -> fzf keybindings -> snippets/prompt/tools -> aliases -> syntax-highlighting
+#   LAST -> ~/.proxy, ~/.extra
+# fzf-tab must bind the completion widget after compinit and before any plugin
+# that wraps widgets (autosuggestions); zsh-syntax-highlighting must be last.
+
+typeset -U path cdpath fpath manpath
+
+ZSH_PLUGINS="$HOME/.local/share/zsh/plugins"   # fetched by chezmoi (.chezmoiexternal.toml)
+
+# --- completions on fpath BEFORE compinit ---------------------------------------
+fpath+=("$ZSH_PLUGINS/zsh-completions/src")
+[ -d /opt/homebrew/share/zsh/site-functions ] && fpath+=(/opt/homebrew/share/zsh/site-functions)
+[ -d /usr/share/zsh/vendor-completions ] && fpath+=(/usr/share/zsh/vendor-completions)
+
+autoload -U compinit && compinit -d "$HOME/.zcompdump"
+command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init zsh)"
+
+# --- plugins: fzf-tab, then autosuggestions -------------------------------------
+[ -f "$ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh" ] && source "$ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh"
+[ -f "$ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.zsh" ] && source "$ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.zsh"
+
+# --- history -------------------------------------------------------------------
+HISTSIZE=32768
+SAVEHIST=32768
+HISTFILE="$HOME/.zsh_history"
+setopt HIST_FCNTL_LOCK HIST_IGNORE_ALL_DUPS HIST_IGNORE_DUPS HIST_IGNORE_SPACE SHARE_HISTORY
+setopt NO_APPEND_HISTORY NO_EXTENDED_HISTORY NO_HIST_EXPIRE_DUPS_FIRST NO_HIST_FIND_NO_DUPS NO_HIST_SAVE_NO_DUPS
+
+# --- fzf keybindings + completion ---------------------------------------------
+if [[ $options[zle] = on ]] && command -v fzf >/dev/null 2>&1; then
+  source <(fzf --zsh)
+fi
+
+# --- the repo's snippets -------------------------------------------------------
+source "$HOME/.config/zsh/fzf-tab.zsh"
+# Must come after `zoxide init zsh` — it overrides the compdef that init
+# installs. See the file's header.
+source "$HOME/.config/zsh/zoxide.zsh"
+source "$HOME/.config/zsh/functions.zsh"
+
+ZSH_AUTOSUGGEST_STRATEGY=(history)
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#757575'
+export GPG_TTY=$(tty)
+
+# rust via rustup escape hatch (mise manages rust by default).
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+
+{{- if eq .chezmoi.os "darwin" }}
+
+# Homebrew on macOS.
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
+# iTerm2 shell integration, if installed.
+[ -e "$HOME/.iterm2_shell_integration.zsh" ] && source "$HOME/.iterm2_shell_integration.zsh"
+{{- end }}
+
+# One-line hint while the interactive agent extras (Smithery auth, the Lark
+# CLI installer) are still pending — run them with `dotfiles-postsetup`.
+if [ -f "$HOME/.local/share/dotfiles/post-login-setup.sh" ]; then
+  print -P "%F{yellow}dotfiles:%f interactive agent extras pending — run %F{cyan}dotfiles-postsetup%f"
+fi
+
+# --- prompt, runtimes, direnv -------------------------------------------------------
+if [[ $TERM != "dumb" ]] && command -v starship >/dev/null 2>&1; then
+  eval "$(starship init zsh)"
+fi
+command -v mise >/dev/null 2>&1 && eval "$(mise activate zsh)"
+command -v direnv >/dev/null 2>&1 && eval "$(direnv hook zsh)"
+
+# worktrunk (`wt`, a mise tool): the shell function that lets `wt switch` cd
+# this shell, plus completions (needs compinit above). Resolvable here through
+# the mise shims dir env.zsh puts on PATH — `mise activate` alone only fixes
+# PATH at the first prompt, which is after this line.
+command -v wt >/dev/null 2>&1 && eval "$(wt config shell init zsh)"
+
+# --- aliases -------------------------------------------------------------------
+alias -- ..='cd ..'
+alias -- ...='cd ../..'
+alias -- ....='cd ../../..'
+alias -- g=git
+alias -- ls='ls --color=auto'
+alias -- l='ls -lF --color=auto'
+alias -- la='ls -lAF --color=auto'
+alias -- lsd='ls -lF --color=auto | grep --color=never '\''^d'\'''
+alias -- grep='grep --color=auto'
+alias -- fgrep='fgrep --color=auto'
+alias -- egrep='egrep --color=auto'
+alias -- week='date +%V'
+alias -- map='xargs -n1'
+alias -- zj=zellij
+alias -- reload='exec $SHELL -l'
+alias -- path='echo -e ${PATH//:/\n}'
+
+# --- syntax highlighting: LAST of the plugins ------------------------------------
+if [ -f "$ZSH_PLUGINS/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
+  source "$ZSH_PLUGINS/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+  ZSH_HIGHLIGHT_HIGHLIGHTERS=(main)
+fi
+
+# --- machine-local escape hatches: truly last, so they beat everything above ------
+# scripts/env_links.py creates and persists both; the -r guard covers a $HOME
+# that has not been through it yet.
+for f in "$HOME/.proxy" "$HOME/.extra"; do
+  [ -r "$f" ] && . "$f"
+done

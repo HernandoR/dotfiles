@@ -1,0 +1,7 @@
+# Source entries chezmoi must NOT apply. Everything under home/ is applied
+# unless listed here (the .chezmoi* files are chezmoi's own and never are).
+#
+# The $HOME env links (~/.claude, ~/.ssh, ~/.agents, ...) are deliberately not
+# chezmoi source entries: scripts/env_links.py owns them from the inventory in
+# .chezmoidata/envlinks.toml (ADR-0013), so nothing needs excluding for them.
+README.md

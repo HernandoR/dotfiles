@@ -15,5 +15,5 @@ venv/
 # uv
 uv.lock
 
-# direnv (nix-direnv's cached devShell + its GC roots)
+# direnv
 .direnv/
