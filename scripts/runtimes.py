@@ -14,9 +14,10 @@ added with `mise use -g <tool>@<version>` (or appended verbatim for the few
 entries that carry options mise's CLI cannot express); a tool the live file has
 keeps whatever version and options it has — the owner's `mise use -g` still wins.
 
-Then `mise install -y` materializes everything. rust goes first when a
-`cargo:` tool is declared (the cargo backend builds with mise's cargo), and the
-mise shims dir is put on this process' PATH so backends find each other.
+Then `mise install -y` materializes everything. When a `cargo:` tool is
+declared, cargo-binstall and rust go first (the cargo backend fetches prebuilt
+binaries through cargo-binstall and only builds when none exists), with the
+mise shims dir on this process' PATH so the backends find each other.
 
 Run by chezmoi (run_onchange, whenever mise.toml or this file changes) and by
 hand via `just runtimes`.
@@ -129,11 +130,14 @@ def main():
     if not missing:
         log(f"{LIVE.name} already declares every repo tool")
 
-    # rust first: the cargo backend (cargo:mergiraf) builds with the cargo mise
-    # provides, and `mise install` does not order one tool after another.
-    if "rust" in want and any(k.startswith("cargo:") for k in want) and not shutil.which("cargo"):
-        run([mise, "install", "-y", "rust"], dry)
+    # Before any cargo: tool — `mise install` does not order tools — put
+    # cargo-binstall on PATH so the cargo backend fetches prebuilt binaries, and
+    # rust so the backend can still build when no artifact exists (exit 94).
     os.environ["PATH"] = f"{SHIMS}{os.pathsep}{os.environ.get('PATH', '')}"
+    if any(k.startswith("cargo:") for k in want):
+        for dep in ("cargo-binstall", "rust"):
+            if dep in want and not shutil.which("cargo-binstall" if dep == "cargo-binstall" else "cargo"):
+                run([mise, "install", "-y", dep], dry)
     log("mise install (everything the live config declares)")
     rc = run([mise, "install", "-y"], dry)
     if rc != 0:

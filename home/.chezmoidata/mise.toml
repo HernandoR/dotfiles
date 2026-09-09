@@ -30,8 +30,13 @@ gh = "latest"
 git-lfs = "latest"
 jj = "latest"
 difftastic = "latest"
-# mergiraf: no prebuilt release mise can fetch (codeberg), so mise's cargo
-# backend builds it with the rust above; runtimes.py installs rust first.
+# cargo-binstall: makes mise's cargo backend FETCH prebuilt binaries instead of
+# compiling (mise's default `cargo.binstall = true` needs it on PATH — it is not
+# installed automatically). runtimes.py installs it before any cargo: tool.
+cargo-binstall = "latest"
+# mergiraf: released on codeberg, which aqua/ubi cannot fetch; cargo-binstall
+# can (verified 2026-09-10, v0.19.1 aarch64-apple-darwin). Falls back to a
+# cargo build with the rust above only if no prebuilt artifact exists.
 "cargo:mergiraf" = "latest"
 
 # --- shell and prompt ---

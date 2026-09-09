@@ -55,7 +55,8 @@ passthrough), the owner dropped zoi and set the ownership rule recorded below.
 ### Packages (updated 2026-09-10)
 
 Whatever mise can fetch, mise manages — `mise.toml` carries the runtimes AND
-the CLI toolset (aqua/ubi release binaries, `cargo:` builds, vfox plugins,
+the CLI toolset (aqua/ubi release binaries, `cargo:` through cargo-binstall
+— prebuilt first, a build only when no artifact exists — vfox plugins,
 `conda:` through mise's own solver, which installs no conda binary). The Node
 ecosystem is nvm's (`node.toml`, `scripts/node.py`), never mise's. What remains
 for the OS package manager — the shell, GNU userland, git, vim, wget/rsync/tree,

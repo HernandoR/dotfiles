@@ -166,8 +166,8 @@ of duplicating it. Portable settings belong in `home/private_dot_config/zsh/env.
 ## Adding software (tutorial)
 
 The rule, in order: **mise if mise can fetch it** (`mise registry | grep <name>`;
-aqua/ubi release binaries, the cargo backend, vfox plugins, conda-forge through
-mise's own solver — no conda binary is installed); **nvm for anything Node**;
+aqua/ubi release binaries, the cargo backend through cargo-binstall, vfox
+plugins, conda-forge through mise's own solver — no conda binary is installed); **nvm for anything Node**;
 **the OS package manager only for what links against the system** or replaces
 something the OS ships.
 
@@ -176,7 +176,7 @@ something the OS ships.
 ```toml
 [mise.tools]
 bat = "latest"            # aqua:sharkdp/bat — resolved from the mise registry
-"cargo:some-tool" = "latest"   # no prebuilt release: mise's cargo backend builds it
+"cargo:some-tool" = "latest"   # crates.io: fetched prebuilt via cargo-binstall, built only as a last resort
 ```
 
 `just apply` (or `just runtimes`) runs `scripts/runtimes.py`: a tool the live
