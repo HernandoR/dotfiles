@@ -1,9 +1,10 @@
 # lz 的 dotfiles
 
 跨平台 dotfiles：**[chezmoi](https://www.chezmoi.io/)** 管文件，
-**[zoi](https://github.com/Zillowe/Zoi)** 作为软件包安装的统一入口，
-**[mise](https://mise.jdx.dev/)** 管运行时，其余命令式步骤由若干 **`uv run` Python
-脚本**完成。目标平台：macOS (aarch64) 与 Debian/Ubuntu (x86_64 + aarch64)。
+**[mise](https://mise.jdx.dev/)** 管运行时和绝大部分 CLI 工具（预编译发布二进制），
+**[nvm](https://github.com/nvm-sh/nvm)** 管 Node 生态，**[zoi](https://github.com/Zillowe/Zoi)**
+作为其自有仓库软件包的入口，其余命令式步骤（包括少数系统级软件包）由若干
+**`uv run` Python 脚本**完成。目标平台：macOS (aarch64) 与 Debian/Ubuntu (x86_64 + aarch64)。
 zsh + Starship (catppuccin_mocha) + fzf-tab 的体验不变。
 
 完整手册见英文 [README.md](README.md)；设计记录见
@@ -42,7 +43,8 @@ cd dotfiles
    `~/dotfiles_backup/<时间戳>/`。
 4. **`chezmoi apply`：** 先运行 env links（`scripts/env_links.py`，持久化的
    `$HOME` 软链：`~/.claude`、`~/.ssh`、`~/.exports` 等），再写入 `home/` 下的文件与
-   zsh 插件，最后按需运行 packages（zoi）、字体、`mise install`、
+   zsh 插件，最后按需运行 mise 工具（`scripts/runtimes.py`）、nvm/Node
+   （`scripts/node.py`）、系统级软件包（`scripts/packages.py`）、字体、
    `scripts/setup.py`（登录 shell、agent 工具链、系统组件）。
 
 ## 常用命令
@@ -64,12 +66,14 @@ cd dotfiles
 - **持久可变状态**（`home/.chezmoidata/envlinks.toml`）：`$HOME` 下指向本机
   `stateRoot` 的软链，只在首次创建时播种；若某个工具把软链替换成了普通文件，
   `env_links.py` 会把它折回目标并恢复链接。
-- **先播种后交出**（mise 的全局工具列表）：`mise.toml` 只是
-  `~/.config/mise/config.toml` 的种子，之后归 mise 所有（`mise use -g`）。
-- **软件包**（`packages.toml`）：`packages.py` 先交给 `zoi install`，再逐个校验
-  可执行文件，缺失则回退到原生包管理器，再回退到 `mise use -g`。实测
-  （2026-09-09）zoi 的仓库只有九个包、原生透传没有真正安装东西，因此当前实际生效的
-  是回退路径；zoi 一旦可用，脚本无需改动。
+- **工具与运行时**（`mise.toml`）：绝大部分 CLI 工具走 mise 的 aqua/ubi/cargo/vfox/conda
+  后端（conda 后端由 mise 自己解析下载，不会装 conda 二进制）。`runtimes.py` 只把仓库
+  声明而本机 `config.toml` 缺少的工具用 `mise use -g` 加进去，已有的版本一律保留。
+- **Node 生态**（`node.toml`）：nvm，不走 mise。`node.py` 安装 nvm、Node LTS、pnpm 与
+  全局 npm 包；交互式 zsh 加载 `nvm.sh`，其他进程由 `env.zsh` 把最新已装 Node 放上 PATH。
+- **系统级软件包**（`packages.toml`）：只剩 zsh、GNU 工具、git、vim、wget、rsync、tree、
+  xclip 这类必须由系统包管理器提供的。`packages.py` 自动探测 brew / apt / dnf / yum。
+  zoi 仅用于其自有仓库里的包（实测 2026-09-09 其仓库只有九个包、原生透传不装东西）。
 
 ### 机器本地的“逃生口”
 
@@ -79,10 +83,11 @@ cd dotfiles
 
 ## 添加软件
 
-- CLI 工具 → `home/.chezmoidata/packages.toml`（每个包管理器一个名字，没有的写 `""`，
-  可加 `mise = "..."` 作回退）。
-- 运行时 → `home/.chezmoidata/mise.toml`（已 bootstrap 的机器用
-  `mise use -g <tool>@<version>` 追加）。
+- CLI 工具、运行时 → `home/.chezmoidata/mise.toml`（mise 能装的都放这里；
+  `just runtimes` 会把新增的加到每台机器）。
+- Node 包 → `home/.chezmoidata/node.toml`。
+- 必须由系统包管理器提供的 → `home/.chezmoidata/packages.toml`
+  （brew / apt / dnf 各一个名字，没有的写 `""`）。
 - 需要持久化的 `$HOME` 路径 → `home/.chezmoidata/envlinks.toml`。
 - 普通 dotfile → `home/`（`chezmoi add ~/.config/tool/config`）。
 - 系统组件 / agent 能力 → `scripts/components.py` / `scripts/agents.py`。

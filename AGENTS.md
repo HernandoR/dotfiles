@@ -1,9 +1,10 @@
 # AGENTS.md
 
 Cross-platform **dotfiles**: **chezmoi** owns the files (`home/`, the source
-state), **zoi** fronts the package installs, **mise** the runtimes, and a set of
-**`uv run` Python scripts** (`scripts/`) does everything imperative — the
-bootstrap, the persistent `$HOME` links, packages, the agent toolchain.
+state), **mise** the runtimes and most of the CLI toolset, **nvm** the Node
+ecosystem, and a set of **`uv run` Python scripts** (`scripts/`) does everything
+imperative — the bootstrap, the persistent `$HOME` links, the OS-level packages,
+the agent toolchain.
 [README.md](README.md) is the full manual — layout, commands, conventions,
 guardrails, and how to add anything.
 
@@ -17,9 +18,11 @@ The rules an agent must not learn the hard way:
   directions start as an RFC, decisions land as an ADR.
 - **Use `just`.** Prefer a recipe (`just apply` / `diff` / `status` / `check` /
   `plan`) over remembering the raw command. `just` lists them all.
-- **Data over code.** A tool goes in `home/.chezmoidata/packages.toml`, a
-  runtime in `mise.toml`, a persistent `$HOME` path in `envlinks.toml`. The
-  scripts read those files; do not hardcode an inventory in a script.
+- **Data over code.** A tool or runtime goes in `home/.chezmoidata/mise.toml`
+  whenever mise has a backend for it (check `mise registry`); Node packages in
+  `node.toml` (nvm, never mise); only OS-level packages in `packages.toml`; a
+  persistent `$HOME` path in `envlinks.toml`. The scripts read those files; do
+  not hardcode an inventory in a script.
 - **Machine differences are chezmoi data, not branches.** `env`, `stateRoot`,
   `network`, `agents`, `system` are answered at `chezmoi init` (or via
   `DOTFILE_*` env vars). Gate an environment-only thing with `envs = [...]` in

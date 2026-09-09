@@ -1,0 +1,23 @@
+# The Node ecosystem — managed by nvm, NOT mise (owner's decision, 2026-09-10;
+# ADR-0002 already chose nvm once). scripts/node.py installs nvm into ~/.nvm,
+# the declared Node, pnpm, and the global npm packages; a chezmoi run_onchange
+# script re-runs it when this file or the script changes.
+#
+# Shells: dot_zshrc.tmpl sources $NVM_DIR/nvm.sh for interactive use; env.zsh
+# puts the newest installed Node's bin on PATH for everything else (editor
+# hosts, ACP servers, `just` recipes, the setup scripts), since nvm.sh itself
+# is interactive-only and slow.
+[node]
+# What `nvm install` gets. "lts/*" = the current LTS line.
+version = "lts/*"
+
+# `npm install -g` targets, installed into the active Node (so they follow the
+# version). pnpm first: PNPM_HOME (env.zsh) is where pnpm's OWN globals go.
+globals = [
+  "pnpm",
+  # Lark CLI — `npx @larksuite/cli@latest install` runs in the post-login setup;
+  # the package is kept installed so the runtime is present.
+  "@larksuite/cli",
+  # Smithery MCP CLI — called directly by the post-login setup.
+  "@smithery/cli",
+]

@@ -1,9 +1,11 @@
 # lz's dotfiles
 
 Cross-platform dotfiles built on **[chezmoi](https://www.chezmoi.io/)** (the
-files), **[zoi](https://github.com/Zillowe/Zoi)** (the package front door),
-**[mise](https://mise.jdx.dev/)** (runtimes) and a handful of **`uv run` Python
-scripts** (everything imperative). Targets macOS (aarch64) and Debian/Ubuntu
+files), **[mise](https://mise.jdx.dev/)** (runtimes and most of the CLI toolset,
+from prebuilt release binaries), **[nvm](https://github.com/nvm-sh/nvm)** (the
+Node ecosystem), **[zoi](https://github.com/Zillowe/Zoi)** (a package front door
+for its own registry) and a handful of **`uv run` Python scripts** (everything
+imperative, including the few OS-level packages). Targets macOS (aarch64) and Debian/Ubuntu
 (x86_64 + aarch64); other Linux families get the user half. The zsh + Starship
 (catppuccin_mocha) + fzf-tab experience is unchanged.
 
@@ -57,10 +59,11 @@ The whole run is one Python process (`scripts/bootstrap.py`; the root
    - `run_before` — **env links** (`scripts/env_links.py`): seed, repair and
      place the persistent `$HOME` symlinks (`~/.claude`, `~/.ssh`, `~/.exports`, …);
    - the **files** from `home/` and the four **zsh plugins** (chezmoi externals);
-   - `run_onchange_after` — **packages** (`scripts/packages.py`, via zoi),
-     **fonts**, **mise runtimes** (`mise install`), and **setup**
-     (`scripts/setup.py`: login shell, agent toolchain, system components) —
-     each only when its inputs changed.
+   - `run_onchange_after` — **mise tools** (`scripts/runtimes.py`: declare
+     what the live config lacks, `mise install`), **Node via nvm**
+     (`scripts/node.py`), **OS packages** (`scripts/packages.py`: brew / apt /
+     dnf / yum), **fonts**, and **setup** (`scripts/setup.py`: login shell,
+     agent toolchain, system components) — each only when its inputs changed.
 
 When it finishes, start the new shell with `exec zsh -l` (or re-login).
 
@@ -110,6 +113,8 @@ chezmoi purge                               # remove chezmoi's config + state (f
 just diff       # what would change
 just apply      # apply the source tree (files, then the run_ scripts when their inputs changed)
 just status     # one line per managed path that differs
+just runtimes   # mise: add newly declared tools, install what is missing
+just node       # nvm: Node, pnpm, global npm packages
 just update     # git pull, apply, zoi update --all, mise up
 just check      # verify the repo (data, scripts, a full render per environment)
 just doctor     # chezmoi / zoi / mise health
@@ -124,8 +129,9 @@ defaults) or by re-running the bootstrap with the flag.
 | --- | --- | --- |
 | Repo-owned files (zsh, starship, git, tmux, mise settings, worktrunk, direnv) | `home/dot_*` → `$HOME` on every apply | chezmoi only — edit the source, never the target |
 | Persistent mutable state (agent dirs, `~/.ssh`, history, `~/.exports`, …) | `home/.chezmoidata/envlinks.toml` → symlink onto the machine's state root | the tool that owns it; seeded once, repaired if a writer replaces the link |
-| Seeded-then-owned (mise's global tool list) | an env-link entry with `seed_from = "mise"` | mise (`mise use -g`) |
-| Packages | `home/.chezmoidata/packages.toml` | `scripts/packages.py` (zoi → native → mise) |
+| Tools and runtimes (most of the toolset) | `home/.chezmoidata/mise.toml` → `~/.config/mise/config.toml` (seeded, then reconciled: missing tools added, existing versions kept) | mise (`mise use -g`, `mise up`) and `scripts/runtimes.py` |
+| Node ecosystem | `home/.chezmoidata/node.toml` → `~/.nvm` | nvm and `scripts/node.py` |
+| OS-level packages (zsh, GNU userland, git, vim, wget, rsync, tree, xclip) | `home/.chezmoidata/packages.toml` | `scripts/packages.py` (brew / apt / dnf / yum) |
 | Agent capabilities | `scripts/agents.py` manifest | the agents' own CLIs, projected by `setup.py` |
 
 The rule from ADR-0009 survives: **a file a tool rewrites at runtime is never a
@@ -157,40 +163,56 @@ of duplicating it. Portable settings belong in `home/private_dot_config/zsh/env.
 
 ## Adding software (tutorial)
 
-### A CLI tool → `home/.chezmoidata/packages.toml`
+The rule, in order: **mise if mise can fetch it** (`mise registry | grep <name>`;
+aqua/ubi release binaries, the cargo backend, vfox plugins, conda-forge through
+mise's own solver — no conda binary is installed); **nvm for anything Node**;
+**the OS package manager only for what links against the system** or replaces
+something the OS ships.
 
-```toml
-[[packages]]
-name = "bat"
-brew = "bat"
-apt = "bat"
-dnf = "bat"
-pacman = "bat"
-apk = "bat"
-zypper = "bat"
-mise = "bat"               # fallback where the native manager has no package
-alias = { bat = "batcat" } # Debian names the binary differently
-```
-
-Say `""` explicitly for a manager that has no package. `just apply` runs
-`packages.py` because the file's hash changed; `just packages` runs it now.
-**zoi is the front door**: every missing tool goes to `zoi install --yes
-<manager>:<name>` first. Its registry held nine packages and its native
-passthrough installed nothing in testing (RFC-0006), so the script probes each
-binary afterwards and falls back to the native manager, then to `mise use -g`.
-Nothing changes here when zoi starts delivering.
-
-### A runtime → `home/.chezmoidata/mise.toml`
+### A CLI tool → `home/.chezmoidata/mise.toml`
 
 ```toml
 [mise.tools]
-deno = "latest"
+bat = "latest"            # aqua:sharkdp/bat — resolved from the mise registry
+"cargo:some-tool" = "latest"   # no prebuilt release: mise's cargo backend builds it
 ```
 
-That file is the **seed** of `~/.config/mise/config.toml`; a host that has
-already bootstrapped keeps mise's own file, so add it there with
-`mise use -g deno@latest` (which installs it too). `just runtimes` installs
-whatever the live file declares but has not materialized.
+`just apply` (or `just runtimes`) runs `scripts/runtimes.py`: a tool the live
+`~/.config/mise/config.toml` lacks is added with `mise use -g`, tools it already
+has keep their versions, then `mise install`. So an addition here reaches every
+host on its next apply, and your own `mise use -g <tool>@<version>` on a host
+still wins for that tool. Prefer `mise use -g` on a machine only for something
+that should *not* be in the repo.
+
+### A Node package → `home/.chezmoidata/node.toml`
+
+```toml
+[node]
+version = "lts/*"
+globals = ["pnpm", "@larksuite/cli", "@smithery/cli", "typescript"]
+```
+
+`scripts/node.py` installs nvm (pinned installer, edits no rc file), the Node
+line, and `npm install -g` for the globals. Interactive zsh sources `nvm.sh`;
+everything else gets the newest installed Node on PATH from `env.zsh`.
+
+### An OS-level package → `home/.chezmoidata/packages.toml`
+
+```toml
+[[packages]]
+name = "htop"
+brew = "htop"
+apt = "htop"
+dnf = "htop"      # yum uses the dnf names
+```
+
+Only for tools mise has no backend for, or that must be the system's build.
+Say `""` for a manager that has no package. `scripts/packages.py` detects the
+host's manager (brew on macOS; apt, dnf or yum on Linux; brew as a last resort)
+and installs what is missing. An entry with `zoi = "<registry id>"` goes through
+`zoi install` first — zoi's registry held nine packages on 2026-09-09 and its
+native passthrough installed nothing (RFC-0006), so zoi is a front door for its
+own packages only.
 
 ### A persistent `$HOME` path → `home/.chezmoidata/envlinks.toml`
 
@@ -252,8 +274,8 @@ don't cite them as current design.
 ### Conventions
 
 - **Data over code:** inventories live in `home/.chezmoidata/*.toml`; chezmoi
-  templates read them as `.packages` / `.mise` / `.envlinks`, the scripts with
-  `tomllib`. A script never hardcodes a list.
+  templates read them as `.mise` / `.node` / `.packages` / `.envlinks`, the
+  scripts with `tomllib`. A script never hardcodes a list.
 - **Scripts:** PEP 723 (`uv run --script`), stdlib only, Python ≥ 3.11; commands
   via `ctx.run_command` (sudo only when needed, honours dry-run); argument lists
   over `shell=True`; download-then-execute, never `curl | bash`; every step
@@ -275,6 +297,11 @@ don't cite them as current design.
   `~/.extra`. fzf-tab must bind before anything wraps widgets. Don't "simplify" it.
 - **Env-link inventory** (`envlinks.toml`): entries are seeded on creation only.
   Changing `mode`/`seed` changes nothing on an existing target — by design.
+- **mise's `config.toml`** is reconciled add-only: `runtimes.py` adds missing
+  tools and never changes a version a host already has. Do not make it a chezmoi
+  source entry, and do not "fix" the reconcile into an overwrite.
+- **Node stays with nvm.** No `node`/`npm:` tools in `mise.toml`; the two must
+  not race for `npm` on PATH.
 - **Agent config files** (`~/.claude/settings.json`, `~/.codex/config.toml`,
   `~/.pi/agent/settings.json`): rewritten by the agents; never make one a
   chezmoi source entry. pi's is seeded leaf-by-leaf under ADR-0012's contract.
@@ -298,14 +325,15 @@ bootstrap.sh      the only shell: ensure uv, exec scripts/bootstrap.py
 Justfile          `just` recipes for the day-to-day commands
 home/
   .chezmoi.toml.tmpl      the per-machine questions (env, stateRoot, network, agents, system)
-  .chezmoidata/           packages.toml, mise.toml, envlinks.toml — the inventories
-  .chezmoiscripts/        run_before env links; run_onchange packages, fonts, mise, setup
+  .chezmoidata/           mise.toml, node.toml, packages.toml, envlinks.toml — the inventories
+  .chezmoiscripts/        run_before env links; run_onchange mise, node, packages, fonts, setup
   .chezmoiexternal.toml   the zsh plugins
   dot_zshenv/.zprofile/.zshrc.tmpl, private_dot_config/{zsh,git,starship.toml,mise/conf.d,worktrunk,direnv}/,
   dot_tmux.conf, dot_local/bin/
 scripts/
   bootstrap.py    plan + clearance, prereqs, zoi/chezmoi/mise, chezmoi init/backup/apply
-  env_links.py    the persistent $HOME links      packages.py   the toolset via zoi
+  env_links.py    the persistent $HOME links      runtimes.py   mise: reconcile + install
+  node.py         nvm: Node, pnpm, npm globals    packages.py   OS packages (brew/apt/dnf/yum)
   setup.py        login shell, runtimes, agents, system components
   agents.py       the ADR-0011 manifest           components.py / managers.py / context.py
   check.py        `just check`
@@ -315,5 +343,5 @@ docs/plans/       ADRs (0013 governs)      docs/rfc/   RFCs (0006 = this migrati
 
 ## Notes
 
-- **Runtimes:** node/rust/go via mise, Python via uv (no system Python is needed).
+- **Runtimes:** rust/go and the CLI toolset via mise, Node via nvm, Python via uv (no system Python is needed).
 - Run the bootstrap from inside the cloned repo; the clone is the chezmoi source.

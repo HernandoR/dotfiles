@@ -1,30 +1,59 @@
-# Global mise tools — the SEED for ~/.config/mise/config.toml, not a live copy.
+# Global mise tools — runtimes AND most of the CLI toolset (ADR-0013, updated
+# 2026-09-10: "whatever mise can manage, mise manages — except the Node
+# ecosystem, which is nvm's; see node.toml").
 #
-# mise owns that file at runtime (`mise use -g`, `mise up --bump`, `mise unuse`
-# all rewrite it), so the repo only writes it when it does not exist yet:
-# scripts/env_links.py renders this table into the seed of the
-# ".config/mise/config.toml" entry (see envlinks.toml). The accepted cost, kept
-# from ADR-0009: a tool added here reaches an already-bootstrapped host only via
-# `mise use -g <tool>@<version>` there.
+# How this reaches a machine: scripts/env_links.py seeds ~/.config/mise/config.toml
+# from this table on a first run, and scripts/runtimes.py adds any tool listed
+# here that the live file lacks (`mise use -g <tool>@<version>`) without touching
+# the ones it has — so `mise use -g` / `mise up` on a host keep their say, and a
+# tool added here still arrives everywhere on the next `chezmoi apply`.
 #
-# The SETTINGS half (how mise installs) is declarative and always applied:
-# home/private_dot_config/mise/conf.d/zz-dotfiles.toml.
+# Backends (mise registry; `mise registry | grep <name>`): the short names below
+# resolve to aqua (prebuilt GitHub releases, checksummed) unless noted. The
+# SETTINGS half (how mise installs) is home/private_dot_config/mise/conf.d/.
+#
+# Deliberately NOT here — see packages.toml: zsh, git, GNU coreutils/findutils/
+# sed/grep (mise's coreutils is uutils, not GNU), vim, wget, rsync, tree, xclip.
 
 [mise.tools]
-aws-cli = "latest"
+# --- runtimes ---
 go = "latest"
-just = "latest"
-node = "lts"
-# Lark CLI — `npx @larksuite/cli@latest install` runs in the post-login setup;
-# kept as a global npm tool so the runtime is present once node exists.
-"npm:@larksuite/cli" = "latest"
-# Smithery MCP CLI — called directly by the post-login setup. pnpm blocks
-# dependency lifecycle scripts by default and smithery ships a postinstall, so
-# exactly that package is allowed to build (mise passes --allow-build=<pkg>).
-"npm:@smithery/cli" = { version = "latest", allow_builds = ["@smithery/cli"] }
-pre-commit = "latest"
 rust = "stable"
+# (node/npm/pnpm: nvm — home/.chezmoidata/node.toml)
+
+# --- dev workflow ---
+aws-cli = "latest"
+just = "latest"
+pre-commit = "latest"
 worktrunk = "latest"
+gh = "latest"
+git-lfs = "latest"
+jj = "latest"
+difftastic = "latest"
+# mergiraf: no prebuilt release mise can fetch (codeberg), so mise's cargo
+# backend builds it with the rust above; runtimes.py installs rust first.
+"cargo:mergiraf" = "latest"
+
+# --- shell and prompt ---
+starship = "latest"
+zoxide = "latest"
+fzf = "latest"
+direnv = "latest"
+tmux = "latest"            # aqua:tmux/tmux-builds — static builds
+zellij = "latest"
+eza = "latest"             # asdf:mise-plugins/mise-eza (ubi has no macOS asset)
+
+# --- everyday CLI ---
+ripgrep = "latest"
+fd = "latest"
+jq = "latest"
+bottom = "latest"
+# skopeo: conda-forge through mise's conda backend — mise solves and downloads
+# the packages itself; NO conda/mamba/pixi binary is installed (checked against
+# the backend docs and a scratch install, 2026-09-10).
+"conda:skopeo" = "latest"
+# 1Password CLI (`op`): vfox plugin fetching 1Password's own release.
+1password = "latest"
 
 # Linux only: the docker CLI is the client half; the daemon is an opt-in system
 # component (`--system docker`, scripts/components.py). macOS never gets a

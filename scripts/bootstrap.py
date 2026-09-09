@@ -7,8 +7,8 @@
     tools  :  privilege → prerequisites (curl, git) → zoi → chezmoi → mise
     apply  :  chezmoi init (this machine's answers) → back up what apply would
               overwrite → chezmoi apply, whose run_ scripts do the rest:
-              env links · packages (zoi) · fonts · mise runtimes · setup.py
-              (login shell, agents, system components)
+              env links · mise tools · Node via nvm · OS packages · fonts ·
+              setup.py (login shell, agents, system components)
 
 `bootstrap.sh` (repo root) is the only shell: it guarantees `uv` and execs this
 file with `uv run`. Everything else is here or in the sibling scripts.
@@ -396,6 +396,8 @@ def main(argv=None):
         plan.backup(f"existing $HOME paths chezmoi will overwrite -> copied to {backup_dir}/ first "
                     f"(exact list decided by `chezmoi status` at run time; candidates: {', '.join(existing)})")
     plan.extend(script_plan_rows("env_links.py"))
+    plan.extend(script_plan_rows("runtimes.py"))
+    plan.extend(script_plan_rows("node.py"))
     plan.extend(script_plan_rows("packages.py"))
     plan.install("Nerd Fonts (FiraCode, FiraMono) — brew casks on macOS, getnf on Linux")
     plan.extend(setup.build_plan(ctx, system_spec, agent_ids))

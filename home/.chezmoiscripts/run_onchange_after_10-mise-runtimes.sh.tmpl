@@ -1,0 +1,11 @@
+#!/bin/sh
+# mise: declare every repo tool in ~/.config/mise/config.toml that is not there
+# yet (the owner's versions win), then `mise install` (scripts/runtimes.py).
+# Runs FIRST among the after-scripts: packages.py's mise fallback and setup.py
+# need the tools. Re-runs when the list or the script changes:
+#   mise.toml:   {{ include ".chezmoidata/mise.toml" | sha256sum }}
+#   runtimes.py: {{ include (joinPath .chezmoi.workingTree "scripts" "runtimes.py") | sha256sum }}
+set -eu
+export PATH="$HOME/.local/bin:$PATH"
+command -v uv >/dev/null 2>&1 || { echo "runtimes: uv not on PATH — run ./bootstrap.sh first" >&2; exit 1; }
+exec uv run --script "{{ .chezmoi.workingTree }}/scripts/runtimes.py"

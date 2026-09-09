@@ -31,10 +31,10 @@ replacement stack: chezmoi, zoi, uv, mise, with Python kept as `uv run` scripts.
 | --- | --- |
 | `.chezmoiroot` → `home/` | the chezmoi source state; `chezmoi init` pins `sourceDir` to the clone |
 | `home/.chezmoi.toml.tmpl` | the per-machine questions: `env`, `stateRoot`, `network`, `agents`, `system` (env vars `DOTFILE_*` win) |
-| `home/.chezmoidata/*.toml` | the reviewed inventories: `packages.toml`, `mise.toml`, `envlinks.toml` — read by chezmoi templates AND by the scripts (tomllib) |
-| `home/.chezmoiscripts/` | `run_before_` env links; `run_onchange_after_` packages, fonts, mise install, setup — each keyed on the hash of its inputs |
+| `home/.chezmoidata/*.toml` | the reviewed inventories: `mise.toml`, `node.toml`, `packages.toml`, `envlinks.toml` — read by chezmoi templates AND by the scripts (tomllib) |
+| `home/.chezmoiscripts/` | `run_before_` env links; `run_onchange_after_` mise, node, packages, fonts, setup — each keyed on the hash of its inputs |
 | `home/.chezmoiexternal.toml` | the four zsh plugins, fetched as archives |
-| `scripts/*.py` | `bootstrap.py` (plan → tools → init → backup → apply), `env_links.py`, `packages.py`, `setup.py`, `agents.py`, `components.py`, `managers.py`, `context.py`, `check.py` |
+| `scripts/*.py` | `bootstrap.py` (plan → tools → init → backup → apply), `env_links.py`, `runtimes.py`, `node.py`, `packages.py`, `setup.py`, `agents.py`, `components.py`, `managers.py`, `context.py`, `check.py` |
 | `bootstrap.sh` | the only shell: ensure `uv`, exec `scripts/bootstrap.py` |
 
 ### Ownership rule (ADR-0009, restated for chezmoi)
@@ -49,13 +49,18 @@ replacement stack: chezmoi, zoi, uv, mise, with Python kept as `uv run` scripts.
 - **Seeded-then-owned** (mise's `config.toml`): an env-link entry whose seed is
   rendered from `mise.toml`; mise owns the file afterwards.
 
-### Packages
+### Packages (updated 2026-09-10)
 
-`packages.toml` lists each tool with its name per native manager, an optional
-zoi registry id and an optional mise fallback. `scripts/packages.py` hands the
-missing ones to `zoi install --yes <manager>:<name>`, probes each `bin`, and
-falls back per tool to the native manager and then to `mise use -g`. Fonts are a
-separate `run_onchange_` script (brew casks on macOS, getnf on Linux).
+Whatever mise can fetch, mise manages — `mise.toml` carries the runtimes AND
+the CLI toolset (aqua/ubi release binaries, `cargo:` builds, vfox plugins,
+`conda:` through mise's own solver, which installs no conda binary). The Node
+ecosystem is nvm's (`node.toml`, `scripts/node.py`), never mise's. What remains
+for the OS package manager — the shell, GNU userland, git, vim, wget/rsync/tree,
+xclip — is `packages.toml`, installed by `scripts/packages.py`, which detects
+brew / apt / dnf / yum. `scripts/runtimes.py` reconciles the live mise config
+add-only: tools the repo declares and the host lacks are added, versions the
+host already has are kept. zoi is used only for entries naming a zoi registry
+package. Fonts are a separate `run_onchange_` script.
 
 ### Environments
 
@@ -69,14 +74,16 @@ root and the extra links (`.jcc.yaml`, `.lark-cli`, `.vscode-server`,
 - **Bootstrap needs no root** for the user half: uv, zoi, chezmoi and mise all
   install into `~/.local/bin`. Root is only for prerequisites, `chsh` and the
   opt-in system components (unchanged from before).
-- **zoi is a front door, measured, not assumed**: with an empty registry and a
-  no-op native passthrough (RFC-0006), the native fallback is what installs
-  today. `packages.py` says so in its output; when zoi delivers, nothing changes.
-- **Versions are no longer pinned by a lockfile.** Tools come from brew/apt at
-  whatever version they ship; mise tools use their declared ranges. That is the
-  reproducibility the Nix generation had and this one trades away knowingly.
-- **A tool added to `mise.toml` still reaches an existing host only via
-  `mise use -g`** — the seeded-then-owned cost ADR-0009 already accepted.
+- **zoi is a front door for its own registry only**: it held nine packages and
+  its native passthrough was a no-op (RFC-0006), so the toolset moved to mise
+  and the OS remainder to a Python forwarder over brew / apt / dnf / yum.
+- **Versions**: mise tools are pinned per host in `config.toml` (`latest` at
+  first install, then whatever `mise up` moves them to); OS packages come at
+  whatever the manager ships. Less than a Nix lockfile, more than nothing.
+- **A tool added to `mise.toml` reaches existing hosts** through the add-only
+  reconcile in `runtimes.py`; versions a host chose are never overwritten.
+- **Node is nvm's**: no `node`/`npm:` mise tools, so the two never race for
+  `npm`; non-interactive callers get the newest installed Node from `env.zsh`.
 - **Verification** is `just check` (`scripts/check.py`): data validation, script
   compile + `--help`, and a full chezmoi render per environment into a scratch
   `$HOME` with `zsh -n`, `git config --list` and TOML parses on the results —

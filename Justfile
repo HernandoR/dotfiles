@@ -13,8 +13,8 @@ default:
     @just --list --unsorted
 
 # Apply the source tree to $HOME: files, zsh plugins, then the run_ scripts
-# (env links before; packages / fonts / mise / setup after, each only when its
-# inputs changed). A bare apply on a terminal gets setup.py's own clearance.
+# (env links before; mise / node / packages / fonts / setup after, each only
+# when its inputs changed). A bare apply on a terminal gets setup.py's own clearance.
 apply *ARGS:
     chezmoi --source '{{ repo }}' apply {{ ARGS }}
 
@@ -51,18 +51,19 @@ check:
 env-links *ARGS:
     uv run --script scripts/env_links.py {{ ARGS }}
 
-# Install whatever packages.toml declares and is missing (zoi first, then the
-# native manager, then mise) — normally run by apply when the list changes.
+# The OS-level remainder from packages.toml (brew / apt / dnf / yum) — normally
+# run by apply when the list changes.
 packages *ARGS:
     uv run --script scripts/packages.py {{ ARGS }}
 
-# Install whatever ~/.config/mise/config.toml declares but has not materialized.
-#
-# NOT how a tool added to .chezmoidata/mise.toml reaches this machine: that file
-# is only the seed for config.toml, which mise owns once it exists. Add it here
-# with `mise use -g <tool>@<version>` — which installs it too.
-runtimes:
-    mise install -y
+# mise: declare every tool from .chezmoidata/mise.toml the live config lacks
+# (your own `mise use -g` versions are kept), then `mise install`.
+runtimes *ARGS:
+    uv run --script scripts/runtimes.py {{ ARGS }}
+
+# Node via nvm: nvm, the Node from .chezmoidata/node.toml, pnpm, global npm packages.
+node *ARGS:
+    uv run --script scripts/node.py {{ ARGS }}
 
 # Login shell, mise runtimes, agent toolchain, system components (scripts/setup.py).
 setup *ARGS:

@@ -1,5 +1,6 @@
 #!/bin/sh
-# The user-level CLI toolset, through zoi (scripts/packages.py). Re-runs only
+# The system-level remainder from the OS package manager (scripts/packages.py) —
+# most tools come from mise (10-mise-runtimes). Re-runs only
 # when the inventory or the installer changes:
 #   packages.toml: {{ include ".chezmoidata/packages.toml" | sha256sum }}
 #   packages.py:   {{ include (joinPath .chezmoi.workingTree "scripts" "packages.py") | sha256sum }}

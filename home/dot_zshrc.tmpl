@@ -50,6 +50,12 @@ export GPG_TTY=$(tty)
 # rust via rustup escape hatch (mise manages rust by default).
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 
+# Node via nvm (scripts/node.py installs it; node.toml says which Node). nvm.sh
+# is what makes `nvm use` / `.nvmrc` work in this shell; env.zsh already put
+# the default Node on PATH for non-interactive callers.
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
 {{- if eq .chezmoi.os "darwin" }}
 
 # Homebrew on macOS.

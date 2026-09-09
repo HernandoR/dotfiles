@@ -9,7 +9,7 @@ this file or the agents/system selection changes, and by hand via `just setup`
 or `uv run scripts/setup.py`. chezmoi and scripts/env_links.py already own the
 files and links; this handles the remainder:
 
-    login shell (chsh) · mise runtimes · agent toolchain (ADR-0011) · Linux system SW
+    login shell (chsh) · mise tools + nvm Node · agent toolchain (ADR-0011) · Linux system SW
 
 Privilege is self-detected (Ctx.priv, live): privileged calls pass
 `with_sudo=True`, so sudo is prepended only when non-root with a sudo binary;
@@ -26,7 +26,6 @@ import os
 import pathlib
 import shutil
 import sys
-import tomllib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agents  # noqa: E402
@@ -41,7 +40,6 @@ logging.basicConfig(
 logger = logging.getLogger("dotfiles")
 
 REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
-MISE_DATA = REPO_DIR / "home" / ".chezmoidata" / "mise.toml"
 DEFERRED_AGENT_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
 
 
@@ -84,18 +82,16 @@ def set_login_shell(ctx):
 
 
 def setup_runtimes(ctx):
-    """Materialize every mise-managed runtime that ~/.config/mise/config.toml
-    declares (seeded from home/.chezmoidata/mise.toml by scripts/env_links.py on
-    a first run; mise's own file afterwards). With the zsh `mise activate`
-    integration a tool's bin only reaches PATH once it is installed, and the
-    lazy auto-install fires only for interactive commands — so drive the global
-    config to completion here. No privilege."""
-    mise = shutil.which("mise")
-    if not mise:
-        logger.warning("mise not on PATH; skipping runtime install")
-        return
-    logger.info("installing mise runtimes (node, rust, smithery, …)")
-    ctx.run_command([mise, "install", "-y"], check=False)
+    """Runtimes and tools: mise (scripts/runtimes.py — declare missing tools, then
+    `mise install`) and the Node ecosystem through nvm (scripts/node.py). Both are
+    also chezmoi run_onchange scripts; calling them here makes a standalone
+    `setup.py` complete on its own and costs nothing when they are current. No
+    privilege."""
+    for script in ("runtimes.py", "node.py"):
+        cmd = ["uv", "run", "--script", str(REPO_DIR / "scripts" / script)]
+        if ctx.dry_run:
+            cmd.append("--dry-run")
+        ctx.run_command(cmd, check=False)
 
 
 def setup_agents(ctx, agent_ids):
@@ -124,17 +120,18 @@ def write_deferred_setup(ctx, agent_ids):
         "#!/usr/bin/env bash",
         "# Interactive agent extras (written by scripts/setup.py). Run manually via",
         "# the `dotfiles-postsetup` shell function (needs a TTY); self-removes on",
-        "# success. The Smithery CLI is a mise npm tool (installed by setup.py), so it",
-        "# is called directly (no npx); only the Lark CLI still needs npx (node from mise).",
+        "# success. The Smithery CLI is a global npm package (scripts/node.py), so it",
+        "# is called directly (no npx); only the Lark CLI still needs npx (node from nvm).",
         "#",
         "# Everything that can run unattended — marketplaces, plugins, MCP servers,",
         "# the shared memory store, pi's declarative MCP/marketplace files and its",
         "# settings preset — is projected from scripts/agents.py during the bootstrap",
         "# (ADR-0011, ADR-0012) and is deliberately NOT repeated here.",
         "",
-        "# Put mise-managed tools (node/npx, smithery) on PATH even when this script",
-        "# is run from a shell without mise activated (e.g. a bare bash subshell).",
-        'command -v mise >/dev/null 2>&1 && eval "$(mise activate bash --shims)" || true',
+        "# Node (npx, smithery) comes from nvm (scripts/node.py); source it so this",
+        "# works from a bare bash subshell too. mise shims cover the rest.",
+        'export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" || true',
+        '[ -d "$HOME/.local/share/mise/shims" ] && export PATH="$HOME/.local/share/mise/shims:$PATH"',
         "",
         "# --- Smithery MCP ----------------------------------------------------------",
         "# The namespace endpoint is per-account (its name comes from the logged-in",
@@ -171,7 +168,7 @@ def write_deferred_setup(ctx, agent_ids):
         r'  echo "smithery CLI not on PATH; skipping Smithery MCP (expected pre-installed)"',
         "fi",
         "",
-        "# --- Lark CLI (needs npx / node from mise) ---------------------------------",
+        "# --- Lark CLI (needs npx / node from nvm) ----------------------------------",
         "# Its installer asks which agents to wire and drops the skills into",
         f"# {agents.SHARED_SKILLS} — the loose-skills root every agent reads (ADR-0011).",
         "if command -v npx >/dev/null 2>&1; then",
@@ -212,20 +209,6 @@ def run_system(ctx, spec):
 # --- the plan --------------------------------------------------------------------
 
 
-def mise_tools():
-    """Tool names declared in home/.chezmoidata/mise.toml for this OS — the seed
-    of ~/.config/mise/config.toml, so on a host that has bootstrapped before this
-    is the repo's list rather than a promise about what `mise install` will do."""
-    try:
-        mise = tomllib.loads(MISE_DATA.read_text())["mise"]
-    except (OSError, KeyError, tomllib.TOMLDecodeError):
-        return []
-    tools = list(mise.get("tools", {}))
-    if sys.platform == "linux":
-        tools += list(mise.get("linux_tools", {}))
-    return tools
-
-
 def _login_shell_plan():
     target = target_zsh() or "zsh (not installed yet — packages.toml installs it)"
     try:
@@ -246,10 +229,6 @@ def build_plan(ctx, system_spec, agent_ids):
     def add(section, text, privileged=False):
         items.append((section, text, privileged))
 
-    if agent_ids:
-        tools = mise_tools()
-        add("install", "mise runtimes from ~/.config/mise/config.toml, seeded on a first run with: "
-            + (", ".join(tools) if tools else "the tools declared in home/.chezmoidata/mise.toml"))
     agents.plan_items(ctx, agent_ids, add)
     if agent_ids:
         add("config", f"interactive agent extras (Smithery/Lark) -> {DEFERRED_AGENT_SETUP} "

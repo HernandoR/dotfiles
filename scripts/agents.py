@@ -820,6 +820,24 @@ def _mise_which(ctx, name):
     return None
 
 
+def _nvm_bin(name):
+    """``$NVM_DIR/versions/node/<newest>/bin/<name>`` or None. Node is nvm's
+    (home/.chezmoidata/node.toml, scripts/node.py) and nvm.sh only reaches an
+    interactive zsh, so resolve the newest installed Node here the way env.zsh
+    does for non-interactive shells."""
+    versions = pathlib.Path(os.environ.get("NVM_DIR") or HOME / ".nvm") / "versions" / "node"
+    if not versions.is_dir():
+        return None
+
+    def key(p):
+        return tuple(int(x) for x in p.name.lstrip("v").split(".") if x.isdigit())
+    for ver in sorted(versions.iterdir(), key=key, reverse=True):
+        cand = ver / "bin" / name
+        if cand.exists():
+            return str(cand)
+    return None
+
+
 _NPM = []  # one-slot cache: `mise which npm` is a mise start-up per call
 
 
@@ -835,7 +853,7 @@ def _npm(ctx):
     """
     if _NPM:
         return _NPM[0]
-    npm = shutil.which("npm") or _mise_which(ctx, "npm")
+    npm = shutil.which("npm") or _nvm_bin("npm") or _mise_which(ctx, "npm")
     if not npm:
         if ctx.dry_run:
             # Describe-only run: nothing is installed, so name the command anyway.
@@ -849,7 +867,7 @@ def _npm(ctx):
 def _npx(ctx):
     """Path to the npx of the mise-managed node runtime, or None. Same PATH gap
     and same resolution order as ``_npm`` — see its docstring."""
-    npx = shutil.which("npx") or _mise_which(ctx, "npx")
+    npx = shutil.which("npx") or _nvm_bin("npx") or _mise_which(ctx, "npx")
     if not npx:
         if ctx.dry_run:
             return "npx"

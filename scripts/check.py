@@ -6,7 +6,7 @@
 
 There is no test framework; this is what stands in for one:
 
-  1. the three data files parse and every entry has what the scripts need;
+  1. the four data files parse and every entry has what the scripts need;
   2. every script compiles and answers --help;
   3. chezmoi renders the whole source tree into a scratch $HOME (no scripts, no
      externals, no network) with each known environment's data, and the results
@@ -33,7 +33,7 @@ ENVS = {
     "mewtant": {"DOTFILE_STATE_ROOT": "/fsx/hernando/dotfile_home_link_src", "DOTFILE_NETWORK_ENV": "CN"},
     "ec2-wo-fsx": {"DOTFILE_STATE_ROOT": "/home/ec2-user/dotfile_home"},
 }
-MANAGERS = ("brew", "apt", "dnf", "pacman", "apk", "zypper")
+MANAGERS = ("brew", "apt", "dnf")
 
 failures = []
 
@@ -69,6 +69,11 @@ def check_data():
         if isinstance(v, dict) and "version" not in v:
             fail(f"mise.tools.{k}: table form needs a version")
     ok(f"mise.toml: {len(mise.get('tools', {}))} tools (+{len(mise.get('linux_tools', {}))} linux-only)")
+
+    node = tomllib.loads((DATA / "node.toml").read_text())["node"]
+    if not node.get("version") or not isinstance(node.get("globals"), list):
+        fail("node.toml: needs version and a globals list")
+    ok(f"node.toml: Node {node.get('version')}, {len(node.get('globals', []))} globals")
 
     pkgs = tomllib.loads((DATA / "packages.toml").read_text())["packages"]
     names = [p["name"] for p in pkgs]
