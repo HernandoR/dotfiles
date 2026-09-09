@@ -10,12 +10,9 @@ Most of the toolset is installed by mise from prebuilt release binaries
 is the system-level remainder — the shell, GNU userland, git, wget/rsync, X
 clipboard — listed in home/.chezmoidata/packages.toml with its name per package
 manager. The script detects which manager this host has (brew on macOS; apt,
-dnf or yum on Linux; brew as a last resort) and installs what is missing, with
-sudo only when the manager needs it.
-
-An entry may name a zoi registry package (`zoi = "..."`); those go through
-`zoi install` first. zoi's native passthrough is deliberately NOT used: measured
-on 2026-09-09, `zoi install brew:cowsay` reported success and installed nothing.
+dnf or yum on Linux; brew as a last resort) and installs ONLY what is missing —
+a tool the host already has is never reinstalled — with sudo only when the
+manager needs it.
 
 Run by chezmoi (run_onchange, whenever packages.toml or this file changes) and
 by hand via `just packages`. `--plan` describes without changing anything.
@@ -65,6 +62,19 @@ def applicable(pkgs):
     return [p for p in pkgs if p.get("only", here) == here]
 
 
+def present(pkg):
+    """Is this tool already here? Never reinstall what the host has.
+
+    Default: `bin` (or the name) resolves on PATH. macOS complicates the GNU
+    userland — `ls`, `find`, `sed`, `grep` always resolve to the BSD tools, so
+    those entries carry `probe_darwin`, a list of paths of which one must exist
+    (the brew gnubin binaries, under either Homebrew prefix)."""
+    probes = pkg.get("probe_darwin") if sys.platform == "darwin" else None
+    if probes:
+        return any(pathlib.Path(x).exists() for x in probes)
+    return shutil.which(pkg.get("bin", pkg["name"])) is not None
+
+
 def have(binary):
     return shutil.which(binary) is not None
 
@@ -98,8 +108,6 @@ def link_alias(ctx, pkg):
 
 def chain(pkg, key):
     steps = []
-    if pkg.get("zoi"):
-        steps.append(f"zoi install {pkg['zoi']}")
     if key and pkg.get(key):
         steps.append(f"{key} install {'--cask ' if key == 'brew' and pkg.get('cask') else ''}{pkg[key]}")
     if pkg.get("mise"):
@@ -116,7 +124,7 @@ def main():
     ctx = Ctx(dry_run=args.dry_run or args.plan, assume_yes=True)
     key, argv, sudo = detect_manager()
     pkgs = applicable(tomllib.loads(DATA.read_text())["packages"])
-    missing = [p for p in pkgs if not have(p.get("bin", p["name"]))]
+    missing = [p for p in pkgs if not present(p)]
 
     if args.plan:
         if key is None:
@@ -131,26 +139,23 @@ def main():
     log(f"{len(missing)} of {len(pkgs)} missing: " + ", ".join(p["name"] for p in missing)
         + f" (package manager: {key or 'none found'})")
 
-    zoi = shutil.which("zoi")
+    if key is None and not ctx.dry_run:
+        warn("no supported package manager (brew/apt/dnf/yum) on this host — install by hand: "
+             + ", ".join(p["name"] for p in missing))
     for p in missing:
-        binary = p.get("bin", p["name"])
-        if p.get("zoi") and zoi:
-            ctx.run_command([zoi, "install", "--yes", p["zoi"]], check=False)
-            if have(binary):
-                continue
         if key and install_native(ctx, key, argv, sudo, p):
             link_alias(ctx, p)
-            if have(binary):
+            if present(p):
                 continue
-        if install_mise(ctx, p) and have(binary):
+        if install_mise(ctx, p) and present(p):
             continue
         if not ctx.dry_run:
-            if not (p.get("zoi") or (key and p.get(key)) or p.get("mise")):
+            if not ((key and p.get(key)) or p.get("mise")):
                 warn(f"{p['name']}: no backend on this host — install it by hand")
             else:
                 warn(f"{p['name']}: still missing after {chain(p, key)}")
 
-    still = [p["name"] for p in missing if not have(p.get("bin", p["name"]))]
+    still = [p["name"] for p in missing if not present(p)]
     if still and not ctx.dry_run:
         warn("not installed: " + ", ".join(still))
     else:

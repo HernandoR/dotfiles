@@ -4,7 +4,7 @@
 # ///
 """scripts/bootstrap.py — the whole bootstrap (ADR-0013), in Python.
 
-    tools  :  privilege → prerequisites (curl, git) → zoi → chezmoi → mise
+    tools  :  privilege → prerequisites (curl, git) → Homebrew (macOS) → chezmoi → mise
     apply  :  chezmoi init (this machine's answers) → back up what apply would
               overwrite → chezmoi apply, whose run_ scripts do the rest:
               env links · mise tools · Node via nvm · OS packages · fonts ·
@@ -12,6 +12,12 @@
 
 `bootstrap.sh` (repo root) is the only shell: it guarantees `uv` and execs this
 file with `uv run`. Everything else is here or in the sibling scripts.
+
+Three tools bootstrap the bootstrap and are therefore installed by their own
+installers into ~/.local/bin rather than by mise: uv (bootstrap.sh — it runs the
+Python), chezmoi and mise themselves. `just update` upgrades them in place
+(`uv self update`, `chezmoi upgrade`, `mise self-update`). Homebrew on macOS is
+the fourth: packages.py needs it before apply, and no tool manager installs it.
 
 Privilege model (Ctx.priv, detected live): root runs privileged steps directly,
 sudo runs them via sudo, none skips them (the user-level half still works).
@@ -33,6 +39,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import setup  # noqa: E402
+from components import Homebrew  # noqa: E402
 from context import ASSUME_YES_ENV, Ctx  # noqa: E402
 from managers import Script  # noqa: E402
 
@@ -48,7 +55,6 @@ BACKUP_ROOT = HOME / "dotfiles_backup"
 
 # Tool -> (installer URL, interpreter, args). Download-then-run, never curl|sh.
 TOOLS = {
-    "zoi": Script("https://zillowe.pages.dev/scripts/zoi/install.sh", interpreter="bash", check=False),
     "chezmoi": Script("https://get.chezmoi.io", interpreter="sh", args=["--", "-b", str(LOCAL_BIN)],
                       check=False),
     "mise": Script("https://mise.run", interpreter="sh", check=False),
@@ -144,7 +150,17 @@ def ensure_prereqs(ctx):
 # ---- the three tools ---------------------------------------------------------------
 
 
+def have_brew():
+    return bool(shutil.which("brew")) or os.access("/opt/homebrew/bin/brew", os.X_OK)
+
+
 def plan_tools(plan):
+    if sys.platform == "darwin":
+        if have_brew():
+            plan.fact("brew", "already installed — not reinstalled")
+        else:
+            plan.install("Homebrew (its installer; BFSU mirror under --network CN) — packages.toml "
+                         "and the fonts need it", priv=True)
     for name, script in TOOLS.items():
         found = shutil.which(name)
         if found:
@@ -154,6 +170,13 @@ def plan_tools(plan):
 
 
 def install_tools(ctx):
+    if sys.platform == "darwin" and not have_brew():
+        # The system component is idempotent and already knows the CN mirror;
+        # running it here (not only from setup.py) puts brew in place BEFORE
+        # chezmoi apply, which is when packages.py first needs it.
+        Homebrew().install(ctx)
+        if not ctx.dry_run and not have_brew():
+            warn("Homebrew did not install — packages.toml and the fonts will be skipped on this run")
     for name, script in TOOLS.items():
         if shutil.which(name):
             continue
@@ -322,7 +345,7 @@ def script_plan_rows(script, *args):
 def parse_args(argv):
     ap = argparse.ArgumentParser(
         prog="bootstrap.sh",
-        description="Bootstrap the dotfiles: zoi + chezmoi + mise, then chezmoi apply (ADR-0013). "
+        description="Bootstrap the dotfiles: chezmoi + mise (+ Homebrew on macOS), then chezmoi apply (ADR-0013). "
                     "On a terminal the full plan is printed and cleared once first (ADR-0010).")
     ap.add_argument("--dry-run", action="store_true", help="print every command without executing")
     ap.add_argument("--verbose", action="store_true", help="more logging")

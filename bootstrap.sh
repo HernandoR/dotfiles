@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bootstrap.sh — the ONLY shell in the bootstrap, and deliberately nothing more
 # than a launcher for scripts/bootstrap.py (ADR-0013). Every real step — the
-# plan, the clearance, prerequisites, zoi, chezmoi, mise, `chezmoi apply` and
+# plan, the clearance, prerequisites, Homebrew (macOS), chezmoi, mise, `chezmoi apply` and
 # the scripts it runs — lives in scripts/. All arguments are forwarded.
 #
 #   ./bootstrap.sh --dry-run            # preview every step, run nothing

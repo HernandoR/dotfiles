@@ -80,12 +80,14 @@ def check_data():
     if len(set(names)) != len(names):
         fail("packages.toml: duplicate names")
     for p in pkgs:
-        if not any(p.get(m) for m in MANAGERS) and not p.get("zoi") and not p.get("mise"):
+        if not any(p.get(m) for m in MANAGERS) and not p.get("mise"):
             fail(f"packages.{p['name']}: no backend at all")
         if p.get("only") not in (None, "linux", "darwin"):
             fail(f"packages.{p['name']}: only must be linux|darwin")
+        if p.get("probe_darwin") and not isinstance(p["probe_darwin"], list):
+            fail(f"packages.{p['name']}: probe_darwin must be a list of paths")
         missing = [m for m in MANAGERS if m not in p]
-        if missing and not p.get("zoi"):
+        if missing:
             fail(f"packages.{p['name']}: say \"\" explicitly for {', '.join(missing)}")
     ok(f"packages.toml: {len(pkgs)} packages")
 

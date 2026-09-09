@@ -1,4 +1,4 @@
-# dotfiles — the repeatable half of the chezmoi + zoi + mise workflow (ADR-0013).
+# dotfiles — the repeatable half of the chezmoi + mise + nvm workflow (ADR-0013).
 #
 # Every recipe here is a command the README already documents; the Justfile
 # exists so it is one name instead of a remembered incantation. `just` itself is
@@ -37,10 +37,9 @@ managed:
 init:
     chezmoi --source '{{ repo }}' init
 
-# Health of the three tools and of the source tree.
+# Health of the tools and of the source tree.
 doctor:
     chezmoi --source '{{ repo }}' doctor || true
-    zoi doctor || true
     mise doctor || true
 
 # The repo's verification: data files, scripts, a full render per environment.
@@ -73,11 +72,14 @@ setup *ARGS:
 agents:
     uv run --script scripts/agents.py
 
-# Pull the repo, re-apply, and move packages / runtimes within their ranges.
+# Pull the repo, re-apply, upgrade the three self-installed tools, move mise
+# tools within their ranges.
 update:
     git -C '{{ repo }}' pull --ff-only
     just apply
-    zoi update --all --yes || true
+    uv self update || true
+    chezmoi upgrade || true
+    mise self-update -y || true
     mise up -y
 
 # Preview the full bootstrap — prints the plan and every step, runs nothing.

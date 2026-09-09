@@ -2,13 +2,12 @@
 
 跨平台 dotfiles：**[chezmoi](https://www.chezmoi.io/)** 管文件，
 **[mise](https://mise.jdx.dev/)** 管运行时和绝大部分 CLI 工具（预编译发布二进制），
-**[nvm](https://github.com/nvm-sh/nvm)** 管 Node 生态，**[zoi](https://github.com/Zillowe/Zoi)**
-作为其自有仓库软件包的入口，其余命令式步骤（包括少数系统级软件包）由若干
-**`uv run` Python 脚本**完成。目标平台：macOS (aarch64) 与 Debian/Ubuntu (x86_64 + aarch64)。
+**[nvm](https://github.com/nvm-sh/nvm)** 管 Node 生态，其余命令式步骤（包括通过
+brew / apt / dnf / yum 安装的少数系统级软件包）由若干 **`uv run` Python 脚本**完成。目标平台：macOS (aarch64) 与 Debian/Ubuntu (x86_64 + aarch64)。
 zsh + Starship (catppuccin_mocha) + fzf-tab 的体验不变。
 
 完整手册见英文 [README.md](README.md)；设计记录见
-[ADR-0013](docs/plans/adr-0013-chezmoi-zoi-mise-uv-2026-09-09.md) 与
+[ADR-0013](docs/plans/adr-0013-chezmoi-mise-nvm-uv-2026-09-09.md) 与
 [RFC-0006](docs/rfc/rfc-0006-chezmoi-zoi-mise-uv-2026-09-09.md)。
 上一代（Nix + Home Manager）保留在 `archive/homemanager/*` 分支。
 
@@ -25,7 +24,7 @@ cd dotfiles
 ./bootstrap.sh                       # 正式运行
 ```
 
-只需要 `curl` 和 `git`。用户层（uv、zoi、chezmoi、mise，全部装进 `~/.local/bin`）
+只需要 `curl` 和 `git`。用户层（uv、chezmoi、mise，全部装进 `~/.local/bin`）
 不需要 root；root/sudo 只用于缺失的前置依赖、`chsh` 以及可选的系统组件。
 
 在终端里运行时，它会先打印完整计划——安装什么、写入/链接哪些文件、会复制备份哪些
@@ -34,8 +33,10 @@ cd dotfiles
 
 ## bootstrap 做了什么
 
-1. **工具：** 检测权限 → 安装前置依赖 → 用各自的安装脚本安装 zoi、chezmoi、mise
-   （先下载再执行，绝不 `curl | sh`）。
+1. **工具：** 检测权限 → 安装前置依赖 → macOS 上安装 Homebrew（系统级软件包和字体
+   需要它）→ 用各自的安装脚本安装 chezmoi、mise（先下载再执行，绝不 `curl | sh`）。
+   uv 已由 `bootstrap.sh` 用同样方式装好，因为脚本本身跑在它提供的 Python 上。这三个
+   是 mise 不管的工具，`just update` 会原地升级它们。
 2. **`chezmoi init`：** 记录本机答案 `env` / `stateRoot` / `network` / `agents` /
    `system`（来自 `home/.chezmoi.toml.tmpl`；命令行参数或 `DOTFILE_*` 环境变量可
    无人值守地回答）。仓库本身就是 chezmoi 的 source 目录。
@@ -57,7 +58,7 @@ cd dotfiles
 | `--system <list>` | 可选 Linux 系统组件（`all` / `none` / 名称列表） |
 | `just diff` / `just apply` / `just status` | 查看差异 / 应用 / 逐文件状态 |
 | `just check` | 校验仓库：数据文件、脚本、每个环境的完整渲染 |
-| `just update` | `git pull` + apply + `zoi update --all` + `mise up` |
+| `just update` | `git pull` + apply + 原地升级 uv/chezmoi/mise + `mise up` |
 
 ## 分层与归属
 
@@ -73,7 +74,6 @@ cd dotfiles
   全局 npm 包；交互式 zsh 加载 `nvm.sh`，其他进程由 `env.zsh` 把最新已装 Node 放上 PATH。
 - **系统级软件包**（`packages.toml`）：只剩 zsh、GNU 工具、git、vim、wget、rsync、tree、
   xclip 这类必须由系统包管理器提供的。`packages.py` 自动探测 brew / apt / dnf / yum。
-  zoi 仅用于其自有仓库里的包（实测 2026-09-09 其仓库只有九个包、原生透传不装东西）。
 
 ### 机器本地的“逃生口”
 

@@ -1,8 +1,8 @@
-# ADR-0013: chezmoi owns the dotfiles, zoi fronts the packages, mise the runtimes; Python stays as `uv run` scripts
+# ADR-0013: chezmoi owns the dotfiles, mise the tools, nvm the Node ecosystem; Python stays as `uv run` scripts
 
 | Field | Value |
 | --- | --- |
-| Status | accepted |
+| Status | accepted (updated 2026-09-10: zoi removed, mise-first, nvm for Node) |
 | Date | 2026-09-09 |
 | Supersedes | ADR-0007 (Nix + Home Manager), ADR-0009 (ownership tiers — the *rule* survives, the mechanism changes) |
 | Keeps | ADR-0010 (plan-first clearance), ADR-0011 + ADR-0012 (agent toolchain) |
@@ -13,17 +13,20 @@ RFC-0006 records why the Nix + Home Manager generation was retired: the bootstra
 cost of Nix itself, the machinery ADR-0009 needed to escape the read-only store,
 and a `prod/*` branch per environment carrying one file. The owner chose the
 replacement stack: chezmoi, zoi, uv, mise, with Python kept as `uv run` scripts.
+On 2026-09-10, after measuring zoi (nine registry packages, a no-op native
+passthrough), the owner dropped zoi and set the ownership rule recorded below.
 
 ## Decision
 
 > In the context of a cross-platform dotfiles repo that must bootstrap on macOS
 > and on throwaway Linux containers whose `$HOME` does not survive, facing the
 > Nix install and store-symlink costs recorded in RFC-0006, we decided for
-> **chezmoi as the file manager, zoi as the package front door, mise for
-> runtimes, and PEP 723 Python scripts run by uv for everything imperative**, and
-> against slimming Home Manager or an all-shell chezmoi tree, to achieve a
-> root-optional bootstrap with one branch for every machine, accepting that zoi
-> today installs almost nothing itself and is backed by a native-manager fallback.
+> **chezmoi as the file manager, mise for every tool it has a backend for, nvm
+> for the Node ecosystem, a Python forwarder over brew / apt / dnf / yum for the
+> OS-level remainder, and PEP 723 Python scripts run by uv for everything
+> imperative**, and against slimming Home Manager, an all-shell chezmoi tree, or
+> zoi as a universal front door, to achieve a root-optional bootstrap with one
+> branch for every machine, accepting that OS packages arrive unpinned.
 
 ### Layout
 
@@ -59,8 +62,13 @@ for the OS package manager — the shell, GNU userland, git, vim, wget/rsync/tre
 xclip — is `packages.toml`, installed by `scripts/packages.py`, which detects
 brew / apt / dnf / yum. `scripts/runtimes.py` reconciles the live mise config
 add-only: tools the repo declares and the host lacks are added, versions the
-host already has are kept. zoi is used only for entries naming a zoi registry
-package. Fonts are a separate `run_onchange_` script.
+host already has are kept. Fonts are a separate `run_onchange_` script.
+
+**Self-installed tools.** uv, chezmoi and mise bootstrap the bootstrap, so they
+come from their own installers into `~/.local/bin` (uv from `bootstrap.sh`,
+since it runs the Python) and are upgraded in place by `just update`. Homebrew
+on macOS is installed by `bootstrap.py` before apply — `packages.toml` and the
+fonts need it, and no tool manager can install it.
 
 ### Environments
 
@@ -71,12 +79,12 @@ root and the extra links (`.jcc.yaml`, `.lark-cli`, `.vscode-server`,
 
 ## Consequences
 
-- **Bootstrap needs no root** for the user half: uv, zoi, chezmoi and mise all
+- **Bootstrap needs no root** for the user half: uv, chezmoi and mise all
   install into `~/.local/bin`. Root is only for prerequisites, `chsh` and the
   opt-in system components (unchanged from before).
-- **zoi is a front door for its own registry only**: it held nine packages and
-  its native passthrough was a no-op (RFC-0006), so the toolset moved to mise
-  and the OS remainder to a Python forwarder over brew / apt / dnf / yum.
+- **zoi is out** (2026-09-10): it held nine packages and its native passthrough
+  was a no-op (RFC-0006); the toolset moved to mise and the OS remainder to a
+  Python forwarder over brew / apt / dnf / yum. Nothing in the repo depends on it.
 - **Versions**: mise tools are pinned per host in `config.toml` (`latest` at
   first install, then whatever `mise up` moves them to); OS packages come at
   whatever the manager ships. Less than a Nix lockfile, more than nothing.

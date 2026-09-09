@@ -11,10 +11,12 @@
 #
 # Keys per entry:
 #   name     display name
-#   bin      the executable to probe afterwards (default: name)
+#   bin      the executable whose presence means "already installed, skip"
+#            (default: name) — nothing the host already has is reinstalled
+#   probe_darwin   macOS only: paths of which one must exist instead of `bin`
+#            (the GNU tools: `ls` always resolves to BSD ls, so probe brew's gnubin)
 #   brew / apt / dnf   the native names ("" = not packaged there)
 #   cask     macOS: install as a brew cask instead of a formula
-#   zoi      a zoi registry package id, tried first when present (none today)
 #   mise     a last-resort mise tool spec (`mise use -g <spec>@latest`)
 #   alias    { <bin> = "<other bin>" }: symlink ~/.local/bin/<bin> to a
 #            differently named native binary
@@ -27,6 +29,7 @@
 name = "coreutils"
 bin = "ls"
 brew = "coreutils"
+probe_darwin = ["/opt/homebrew/opt/coreutils/libexec/gnubin/ls", "/usr/local/opt/coreutils/libexec/gnubin/ls"]
 apt = "coreutils"
 dnf = "coreutils"
 
@@ -34,6 +37,7 @@ dnf = "coreutils"
 name = "findutils"
 bin = "find"
 brew = "findutils"
+probe_darwin = ["/opt/homebrew/opt/findutils/libexec/gnubin/find", "/usr/local/opt/findutils/libexec/gnubin/find"]
 apt = "findutils"
 dnf = "findutils"
 
@@ -41,6 +45,7 @@ dnf = "findutils"
 name = "gnu-sed"
 bin = "sed"
 brew = "gnu-sed"
+probe_darwin = ["/opt/homebrew/opt/gnu-sed/libexec/gnubin/sed", "/usr/local/opt/gnu-sed/libexec/gnubin/sed"]
 apt = "sed"
 dnf = "sed"
 
@@ -48,6 +53,7 @@ dnf = "sed"
 name = "gnu-grep"
 bin = "grep"
 brew = "grep"
+probe_darwin = ["/opt/homebrew/opt/grep/libexec/gnubin/grep", "/usr/local/opt/grep/libexec/gnubin/grep"]
 apt = "grep"
 dnf = "grep"
 

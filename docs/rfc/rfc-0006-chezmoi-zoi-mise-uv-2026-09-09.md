@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Resolved |
 | Date | 2026-09-09 |
-| Outcome | [ADR-0013](../plans/adr-0013-chezmoi-zoi-mise-uv-2026-09-09.md) |
+| Outcome | [ADR-0013](../plans/adr-0013-chezmoi-mise-nvm-uv-2026-09-09.md) |
 
 ## Problem
 
@@ -72,3 +72,12 @@ place as `uv run` scripts.
 Adopted as ADR-0013. The Nix generation of the repo is preserved on
 `archive/homemanager/main`, `archive/homemanager/prod/mewtant` and
 `archive/homemanager/prod/ec2-wo-fsx`.
+
+## Post-resolution note (2026-09-10)
+
+zoi was removed from the stack the day after adoption: with a nine-package
+registry and a native passthrough that installs nothing, it added a binary and a
+code path without installing anything. The toolset moved to mise (aqua/ubi/
+cargo/vfox/conda backends), the Node ecosystem to nvm, and the OS-level
+remainder to a Python forwarder over brew / apt / dnf / yum. ADR-0013 carries
+the updated rule; this RFC keeps the measurements that led there.

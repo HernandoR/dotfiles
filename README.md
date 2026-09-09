@@ -3,13 +3,12 @@
 Cross-platform dotfiles built on **[chezmoi](https://www.chezmoi.io/)** (the
 files), **[mise](https://mise.jdx.dev/)** (runtimes and most of the CLI toolset,
 from prebuilt release binaries), **[nvm](https://github.com/nvm-sh/nvm)** (the
-Node ecosystem), **[zoi](https://github.com/Zillowe/Zoi)** (a package front door
-for its own registry) and a handful of **`uv run` Python scripts** (everything
-imperative, including the few OS-level packages). Targets macOS (aarch64) and Debian/Ubuntu
+Node ecosystem) and a handful of **`uv run` Python scripts** (everything
+imperative, including the few OS-level packages via brew / apt / dnf / yum). Targets macOS (aarch64) and Debian/Ubuntu
 (x86_64 + aarch64); other Linux families get the user half. The zsh + Starship
 (catppuccin_mocha) + fzf-tab experience is unchanged.
 
-Design is recorded in [ADR-0013](docs/plans/adr-0013-chezmoi-zoi-mise-uv-2026-09-09.md)
+Design is recorded in [ADR-0013](docs/plans/adr-0013-chezmoi-mise-nvm-uv-2026-09-09.md)
 (intent) and [RFC-0006](docs/rfc/rfc-0006-chezmoi-zoi-mise-uv-2026-09-09.md)
 (why the Nix + Home Manager generation was retired); [AGENTS.md](AGENTS.md) holds
 the short must-follow rules for coding agents. The previous generation lives on
@@ -31,7 +30,7 @@ cd dotfiles
 ```
 
 `bootstrap.sh` needs `curl` and `git`. No privilege is required for the user
-half (uv, zoi, chezmoi, mise all land in `~/.local/bin`); root/sudo is used only
+half (uv, chezmoi, mise all land in `~/.local/bin`); root/sudo is used only
 for missing prerequisites, `chsh`, and the opt-in system components.
 
 **On a terminal it asks before it touches anything.** It prints the whole plan
@@ -46,9 +45,12 @@ prompt on a terminal too.
 The whole run is one Python process (`scripts/bootstrap.py`; the root
 `bootstrap.sh` only guarantees `uv` and execs it):
 
-1. **Tools:** detect privilege → install prerequisites (curl, git) → install
-   **zoi**, **chezmoi**, **mise** with their own installers (download-then-run,
-   never `curl | sh`), all into `~/.local/bin`.
+1. **Tools:** detect privilege → install prerequisites (curl, git) → on macOS
+   install **Homebrew** (the OS packages and fonts need it) → install
+   **chezmoi** and **mise** with their own installers (download-then-run, never
+   `curl | sh`) into `~/.local/bin`. **uv** was already installed the same way
+   by `bootstrap.sh`, since it provides the Python this runs on. These three
+   are the only tools mise does not manage; `just update` upgrades them in place.
 2. **`chezmoi init`:** record this machine's answers — `env`, `stateRoot`,
    `network`, `agents`, `system` — in `~/.config/chezmoi/chezmoi.toml`
    (from `home/.chezmoi.toml.tmpl`; flags/`DOTFILE_*` env vars answer them
@@ -115,9 +117,9 @@ just apply      # apply the source tree (files, then the run_ scripts when their
 just status     # one line per managed path that differs
 just runtimes   # mise: add newly declared tools, install what is missing
 just node       # nvm: Node, pnpm, global npm packages
-just update     # git pull, apply, zoi update --all, mise up
+just update     # git pull, apply, upgrade uv/chezmoi/mise in place, mise up
 just check      # verify the repo (data, scripts, a full render per environment)
-just doctor     # chezmoi / zoi / mise health
+just doctor     # chezmoi / mise health
 ```
 
 Machine answers can be changed with `just init` (stored answers are the
@@ -209,10 +211,7 @@ dnf = "htop"      # yum uses the dnf names
 Only for tools mise has no backend for, or that must be the system's build.
 Say `""` for a manager that has no package. `scripts/packages.py` detects the
 host's manager (brew on macOS; apt, dnf or yum on Linux; brew as a last resort)
-and installs what is missing. An entry with `zoi = "<registry id>"` goes through
-`zoi install` first — zoi's registry held nine packages on 2026-09-09 and its
-native passthrough installed nothing (RFC-0006), so zoi is a front door for its
-own packages only.
+and installs what is missing.
 
 ### A persistent `$HOME` path → `home/.chezmoidata/envlinks.toml`
 
@@ -331,7 +330,7 @@ home/
   dot_zshenv/.zprofile/.zshrc.tmpl, private_dot_config/{zsh,git,starship.toml,mise/conf.d,worktrunk,direnv}/,
   dot_tmux.conf, dot_local/bin/
 scripts/
-  bootstrap.py    plan + clearance, prereqs, zoi/chezmoi/mise, chezmoi init/backup/apply
+  bootstrap.py    plan + clearance, prereqs, brew (macOS)/chezmoi/mise, chezmoi init/backup/apply
   env_links.py    the persistent $HOME links      runtimes.py   mise: reconcile + install
   node.py         nvm: Node, pnpm, npm globals    packages.py   OS packages (brew/apt/dnf/yum)
   setup.py        login shell, runtimes, agents, system components
