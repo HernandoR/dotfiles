@@ -33,6 +33,17 @@ cd dotfiles
 half (uv, chezmoi, mise all land in `~/.local/bin`); root/sudo is used only
 for missing prerequisites, `chsh`, and the opt-in system components.
 
+On a truly bare machine, chezmoi's own entry point also works:
+
+```bash
+BINDIR="$HOME/.local/bin" sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply HernandoR
+```
+
+It has no pre-apply plan—the bootstrap tools are supplied by a `run_before`
+script inside that apply—so prefer `bootstrap.sh` wherever existing files need
+review. Afterwards use `chezmoi apply --dry-run` to preview changes. Both paths
+copy existing managed files aside once before their first successful apply.
+
 **It prints the whole plan first, then runs it — unattended.** The plan lists
 what will be installed, which files are written or linked, and every existing
 file it will copy aside
@@ -61,14 +72,17 @@ The whole run is one Python process (`scripts/bootstrap.py`; the root
 3. **Backup:** every existing `$HOME` path that apply would change is copied
    (never moved or deleted) to `~/dotfiles_backup/<stamp>/`.
 4. **`chezmoi apply`**, which runs, in order:
-   - `run_before` — **env links** (`scripts/env_links.py`): seed, repair and
+   - `run_before` — **bootstrap tools**, then **env links**
+     (`scripts/env_links.py`): seed, repair and
      place the persistent `$HOME` symlinks (`~/.claude`, `~/.ssh`, `~/.exports`, …);
    - the **files** from `home/` and the four **zsh plugins** (chezmoi externals);
    - `run_onchange_after` — **mise tools** (`scripts/runtimes.py`: declare
      what the live config lacks, `mise install`), **Node via nvm**
      (`scripts/node.py`), **OS packages** (`scripts/packages.py`: brew / apt /
      dnf / yum), **fonts**, and **setup** (`scripts/setup.py`: login shell,
-     agent toolchain, system components) — each only when its inputs changed.
+     agent toolchain, system components) — each only when its inputs changed;
+   - `run_after` promotes the first-apply backup transaction to complete only
+     after all prior actions succeed.
 
 When it finishes, start the new shell with `exec zsh -l` (or re-login).
 
@@ -360,17 +374,19 @@ renders the whole tree per environment into a scratch `$HOME` where `zsh -n`,
 
 ```text
 .chezmoiroot      -> home/ is the chezmoi source state
-bootstrap.sh      the only shell: ensure uv, exec scripts/bootstrap.py
+bootstrap.sh      source scripts/uv-bootstrap.sh, exec scripts/bootstrap.py
 Justfile          `just` recipes for the day-to-day commands
 home/
   .chezmoi.toml.tmpl      the per-machine questions (env, stateRoot, network, agents, system)
   .chezmoidata/           mise.toml, node.toml, packages.toml, envlinks.toml — the inventories
-  .chezmoiscripts/        run_before env links; run_onchange mise, node, packages, fonts, setup
+  .chezmoiscripts/        run_before tools/env links; run_onchange mise, node, packages, fonts, setup; final run_after stamp
   .chezmoiexternal.toml   the zsh plugins
   dot_zshenv/.zprofile/.zshrc.tmpl, private_dot_config/{zsh,git,starship.toml,mise/conf.d,worktrunk,direnv}/,
   dot_tmux.conf, dot_local/bin/
 scripts/
-  bootstrap.py    plan + clearance, prereqs, brew (macOS)/chezmoi/mise, chezmoi init/backup/apply
+  bootstrap.py    plan + clearance, chezmoi init/backup/apply
+  tools.py        shared prereqs, brew (macOS), chezmoi/mise, first-apply backup transaction
+  uv-bootstrap.sh the only shell helper: uv + brew PATH
   env_links.py    the persistent $HOME links      runtimes.py   mise: reconcile + install
   node.py         nvm: Node, pnpm, npm globals    packages.py   OS packages (brew/apt/dnf/yum)
   setup.py        login shell, runtimes, agents, system components

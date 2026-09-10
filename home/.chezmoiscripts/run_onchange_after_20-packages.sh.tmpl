@@ -6,5 +6,7 @@
 #   packages.py:   {{ include (joinPath .chezmoi.workingTree "scripts" "packages.py") | sha256sum }}
 set -eu
 export PATH="$HOME/.local/bin:$PATH"
+. "{{ .chezmoi.workingTree }}/scripts/uv-bootstrap.sh"
+ensure_brew_path
 command -v uv >/dev/null 2>&1 || { echo "packages: uv not on PATH — run ./bootstrap.sh first" >&2; exit 1; }
 exec uv run --script "{{ .chezmoi.workingTree }}/scripts/packages.py"

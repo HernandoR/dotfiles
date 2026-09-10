@@ -1,0 +1,11 @@
+#!/bin/sh
+# Bootstrap uv, Homebrew, chezmoi and mise before any other chezmoi script.
+set -eu
+export PATH="$HOME/.local/bin:$PATH"
+. "{{ .chezmoi.workingTree }}/scripts/uv-bootstrap.sh"
+ensure_uv
+ensure_brew_path
+if tools_present && [ -e "$HOME/.local/state/dotfiles/first-apply.done" ]; then
+  exit 0
+fi
+exec uv run --script "{{ .chezmoi.workingTree }}/scripts/tools.py" --install --backup

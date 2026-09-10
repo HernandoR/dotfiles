@@ -1,0 +1,9 @@
+#!/bin/sh
+# Only chezmoi reaches this after every prior apply action has succeeded.
+set -eu
+state_dir="$HOME/.local/state/dotfiles"
+pending="$state_dir/first-apply.pending"
+done="$state_dir/first-apply.done"
+if [ -e "$pending" ]; then
+  mv "$pending" "$done"
+fi

@@ -18,12 +18,15 @@ Exit status is non-zero on the first failure. Needs `chezmoi` and `zsh` on PATH.
 import os
 import pathlib
 import py_compile
+import re
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
 import tomllib
+
+import tools
 
 # Die quietly when stdout is closed early (`… | head`) instead of ending in a
 # BrokenPipeError traceback. Full rationale in scripts/context.py.
@@ -114,6 +117,54 @@ def check_scripts():
             fail(f"{path.name} --help: {res.stderr.strip().splitlines()[-1:]}")
         else:
             ok(f"{path.name} compiles and answers --help")
+    for path in sorted(SCRIPTS.glob("*.sh")):
+        res = subprocess.run(["sh", "-n", str(path)], capture_output=True, text=True)
+        (ok if res.returncode == 0 else fail)(f"{path.name} sh -n" + ("" if res.returncode == 0 else f": {res.stderr.strip()}"))
+
+
+def check_bootstrap_contract():
+    print("bootstrap contracts")
+    prelude = (SCRIPTS / "uv-bootstrap.sh").read_text()
+    match = re.search(r'^DECLARED_TOOLS="([^"]*)"$', prelude, re.M)
+    declared = set(match.group(1).split()) if match else set()
+    if declared != set(tools.TOOLS):
+        fail(f"uv-bootstrap.sh DECLARED_TOOLS {sorted(declared)} != tools.py TOOLS {sorted(tools.TOOLS)}")
+    else:
+        ok("uv-bootstrap.sh tool list matches tools.py")
+    if "ensure_brew_path" not in prelude or "shellenv" not in prelude:
+        fail("uv-bootstrap.sh: missing shared brew PATH helper")
+    else:
+        ok("uv-bootstrap.sh normalizes brew PATH")
+
+    before = sorted(HOME_SRC.joinpath(".chezmoiscripts").glob("run_before_*.sh.tmpl"))
+    names = [p.name for p in before]
+    if "run_before_05-tools.sh.tmpl" not in names:
+        fail("missing run_before_05-tools.sh.tmpl")
+    else:
+        too_early = [
+            path.name for path in before
+            if path.name != "run_before_05-tools.sh.tmpl"
+            and "uv " in path.read_text()
+            and path.name < "run_before_05-tools.sh.tmpl"
+        ]
+        for name in too_early:
+            fail(f"{name}: invokes uv before the tools phase")
+        if not too_early:
+            ok("run_before tool ordering")
+
+    for name in ("run_onchange_after_20-packages.sh.tmpl", "run_onchange_after_25-fonts.sh.tmpl"):
+        text = (HOME_SRC / ".chezmoiscripts" / name).read_text()
+        if "uv-bootstrap.sh" not in text or "ensure_brew_path" not in text:
+            fail(f"{name}: must use the shared brew PATH helper")
+        else:
+            ok(f"{name}: uses shared brew PATH helper")
+
+    finalizer = HOME_SRC / ".chezmoiscripts" / "run_after_99-first-apply-stamp.sh.tmpl"
+    text = finalizer.read_text() if finalizer.exists() else ""
+    if "first-apply.pending" not in text or "first-apply.done" not in text or "mv " not in text:
+        fail("first-apply finalizer must promote pending to done")
+    else:
+        ok("first-apply finalizer promotes pending to done")
 
 
 def check_render():
@@ -171,6 +222,7 @@ def main():
         return
     check_data()
     check_scripts()
+    check_bootstrap_contract()
     check_render()
     print()
     if failures:

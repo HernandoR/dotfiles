@@ -42,9 +42,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import setup  # noqa: E402
-from components import Homebrew  # noqa: E402
+import tools  # noqa: E402
 from context import ASSUME_YES_ENV, INTERACTIVE_ENV, Ctx  # noqa: E402
-from managers import Script  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,30 +57,6 @@ REPO = SCRIPTS.parent
 HOME = pathlib.Path.home()
 LOCAL_BIN = HOME / ".local" / "bin"
 BACKUP_ROOT = HOME / "dotfiles_backup"
-
-# Tool -> (installer URL, interpreter, args). Download-then-run, never curl|sh.
-#
-# The args go to the *interpreter*, after the downloaded script path
-# (`sh /tmp/xyz.sh -b ~/.local/bin`), never through `sh -c`. That is why there is
-# no `--` separator here, even though the upstream one-liner
-# (`sh -c "$(curl -fsLS https://get.chezmoi.io)"`) has one: `--` only separates
-# `sh`'s own flags from the command string, and as a script *argument* it is
-# poisonous — getopts reads it as end-of-options, so `-b` is dropped, the
-# installer falls back to its relative default (`bin`), and it then replays the
-# leftover argv: `exec ./bin/chezmoi -b ~/.local/bin` -> "unknown shorthand flag:
-# 'b' in -b", exit 1, a stray ./bin in the caller's cwd and no chezmoi in
-# ~/.local/bin (the reference Mac, 2026-09-10). check=False turned a hard failure
-# into the "still not installed outside /nix" warning, and bootstrap died on the
-# missing binary further down.
-TOOLS = {
-    "chezmoi": Script(
-        "https://get.chezmoi.io",
-        interpreter="sh",
-        args=["-b", str(LOCAL_BIN)],
-        check=False,
-    ),
-    "mise": Script("https://mise.run", interpreter="sh", check=False),
-}
 
 # The chezmoi data every host answers (home/.chezmoi.toml.tmpl): flag -> env var
 # the template reads first, so a bootstrap never prompts.
@@ -107,163 +82,6 @@ def warn(msg):
     print(f"\033[1;33mwarn:\033[0m {msg}", file=sys.stderr, flush=True)
 
 
-# ---- prerequisites --------------------------------------------------------------
-
-_PKG_MANAGERS = {
-    "debian": "apt-get",
-    "ubuntu": "apt-get",
-    "fedora": "_dnf_or_yum",
-    "rhel": "_dnf_or_yum",
-    "amzn": "_dnf_or_yum",
-    "suse": "zypper",
-    "arch": "pacman",
-    "alpine": "apk",
-    "darwin": "brew",
-}
-_PREREQ_PACKAGES = "curl git ca-certificates"
-
-
-def os_pkg_manager(os_type):
-    pm = _PKG_MANAGERS.get(os_type)
-    if pm == "_dnf_or_yum":
-        return "dnf" if shutil.which("dnf") else "yum"
-    return pm
-
-
-def prereqs_missing():
-    return not (shutil.which("curl") and shutil.which("git"))
-
-
-def plan_prereqs(plan, os_type):
-    if os_type == "darwin":
-        if not shutil.which("git"):
-            plan.install("Xcode command line tools (for git)", priv=True)
-        return
-    if not prereqs_missing():
-        return
-    pm = os_pkg_manager(os_type)
-    if pm and pm != "brew":
-        plan.install(f"prerequisites via {pm}: {_PREREQ_PACKAGES}", priv=True)
-    else:
-        plan.fact(
-            "skipping",
-            f"prerequisite install: no package-manager backend for '{os_type}' "
-            "(install curl/git yourself)",
-        )
-
-
-def ensure_prereqs(ctx):
-    if ctx.os_type == "darwin":
-        if not shutil.which("git"):
-            ctx.run_command("xcode-select --install || true", shell=True, check=False)
-        if not shutil.which("curl"):
-            die("curl is required")
-        return
-    if not prereqs_missing():
-        return
-    pm = os_pkg_manager(ctx.os_type)
-    if not pm or pm == "brew":
-        warn(
-            f"no package-manager backend for OS '{ctx.os_type}': skipping the prereq install."
-        )
-        return
-    pkgs = _PREREQ_PACKAGES.split()
-    log(f"installing prerequisites via {pm} ({_PREREQ_PACKAGES})")
-    if pm == "apt-get":
-        ctx.run_command(["apt-get", "update", "-qq"], with_sudo=True)
-        ctx.run_command(["apt-get", "install", "-y", "-qq", *pkgs], with_sudo=True)
-    elif pm in ("dnf", "yum"):
-        ctx.run_command([pm, "install", "-y", *pkgs], with_sudo=True)
-    elif pm == "zypper":
-        ctx.run_command(
-            ["zypper", "--non-interactive", "install", *pkgs], with_sudo=True
-        )
-    elif pm == "pacman":
-        ctx.run_command(
-            ["pacman", "-Sy", "--noconfirm", "--needed", *pkgs], with_sudo=True
-        )
-    elif pm == "apk":
-        ctx.run_command(["apk", "add", "--no-cache", *pkgs], with_sudo=True)
-
-
-# ---- the three tools ---------------------------------------------------------------
-
-
-def have_brew():
-    if shutil.which("brew"):
-        return True
-    # A login shell that has not picked up /opt/homebrew/bin yet — a fresh box,
-    # or this process' own PATH — still has brew on disk.
-    apple_silicon = pathlib.Path("/opt/homebrew/bin/brew")
-    return apple_silicon.is_file() and os.access(apple_silicon, os.X_OK)
-
-
-def installed_outside_nix(name):
-    """Where `name` resolves, unless that is Nix's copy — in which case None.
-
-    A tool the retired generation provided does not count as installed: it goes
-    away when Nix does, and skipping the install because it is on PATH today
-    leaves a host that loses uv and mise the moment the store is removed — which
-    is what happened on the reference Mac on 2026-09-10, taking `uv`, `mise` and
-    `just` with it. Treating Nix's copy as absent puts a real one in
-    ~/.local/bin first, so the machine survives the removal."""
-    found = shutil.which(name)
-    if not found or found.startswith("/nix/") or "/.nix-profile/" in found:
-        return None
-    return found
-
-
-def plan_tools(plan):
-    if sys.platform == "darwin":
-        if have_brew():
-            plan.fact("brew", "already installed — not reinstalled")
-        else:
-            plan.install(
-                "Homebrew (its installer; BFSU mirror under --network CN) — packages.toml "
-                "and the fonts need it",
-                priv=True,
-            )
-    for name, script in TOOLS.items():
-        found = installed_outside_nix(name)
-        if found:
-            plan.fact(name, f"already installed ({found}) — not reinstalled")
-        elif shutil.which(name):
-            plan.install(
-                f"{name} via its installer ({script.url}) into {LOCAL_BIN} — the one on "
-                f"PATH ({shutil.which(name)}) is Nix's and goes away with it"
-            )
-        else:
-            plan.install(f"{name} via its installer ({script.url}) into {LOCAL_BIN}")
-
-
-def install_tools(ctx):
-    if sys.platform == "darwin" and not have_brew():
-        # The system component is idempotent and already knows the CN mirror;
-        # running it here (not only from setup.py) puts brew in place BEFORE
-        # chezmoi apply, which is when packages.py first needs it.
-        Homebrew().install(ctx)
-        if not ctx.dry_run and not have_brew():
-            warn(
-                "Homebrew did not install — packages.toml and the fonts will be skipped on this run"
-            )
-    for name, script in TOOLS.items():
-        if installed_outside_nix(name):
-            continue
-        if shutil.which(name):
-            log(
-                f"installing {name} into {LOCAL_BIN} — the one on PATH "
-                f"({shutil.which(name)}) is Nix's and goes away with it"
-            )
-        else:
-            log(f"installing {name}")
-        ctx.package_manager("scripts").install(ctx, script)
-        if not ctx.dry_run and not installed_outside_nix(name):
-            warn(
-                f"{name} still not installed outside /nix after its installer — the apply may "
-                "be incomplete"
-            )
-
-
 # ---- chezmoi ----------------------------------------------------------------------
 
 
@@ -284,101 +102,6 @@ def chezmoi(ctx, *args, capture=False, check=True, config=None):
     if capture:
         return subprocess.run(cmd, capture_output=True, text=True, check=check)
     return ctx.run_command(cmd, check=check)
-
-
-def source_targets():
-    """Approximate the $HOME paths chezmoi will write, from the source names
-    alone (so the plan works before chezmoi is installed). Attribute prefixes
-    are stripped the way chezmoi does; .chezmoi* entries are chezmoi's own."""
-    out = []
-    root = REPO / "home"
-    for path in sorted(root.rglob("*")):
-        if path.is_dir() or any(
-            part.startswith(".chezmoi") for part in path.relative_to(root).parts
-        ):
-            continue
-        parts = []
-        for part in path.relative_to(root).parts:
-            for prefix in (
-                "private_",
-                "readonly_",
-                "executable_",
-                "create_",
-                "modify_",
-                "symlink_",
-                "encrypted_",
-                "once_",
-                "onchange_",
-                "after_",
-                "before_",
-            ):
-                if part.startswith(prefix):
-                    part = part[len(prefix) :]
-            if part.startswith("dot_"):
-                part = "." + part[4:]
-            if part.endswith(".tmpl"):
-                part = part[:-5]
-            parts.append(part)
-        rel = "/".join(parts)
-        if rel != "README.md":
-            out.append(rel)
-    return out
-
-
-def existing_targets(ctx, config):
-    """$HOME paths chezmoi would change that already exist. With chezmoi on
-    PATH ask it (`chezmoi status`: a column-2 code means apply would touch the
-    path); without it, fall back to "every source target that exists"."""
-    if chezmoi_bin():
-        try:
-            res = chezmoi(
-                ctx,
-                "status",
-                "--exclude",
-                "scripts,externals",
-                capture=True,
-                config=config,
-            )
-            rels = []
-            for line in res.stdout.splitlines():
-                if len(line) > 3 and line[1] != " ":
-                    rels.append(line[3:])
-            # Files and symlinks only: for a directory chezmoi changes at most the
-            # mode, and copying ~/.config whole would be the wrong kind of careful.
-            return [
-                r
-                for r in rels
-                if (HOME / r).is_symlink()
-                or ((HOME / r).exists() and not (HOME / r).is_dir())
-            ]
-        except (subprocess.CalledProcessError, OSError):
-            pass
-    return [
-        r for r in source_targets() if (HOME / r).exists() or (HOME / r).is_symlink()
-    ]
-
-
-def backup_targets(ctx, rels, dest):
-    """Copy (never move) every existing target that apply will overwrite, under
-    its $HOME-relative name in one timestamped dir. Copying, because chezmoi
-    replaces the path itself; moving would only make apply's job easier while
-    losing a symlink's identity. A previous generation's symlink is copied AS a
-    symlink (cp -P semantics)."""
-    if not rels:
-        return
-    for rel in rels:
-        src, dst = HOME / rel, dest / rel
-        if ctx.dry_run:
-            print(f"\033[2m[dry-run]\033[0m cp -aP ~/{rel} {dst}")
-            continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if src.is_symlink():
-            dst.symlink_to(os.readlink(src))
-        elif src.is_dir():
-            shutil.copytree(src, dst, symlinks=True)
-        else:
-            shutil.copy2(src, dst, follow_symlinks=False)
-    log(f"backed up {len(rels)} existing path(s) under {dest}")
 
 
 # ---- the plan --------------------------------------------------------------------
@@ -581,14 +304,14 @@ def main(argv=None):
     )
     plan.fact("repo", f"{REPO} (becomes the chezmoi source dir)")
     if ctx.priv != "none":
-        plan_prereqs(plan, ctx.os_type)
+        tools.plan_prereqs(plan, ctx.os_type)
     else:
         plan.fact("skipping", "prereq install (no privilege)")
-    plan_tools(plan)
+    tools.plan_tools(plan)
     plan.config(
         f"{HOME}/.config/chezmoi/chezmoi.toml <- this machine's answers (env, state root, network, agents, system)"
     )
-    targets = source_targets()
+    targets = tools.source_targets()
     plan.config(
         f"chezmoi apply: {len(targets)} files from home/ -> {HOME}: "
         + ", ".join(targets)
@@ -620,8 +343,8 @@ def main(argv=None):
 
     # ---- tools ------------------------------------------------------------------
     if ctx.priv != "none":
-        ensure_prereqs(ctx)
-    install_tools(ctx)
+        tools.ensure_prereqs(ctx)
+    tools.install_tools(ctx)
     if not chezmoi_bin() and not ctx.dry_run:
         die(
             "chezmoi is not installed and its installer failed — install it, then re-run"
@@ -674,7 +397,7 @@ def main(argv=None):
                         ],
                         check=False,
                     )
-                    rels = existing_targets(ctx, cfg)
+                    rels = tools.existing_targets(ctx, cfg)
                     if rels:
                         log(
                             "existing paths apply would change (copied to the backup dir first): "
@@ -686,8 +409,9 @@ def main(argv=None):
         return
     log("chezmoi init — recording this machine's answers")
     chezmoi(ctx, "init")
-    rels = existing_targets(ctx, None)
-    backup_targets(ctx, rels, backup_dir)
+    rels = tools.existing_targets(ctx, None)
+    tools.backup_targets(ctx, rels, backup_dir)
+    os.environ["DF_BACKUP_TAKEN"] = "1"
     log(
         "chezmoi apply — files, zsh plugins, then the run_ scripts (env links, packages, fonts, mise, setup)"
     )

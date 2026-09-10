@@ -139,6 +139,9 @@ def main():
         + f" (package manager: {key or 'none found'})")
 
     if key is None and not ctx.dry_run:
+        if sys.platform == "darwin" and any(p.get("brew") for p in missing):
+            warn("Homebrew is missing despite macOS package entries; this apply cannot install "
+                 "their brew packages and run_onchange will not retry until an input changes")
         warn("no supported package manager (brew/apt/dnf/yum) on this host — install by hand: "
              + ", ".join(p["name"] for p in missing))
     for p in missing:

@@ -1,7 +1,7 @@
 # ADR-0010: Plan-first bootstrap with a single interactive clearance
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Status | accepted |
 | Date | 2026-08-04 |
 
@@ -75,7 +75,7 @@ the code. So the script that performs a step also describes it, and
 `bootstrap.sh` merges:
 
 | Producer | Contract |
-|---|---|
+| --- | --- |
 | `lib.sh` `plan_fact`/`plan_install`/`plan_config`/`plan_backup` | in-process buckets; `plan_prereqs`/`plan_nix` sit beside `ensure_prereqs`/`install_lix` |
 | `nix-cn.sh --plan` | emits `section<TAB>text<TAB>priv`; plan and apply share `conf_target`/`missing_lines` |
 | `setup.py --plan-items` | same TSV for the post-HM half (link map, login shell, mise, Claude, system components) |
@@ -137,3 +137,11 @@ questionary confirm and are unchanged.
   live. When ADR-0009 retires `apply_link_map`, those lines and the
   `.pre-dotfiles.bak` entries in the move-aside section go with it, leaving Home
   Manager's `.backup` as the only displacement to report.
+- **ADR-0013 added a second entry point (2026-09-10, RFC-0007)** — chezmoi's own
+  `init --apply` one-liner — on which the plan print above *cannot* exist: the
+  bootstrap tools arrive from a `run_before` script, which is itself part of the
+  apply a plan would have to precede. The copy-aside backup is preserved on that
+  path: a pending first-apply marker is promoted to done only by a final
+  successful apply action, keeping it to once per machine without recording a
+  failed apply as complete. The README names the missing preview where it
+  introduces that invocation.

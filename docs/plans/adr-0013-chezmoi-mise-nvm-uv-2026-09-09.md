@@ -35,10 +35,11 @@ passthrough), the owner dropped zoi and set the ownership rule recorded below.
 | `.chezmoiroot` → `home/` | the chezmoi source state; `chezmoi init` pins `sourceDir` to the clone |
 | `home/.chezmoi.toml.tmpl` | the per-machine questions: `env`, `stateRoot`, `network`, `agents`, `system` (env vars `DOTFILE_*` win) |
 | `home/.chezmoidata/*.toml` | the reviewed inventories: `mise.toml`, `node.toml`, `packages.toml`, `envlinks.toml` — read by chezmoi templates AND by the scripts (tomllib) |
-| `home/.chezmoiscripts/` | `run_before_` env links; `run_onchange_after_` mise, node, packages, fonts, setup — each keyed on the hash of its inputs |
+| `home/.chezmoiscripts/` | `run_before_05` the bootstrap tools (idempotent), `run_before_10` env links; `run_onchange_after_` mise, node, packages, fonts, setup — each keyed on the hash of its inputs; a final `run_after` promotes the first-apply transaction only on success |
 | `home/.chezmoiexternal.toml` | the four zsh plugins, fetched as archives |
-| `scripts/*.py` | `bootstrap.py` (plan → tools → init → backup → apply), `env_links.py`, `runtimes.py`, `node.py`, `packages.py`, `setup.py`, `agents.py`, `components.py`, `managers.py`, `context.py`, `check.py` |
-| `bootstrap.sh` | the only shell: ensure `uv`, exec `scripts/bootstrap.py` |
+| `scripts/*.py` | `bootstrap.py` (plan → tools → init → backup → apply), `tools.py` (the shared toolchain phase), `env_links.py`, `runtimes.py`, `node.py`, `packages.py`, `setup.py`, `agents.py`, `components.py`, `managers.py`, `context.py`, `check.py` |
+| `bootstrap.sh` | the standalone entry point: source `scripts/uv-bootstrap.sh`, exec `scripts/bootstrap.py` |
+| `scripts/uv-bootstrap.sh` | the one reusable shell prelude: ensure `uv`, normalize a freshly installed Homebrew onto `PATH`, and report whether the declared tools resolve — sourced by `bootstrap.sh` and by the chezmoi wrappers |
 
 ### Ownership rule (ADR-0009, restated for chezmoi)
 
@@ -66,10 +67,26 @@ add-only: tools the repo declares and the host lacks are added, versions the
 host already has are kept. Fonts are a separate `run_onchange_` script.
 
 **Self-installed tools.** uv, chezmoi and mise bootstrap the bootstrap, so they
-come from their own installers into `~/.local/bin` (uv from `bootstrap.sh`,
-since it runs the Python) and are upgraded in place by `just update`. Homebrew
-on macOS is installed by `bootstrap.py` before apply — `packages.toml` and the
-fonts need it, and no tool manager can install it.
+come from their own installers into `~/.local/bin` (uv from
+`scripts/uv-bootstrap.sh`, since it runs the Python) and are upgraded in place
+by `just update`. Homebrew on macOS is installed before apply — `packages.toml`
+and the fonts need it, and no tool manager can install it.
+
+Since 2026-09-10 (RFC-0007) this phase lives in `scripts/tools.py`, is
+idempotent, and is reached from chezmoi's own `run_before` script phase, so the
+repo has **two entry points**:
+
+- **`./bootstrap.sh`** — the plan printed, existing `$HOME` files copied aside,
+  clearance on request. The recommendation wherever a machine has files to
+  displace.
+- **chezmoi's documented one-liner** —
+  `BINDIR="$HOME/.local/bin" sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply <user>`.
+  It has no plan print by construction (its `run_before` script *is* part of the
+  apply a plan would have to precede, ADR-0010), so it previews with
+  `chezmoi apply --dry-run` instead, and it takes the same once-per-machine
+  copy-aside backup. A pending marker made before apply is promoted to its done
+  marker only by a final successful apply action, so a failed first apply is
+  retried rather than recorded as complete.
 
 ### Environments
 

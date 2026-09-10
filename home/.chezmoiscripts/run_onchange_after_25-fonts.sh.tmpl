@@ -3,6 +3,8 @@
 # missing font never fails an apply. Re-runs when this file changes.
 set -u
 export PATH="$HOME/.local/bin:$PATH"
+. "{{ .chezmoi.workingTree }}/scripts/uv-bootstrap.sh"
+ensure_brew_path
 {{ if eq .chezmoi.os "darwin" -}}
 if command -v brew >/dev/null 2>&1; then
   brew install --cask font-fira-code-nerd-font font-fira-mono-nerd-font || true

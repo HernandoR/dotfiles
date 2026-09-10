@@ -13,19 +13,11 @@
 #
 # The one thing shell must do that Python cannot: make sure `uv` exists, since
 # uv is what provides the Python the scripts run on (no system python needed).
-# Download-then-execute, never `curl | sh`.
+# The shared prelude is also used by chezmoi's run_before tool phase.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$HOME/.local/bin:$PATH"
-
-if ! command -v uv >/dev/null 2>&1; then
-  command -v curl >/dev/null 2>&1 || { echo "error: curl is required to install uv" >&2; exit 1; }
-  echo "==> uv not found — installing it into ~/.local/bin (the bootstrap runs on uv)" >&2
-  tmp="$(mktemp)"
-  curl -fsSL --retry 3 https://astral.sh/uv/install.sh -o "$tmp"
-  UV_INSTALL_DIR="$HOME/.local/bin" UV_NO_MODIFY_PATH=1 sh "$tmp"
-  rm -f "$tmp"
-  command -v uv >/dev/null 2>&1 || { echo "error: uv install failed" >&2; exit 1; }
-fi
+. "$DIR/scripts/uv-bootstrap.sh"
+ensure_uv
 
 exec uv run --script "$DIR/scripts/bootstrap.py" "$@"
