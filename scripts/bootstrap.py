@@ -30,6 +30,7 @@ devpod recreation. Pass --interactive (or DOTFILE_INTERACTIVE=1) for the
 one-shot clearance prompt and the `chezmoi init` questions; --dry-run prints
 every action and changes nothing.
 """
+
 import argparse
 import logging
 import os
@@ -45,8 +46,11 @@ from components import Homebrew  # noqa: E402
 from context import ASSUME_YES_ENV, INTERACTIVE_ENV, Ctx  # noqa: E402
 from managers import Script  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s",
-                    datefmt="%H:%M:%S")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%H:%M:%S",
+)
 logger = logging.getLogger("dotfiles")
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent
@@ -56,9 +60,26 @@ LOCAL_BIN = HOME / ".local" / "bin"
 BACKUP_ROOT = HOME / "dotfiles_backup"
 
 # Tool -> (installer URL, interpreter, args). Download-then-run, never curl|sh.
+#
+# The args go to the *interpreter*, after the downloaded script path
+# (`sh /tmp/xyz.sh -b ~/.local/bin`), never through `sh -c`. That is why there is
+# no `--` separator here, even though the upstream one-liner
+# (`sh -c "$(curl -fsLS https://get.chezmoi.io)"`) has one: `--` only separates
+# `sh`'s own flags from the command string, and as a script *argument* it is
+# poisonous — getopts reads it as end-of-options, so `-b` is dropped, the
+# installer falls back to its relative default (`bin`), and it then replays the
+# leftover argv: `exec ./bin/chezmoi -b ~/.local/bin` -> "unknown shorthand flag:
+# 'b' in -b", exit 1, a stray ./bin in the caller's cwd and no chezmoi in
+# ~/.local/bin (the reference Mac, 2026-09-10). check=False turned a hard failure
+# into the "still not installed outside /nix" warning, and bootstrap died on the
+# missing binary further down.
 TOOLS = {
-    "chezmoi": Script("https://get.chezmoi.io", interpreter="sh", args=["--", "-b", str(LOCAL_BIN)],
-                      check=False),
+    "chezmoi": Script(
+        "https://get.chezmoi.io",
+        interpreter="sh",
+        args=["-b", str(LOCAL_BIN)],
+        check=False,
+    ),
     "mise": Script("https://mise.run", interpreter="sh", check=False),
 }
 
@@ -89,8 +110,15 @@ def warn(msg):
 # ---- prerequisites --------------------------------------------------------------
 
 _PKG_MANAGERS = {
-    "debian": "apt-get", "ubuntu": "apt-get", "fedora": "_dnf_or_yum", "rhel": "_dnf_or_yum",
-    "amzn": "_dnf_or_yum", "suse": "zypper", "arch": "pacman", "alpine": "apk", "darwin": "brew",
+    "debian": "apt-get",
+    "ubuntu": "apt-get",
+    "fedora": "_dnf_or_yum",
+    "rhel": "_dnf_or_yum",
+    "amzn": "_dnf_or_yum",
+    "suse": "zypper",
+    "arch": "pacman",
+    "alpine": "apk",
+    "darwin": "brew",
 }
 _PREREQ_PACKAGES = "curl git ca-certificates"
 
@@ -117,8 +145,11 @@ def plan_prereqs(plan, os_type):
     if pm and pm != "brew":
         plan.install(f"prerequisites via {pm}: {_PREREQ_PACKAGES}", priv=True)
     else:
-        plan.fact("skipping", f"prerequisite install: no package-manager backend for '{os_type}' "
-                              "(install curl/git yourself)")
+        plan.fact(
+            "skipping",
+            f"prerequisite install: no package-manager backend for '{os_type}' "
+            "(install curl/git yourself)",
+        )
 
 
 def ensure_prereqs(ctx):
@@ -132,7 +163,9 @@ def ensure_prereqs(ctx):
         return
     pm = os_pkg_manager(ctx.os_type)
     if not pm or pm == "brew":
-        warn(f"no package-manager backend for OS '{ctx.os_type}': skipping the prereq install.")
+        warn(
+            f"no package-manager backend for OS '{ctx.os_type}': skipping the prereq install."
+        )
         return
     pkgs = _PREREQ_PACKAGES.split()
     log(f"installing prerequisites via {pm} ({_PREREQ_PACKAGES})")
@@ -142,9 +175,13 @@ def ensure_prereqs(ctx):
     elif pm in ("dnf", "yum"):
         ctx.run_command([pm, "install", "-y", *pkgs], with_sudo=True)
     elif pm == "zypper":
-        ctx.run_command(["zypper", "--non-interactive", "install", *pkgs], with_sudo=True)
+        ctx.run_command(
+            ["zypper", "--non-interactive", "install", *pkgs], with_sudo=True
+        )
     elif pm == "pacman":
-        ctx.run_command(["pacman", "-Sy", "--noconfirm", "--needed", *pkgs], with_sudo=True)
+        ctx.run_command(
+            ["pacman", "-Sy", "--noconfirm", "--needed", *pkgs], with_sudo=True
+        )
     elif pm == "apk":
         ctx.run_command(["apk", "add", "--no-cache", *pkgs], with_sudo=True)
 
@@ -153,7 +190,12 @@ def ensure_prereqs(ctx):
 
 
 def have_brew():
-    return bool(shutil.which("brew")) or os.access("/opt/homebrew/bin/brew", os.X_OK)
+    if shutil.which("brew"):
+        return True
+    # A login shell that has not picked up /opt/homebrew/bin yet — a fresh box,
+    # or this process' own PATH — still has brew on disk.
+    apple_silicon = pathlib.Path("/opt/homebrew/bin/brew")
+    return apple_silicon.is_file() and os.access(apple_silicon, os.X_OK)
 
 
 def installed_outside_nix(name):
@@ -176,15 +218,20 @@ def plan_tools(plan):
         if have_brew():
             plan.fact("brew", "already installed — not reinstalled")
         else:
-            plan.install("Homebrew (its installer; BFSU mirror under --network CN) — packages.toml "
-                         "and the fonts need it", priv=True)
+            plan.install(
+                "Homebrew (its installer; BFSU mirror under --network CN) — packages.toml "
+                "and the fonts need it",
+                priv=True,
+            )
     for name, script in TOOLS.items():
         found = installed_outside_nix(name)
         if found:
             plan.fact(name, f"already installed ({found}) — not reinstalled")
         elif shutil.which(name):
-            plan.install(f"{name} via its installer ({script.url}) into {LOCAL_BIN} — the one on "
-                         f"PATH ({shutil.which(name)}) is Nix's and goes away with it")
+            plan.install(
+                f"{name} via its installer ({script.url}) into {LOCAL_BIN} — the one on "
+                f"PATH ({shutil.which(name)}) is Nix's and goes away with it"
+            )
         else:
             plan.install(f"{name} via its installer ({script.url}) into {LOCAL_BIN}")
 
@@ -196,19 +243,25 @@ def install_tools(ctx):
         # chezmoi apply, which is when packages.py first needs it.
         Homebrew().install(ctx)
         if not ctx.dry_run and not have_brew():
-            warn("Homebrew did not install — packages.toml and the fonts will be skipped on this run")
+            warn(
+                "Homebrew did not install — packages.toml and the fonts will be skipped on this run"
+            )
     for name, script in TOOLS.items():
         if installed_outside_nix(name):
             continue
         if shutil.which(name):
-            log(f"installing {name} into {LOCAL_BIN} — the one on PATH "
-                f"({shutil.which(name)}) is Nix's and goes away with it")
+            log(
+                f"installing {name} into {LOCAL_BIN} — the one on PATH "
+                f"({shutil.which(name)}) is Nix's and goes away with it"
+            )
         else:
             log(f"installing {name}")
         ctx.package_manager("scripts").install(ctx, script)
         if not ctx.dry_run and not installed_outside_nix(name):
-            warn(f"{name} still not installed outside /nix after its installer — the apply may "
-                 "be incomplete")
+            warn(
+                f"{name} still not installed outside /nix after its installer — the apply may "
+                "be incomplete"
+            )
 
 
 # ---- chezmoi ----------------------------------------------------------------------
@@ -240,14 +293,27 @@ def source_targets():
     out = []
     root = REPO / "home"
     for path in sorted(root.rglob("*")):
-        if path.is_dir() or any(part.startswith(".chezmoi") for part in path.relative_to(root).parts):
+        if path.is_dir() or any(
+            part.startswith(".chezmoi") for part in path.relative_to(root).parts
+        ):
             continue
         parts = []
         for part in path.relative_to(root).parts:
-            for prefix in ("private_", "readonly_", "executable_", "create_", "modify_", "symlink_",
-                           "encrypted_", "once_", "onchange_", "after_", "before_"):
+            for prefix in (
+                "private_",
+                "readonly_",
+                "executable_",
+                "create_",
+                "modify_",
+                "symlink_",
+                "encrypted_",
+                "once_",
+                "onchange_",
+                "after_",
+                "before_",
+            ):
                 if part.startswith(prefix):
-                    part = part[len(prefix):]
+                    part = part[len(prefix) :]
             if part.startswith("dot_"):
                 part = "." + part[4:]
             if part.endswith(".tmpl"):
@@ -265,18 +331,31 @@ def existing_targets(ctx, config):
     path); without it, fall back to "every source target that exists"."""
     if chezmoi_bin():
         try:
-            res = chezmoi(ctx, "status", "--exclude", "scripts,externals", capture=True, config=config)
+            res = chezmoi(
+                ctx,
+                "status",
+                "--exclude",
+                "scripts,externals",
+                capture=True,
+                config=config,
+            )
             rels = []
             for line in res.stdout.splitlines():
                 if len(line) > 3 and line[1] != " ":
                     rels.append(line[3:])
             # Files and symlinks only: for a directory chezmoi changes at most the
             # mode, and copying ~/.config whole would be the wrong kind of careful.
-            return [r for r in rels
-                    if (HOME / r).is_symlink() or ((HOME / r).exists() and not (HOME / r).is_dir())]
+            return [
+                r
+                for r in rels
+                if (HOME / r).is_symlink()
+                or ((HOME / r).exists() and not (HOME / r).is_dir())
+            ]
         except (subprocess.CalledProcessError, OSError):
             pass
-    return [r for r in source_targets() if (HOME / r).exists() or (HOME / r).is_symlink()]
+    return [
+        r for r in source_targets() if (HOME / r).exists() or (HOME / r).is_symlink()
+    ]
 
 
 def backup_targets(ctx, rels, dest):
@@ -330,7 +409,10 @@ class Plan:
     _SECTIONS = (
         ("install", "\033[1mwill install\033[0m"),
         ("config", "\033[1mwill write / link\033[0m"),
-        ("backup", "\033[1;33mwill copy your existing files aside first (never deleted)\033[0m"),
+        (
+            "backup",
+            "\033[1;33mwill copy your existing files aside first (never deleted)\033[0m",
+        ),
     )
 
     def render(self):
@@ -360,12 +442,20 @@ def script_plan_rows(script, *args):
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
     except (OSError, subprocess.CalledProcessError) as exc:
         err = getattr(exc, "stderr", "") or str(exc)
-        return [("config", f"{script} --plan failed: {err.strip().splitlines()[-1] if err.strip() else exc}", False)]
+        return [
+            (
+                "config",
+                f"{script} --plan failed: {err.strip().splitlines()[-1] if err.strip() else exc}",
+                False,
+            )
+        ]
     rows = []
     for line in res.stdout.splitlines():
         parts = line.split("\t")
         if len(parts) >= 2 and parts[0] in ("install", "config", "backup"):
-            rows.append((parts[0], parts[1], len(parts) > 2 and parts[2] == "privileged"))
+            rows.append(
+                (parts[0], parts[1], len(parts) > 2 and parts[2] == "privileged")
+            )
     return rows
 
 
@@ -376,23 +466,55 @@ def parse_args(argv):
     ap = argparse.ArgumentParser(
         prog="bootstrap.sh",
         description="Bootstrap the dotfiles: chezmoi + mise (+ Homebrew on macOS), then chezmoi apply (ADR-0013). "
-                    "On a terminal the full plan is printed and cleared once first (ADR-0010).")
-    ap.add_argument("--dry-run", action="store_true", help="print every command without executing")
+        "On a terminal the full plan is printed and cleared once first (ADR-0010).",
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="print every command without executing"
+    )
     ap.add_argument("--verbose", action="store_true", help="more logging")
-    ap.add_argument("-i", "--interactive", action="store_true",
-                    help="ask before running the printed plan, and let `chezmoi init` ask its "
-                         "questions (default: neither — everything runs unattended); "
-                         "same as DOTFILE_INTERACTIVE=1")
-    ap.add_argument("-y", "--yes", action="store_true",
-                    help="accepted for compatibility and already the default (nothing prompts)")
-    ap.add_argument("--env", default="", help="environment name: default | mewtant | ec2-wo-fsx (DOTFILE_ENV)")
-    ap.add_argument("--state-root", default="",
-                    help="persistent root for the $HOME links (DOTFILE_STATE_ROOT; default derives from --env)")
-    ap.add_argument("--network", default="", metavar="CN", help="CN enables the China mirrors (DOTFILE_NETWORK_ENV)")
-    ap.add_argument("--agents", default="", help="coding agents: claude,codex,pi / all (default) / none (DOTFILE_AGENTS)")
-    ap.add_argument("--system", default="",
-                    help="Linux system components: names, 'all', 'default' or 'none' (DOTFILE_SYSTEM_COMPONENTS)")
-    ap.add_argument("--no-claude", action="store_true", help="deprecated alias for --agents none")
+    ap.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        help="ask before running the printed plan, and let `chezmoi init` ask its "
+        "questions (default: neither — everything runs unattended); "
+        "same as DOTFILE_INTERACTIVE=1",
+    )
+    ap.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="accepted for compatibility and already the default (nothing prompts)",
+    )
+    ap.add_argument(
+        "--env",
+        default="",
+        help="environment name: default | mewtant | ec2-wo-fsx (DOTFILE_ENV)",
+    )
+    ap.add_argument(
+        "--state-root",
+        default="",
+        help="persistent root for the $HOME links (DOTFILE_STATE_ROOT; default derives from --env)",
+    )
+    ap.add_argument(
+        "--network",
+        default="",
+        metavar="CN",
+        help="CN enables the China mirrors (DOTFILE_NETWORK_ENV)",
+    )
+    ap.add_argument(
+        "--agents",
+        default="",
+        help="coding agents: claude,codex,pi / all (default) / none (DOTFILE_AGENTS)",
+    )
+    ap.add_argument(
+        "--system",
+        default="",
+        help="Linux system components: names, 'all', 'default' or 'none' (DOTFILE_SYSTEM_COMPONENTS)",
+    )
+    ap.add_argument(
+        "--no-claude", action="store_true", help="deprecated alias for --agents none"
+    )
     return ap.parse_args(argv)
 
 
@@ -422,46 +544,74 @@ def main(argv=None):
         os.environ[INTERACTIVE_ENV] = "1"
     ctx = Ctx(dry_run=args.dry_run, ask=args.interactive)
     # flag > env > default, the same resolution setup.py uses standalone.
-    system_spec, agent_ids = setup.resolve_selection(argparse.Namespace(
-        system=args.system, agents=args.agents, no_claude=False))
+    system_spec, agent_ids = setup.resolve_selection(
+        argparse.Namespace(system=args.system, agents=args.agents, no_claude=False)
+    )
 
-    log(f"OS: {ctx.os_type} | arch: {os.uname().machine} | privilege: {ctx.priv} "
-        f"| env: {env_name} | network: {network or 'default'}")
+    log(
+        f"OS: {ctx.os_type} | arch: {os.uname().machine} | privilege: {ctx.priv} "
+        f"| env: {env_name} | network: {network or 'default'}"
+    )
 
     # ---- the plan + the one-shot clearance (ADR-0010) --------------------------
     plan = Plan()
     plan.fact("os", f"{ctx.os_type} ({os.uname().machine})")
-    plan.fact("env", env_name + (f" (state root {os.environ['DOTFILE_STATE_ROOT']})"
-                                 if os.environ.get("DOTFILE_STATE_ROOT") else ""))
-    plan.fact("privilege", {
-        "root": "root — privileged steps run directly (no sudo)",
-        "sudo": "sudo — privileged steps run via sudo (may ask for your password)",
-        "none": "none — every privileged step is skipped",
-    }[ctx.priv])
-    plan.fact("network", "CN — pypi/uv + rustup mirrors, BFSU for brew" if network == "CN"
-              else "upstream defaults (pass --network CN for the China mirrors)")
+    plan.fact(
+        "env",
+        env_name
+        + (
+            f" (state root {os.environ['DOTFILE_STATE_ROOT']})"
+            if os.environ.get("DOTFILE_STATE_ROOT")
+            else ""
+        ),
+    )
+    plan.fact(
+        "privilege",
+        {
+            "root": "root — privileged steps run directly (no sudo)",
+            "sudo": "sudo — privileged steps run via sudo (may ask for your password)",
+            "none": "none — every privileged step is skipped",
+        }[ctx.priv],
+    )
+    plan.fact(
+        "network",
+        "CN — pypi/uv + rustup mirrors, BFSU for brew"
+        if network == "CN"
+        else "upstream defaults (pass --network CN for the China mirrors)",
+    )
     plan.fact("repo", f"{REPO} (becomes the chezmoi source dir)")
     if ctx.priv != "none":
         plan_prereqs(plan, ctx.os_type)
     else:
         plan.fact("skipping", "prereq install (no privilege)")
     plan_tools(plan)
-    plan.config(f"{HOME}/.config/chezmoi/chezmoi.toml <- this machine's answers (env, state root, network, agents, system)")
+    plan.config(
+        f"{HOME}/.config/chezmoi/chezmoi.toml <- this machine's answers (env, state root, network, agents, system)"
+    )
     targets = source_targets()
-    plan.config(f"chezmoi apply: {len(targets)} files from home/ -> {HOME}: " + ", ".join(targets))
-    plan.config("zsh plugins (fzf-tab, autosuggestions, syntax-highlighting, completions) -> "
-                f"{HOME}/.local/share/zsh/plugins (chezmoi externals)")
+    plan.config(
+        f"chezmoi apply: {len(targets)} files from home/ -> {HOME}: "
+        + ", ".join(targets)
+    )
+    plan.config(
+        "zsh plugins (fzf-tab, autosuggestions, syntax-highlighting, completions) -> "
+        f"{HOME}/.local/share/zsh/plugins (chezmoi externals)"
+    )
     stamp = time.strftime("%Y_%m_%d_%H%M%S")
     backup_dir = BACKUP_ROOT / stamp
     existing = [r for r in targets if (HOME / r).exists() or (HOME / r).is_symlink()]
     if existing:
-        plan.backup(f"existing $HOME paths chezmoi will overwrite -> copied to {backup_dir}/ first "
-                    f"(exact list decided by `chezmoi status` at run time; candidates: {', '.join(existing)})")
+        plan.backup(
+            f"existing $HOME paths chezmoi will overwrite -> copied to {backup_dir}/ first "
+            f"(exact list decided by `chezmoi status` at run time; candidates: {', '.join(existing)})"
+        )
     plan.extend(script_plan_rows("env_links.py"))
     plan.extend(script_plan_rows("runtimes.py"))
     plan.extend(script_plan_rows("node.py"))
     plan.extend(script_plan_rows("packages.py"))
-    plan.install("Nerd Fonts (FiraCode, FiraMono) — brew casks on macOS, getnf on Linux")
+    plan.install(
+        "Nerd Fonts (FiraCode, FiraMono) — brew casks on macOS, getnf on Linux"
+    )
     plan.extend(setup.build_plan(ctx, system_spec, agent_ids))
     plan.render()
     ctx.require_clearance("Proceed with this plan?")
@@ -473,30 +623,63 @@ def main(argv=None):
         ensure_prereqs(ctx)
     install_tools(ctx)
     if not chezmoi_bin() and not ctx.dry_run:
-        die("chezmoi is not installed and its installer failed — install it, then re-run")
+        die(
+            "chezmoi is not installed and its installer failed — install it, then re-run"
+        )
 
     # ---- chezmoi init + apply -----------------------------------------------------
     if ctx.dry_run:
-        log(f"[dry-run] chezmoi --source {REPO} init            (writes ~/.config/chezmoi/chezmoi.toml)")
+        log(
+            f"[dry-run] chezmoi --source {REPO} init            (writes ~/.config/chezmoi/chezmoi.toml)"
+        )
         log(f"[dry-run] cp -aP <existing targets> {backup_dir}/")
-        log(f"[dry-run] chezmoi --source {REPO} apply           (files, externals, run_ scripts)")
-        if chezmoi_bin():
+        log(
+            f"[dry-run] chezmoi --source {REPO} apply           (files, externals, run_ scripts)"
+        )
+        binary = chezmoi_bin()
+        if binary:
             # Render this machine's answers into a scratch config (nothing under
             # ~/.config is touched) and show exactly what apply would change.
             import tempfile
 
             with tempfile.TemporaryDirectory() as tmp:
                 cfg = pathlib.Path(tmp) / "chezmoi.toml"
-                res = subprocess.run([chezmoi_bin(), "--source", str(REPO), "--no-tty",
-                                      "--config", str(cfg), "init"], capture_output=True, text=True)
+                res = subprocess.run(
+                    [
+                        binary,
+                        "--source",
+                        str(REPO),
+                        "--no-tty",
+                        "--config",
+                        str(cfg),
+                        "init",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
                 if res.returncode == 0:
-                    subprocess.run([chezmoi_bin(), "--source", str(REPO), "--no-tty",
-                                    "--config", str(cfg), "apply", "--dry-run", "--verbose",
-                                    "--exclude", "externals,scripts"], check=False)
+                    subprocess.run(
+                        [
+                            binary,
+                            "--source",
+                            str(REPO),
+                            "--no-tty",
+                            "--config",
+                            str(cfg),
+                            "apply",
+                            "--dry-run",
+                            "--verbose",
+                            "--exclude",
+                            "externals,scripts",
+                        ],
+                        check=False,
+                    )
                     rels = existing_targets(ctx, cfg)
                     if rels:
-                        log("existing paths apply would change (copied to the backup dir first): "
-                            + ", ".join(rels))
+                        log(
+                            "existing paths apply would change (copied to the backup dir first): "
+                            + ", ".join(rels)
+                        )
                 else:
                     warn("chezmoi init (scratch) failed: " + res.stderr.strip())
         log("(dry-run) afterwards, start the new shell with: exec zsh -l")
@@ -505,12 +688,16 @@ def main(argv=None):
     chezmoi(ctx, "init")
     rels = existing_targets(ctx, None)
     backup_targets(ctx, rels, backup_dir)
-    log("chezmoi apply — files, zsh plugins, then the run_ scripts (env links, packages, fonts, mise, setup)")
+    log(
+        "chezmoi apply — files, zsh plugins, then the run_ scripts (env links, packages, fonts, mise, setup)"
+    )
     chezmoi(ctx, "apply")
 
     log("Bootstrap complete.")
     zsh = setup.target_zsh() or "zsh"
-    log("Your login shell is zsh — re-login (new terminal / SSH) to get it, or switch this session now:")
+    log(
+        "Your login shell is zsh — re-login (new terminal / SSH) to get it, or switch this session now:"
+    )
     print(f"\n    exec {zsh} -l\n")
 
 
