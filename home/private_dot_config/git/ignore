@@ -1,5 +1,8 @@
 # Global excludes. `.claude/worktrees/` is where Claude Code puts the worktrees
-# it creates, and — through ~/.config/worktrunk/config.toml — where `wt` puts
-# its too. A nested worktree is a `.git` file plus a full checkout, so without
-# this every repo shows an untracked `.claude/` the moment either tool is used.
+# it creates, and it exposes no setting for the path. A nested worktree is a
+# `.git` file plus a full checkout, so without this every repo shows an
+# untracked `.claude/` the moment Claude Code creates one.
+#
+# `wt` and GitLens both create OUTSIDE the repo — `<parent>/<repo>.worktrees/`,
+# see ~/.config/worktrunk/config.toml — so they need no entry here.
 .claude/worktrees/
