@@ -5,7 +5,7 @@
 | Status | accepted (updated 2026-09-10: zoi removed, mise-first, nvm for Node) |
 | Date | 2026-09-09 |
 | Supersedes | ADR-0007 (Nix + Home Manager), ADR-0009 (ownership tiers — the *rule* survives, the mechanism changes) |
-| Keeps | ADR-0010 (plan-first clearance), ADR-0011 + ADR-0012 (agent toolchain) |
+| Keeps | ADR-0010 (plan-first — the clearance becomes opt-in, see below), ADR-0011 + ADR-0012 (agent toolchain) |
 
 ## Context
 
@@ -78,6 +78,25 @@ root and the extra links (`.jcc.yaml`, `.lark-cli`, `.vscode-server`,
 `.zed_server`, `~/.local/bin/jcc`) are gated on `envs = [...]` in
 `envlinks.toml`. `main` is the only branch.
 
+### Interactivity (2026-09-10)
+
+**Everything runs unattended by default.** ADR-0010's *plan* survives unchanged
+— every step still registers what it would do, and the whole plan is printed
+before anything runs — but its *clearance prompt* becomes opt-in
+(`--interactive`, `DOTFILE_INTERACTIVE=1`), and so do the `chezmoi init`
+questions, which the config template gates on the same variable. `chezmoi` is
+invoked with `--no-tty` unless asked.
+
+The reason ADR-0010 gave for a single prompt was that displacing a user's files
+is the one irreversible-feeling part of a bootstrap. That protection now comes
+from the copy-aside backup (`~/dotfiles_backup/<stamp>/`, taken before apply)
+and from `--dry-run`, which prints the plan *and* chezmoi's own diff. What the
+prompt actually cost was worse: this repo's common cases are CI, a container
+build, a devpod recreation and an agent's shell, where a question does not
+protect anybody — it hangs the run. Two interactive surfaces remain, both
+outside the apply path and both invoked by hand: `dotfiles-postsetup` (OAuth
+logins) and `brew-cask-interactive-install.sh` (a picker).
+
 ## Consequences
 
 - **Bootstrap needs no root** for the user half: uv, chezmoi and mise all
@@ -93,6 +112,9 @@ root and the extra links (`.jcc.yaml`, `.lark-cli`, `.vscode-server`,
   reconcile in `runtimes.py`; versions a host chose are never overwritten.
 - **Node is nvm's**: no `node`/`npm:` mise tools, so the two never race for
   `npm`; non-interactive callers get the newest installed Node from `env.zsh`.
+- **Nothing prompts in the apply path.** A step that cannot run unattended does
+  not belong there; `stdin_devnull=True` makes an unexpected question fail
+  loudly rather than block.
 - **Verification** is `just check` (`scripts/check.py`): data validation, script
   compile + `--help`, and a full chezmoi render per environment into a scratch
   `$HOME` with `zsh -n`, `git config --list` and TOML parses on the results —

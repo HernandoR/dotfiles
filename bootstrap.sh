@@ -5,7 +5,7 @@
 # the scripts it runs — lives in scripts/. All arguments are forwarded.
 #
 #   ./bootstrap.sh --dry-run            # preview every step, run nothing
-#   ./bootstrap.sh --yes                # skip the interactive plan clearance
+#   ./bootstrap.sh --interactive        # ask before running the plan (default: unattended)
 #   ./bootstrap.sh --env mewtant        # a named environment (state root, extra links)
 #   ./bootstrap.sh --network CN         # enable China mirrors
 #   ./bootstrap.sh --system docker      # + Linux system components

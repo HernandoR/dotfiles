@@ -6,6 +6,7 @@ import logging
 import os
 import pathlib
 import shutil
+import signal
 import subprocess
 import sys
 
@@ -14,23 +15,57 @@ from managers import PackageManager
 logger = logging.getLogger("dotfiles")
 
 
+def quiet_broken_pipe():
+    """Die quietly when stdout is closed early, as in ``… | head -40``.
+
+    Python installs SIG_IGN for SIGPIPE and reports the failed write as a
+    BrokenPipeError instead, so a script that keeps printing after ``head`` has
+    exited ends in a traceback rather than simply stopping — which is what
+    ``./bootstrap.sh --dry-run | head -40`` did on 2026-09-10. Restoring the
+    default disposition makes the process be killed by SIGPIPE exactly like
+    ``cat`` or ``ls``, which is the behaviour every caller of a pipeline expects.
+
+    Called at import time because these modules are only ever imported by this
+    repo's own CLI entry points, and it must take effect before the first print.
+    Scripts that do not import this module carry the same three lines inline.
+    """
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+
+quiet_broken_pipe()
+
+
 ASSUME_YES_ENV = "DF_ASSUME_YES"
+# Opt IN to being asked. Everything in this repo runs non-interactively by
+# default (ADR-0013 update 2026-09-10): the plan is printed, then the run
+# proceeds. Set this (or pass --interactive) to get the one-shot clearance
+# prompt and the `chezmoi init` questions back.
+INTERACTIVE_ENV = "DOTFILE_INTERACTIVE"
 
 
 class Ctx:
     """Execution context passed to components (the ADR-0003 ``ctx``)."""
 
-    def __init__(self, dry_run=False, options=None, assume_yes=None):
+    def __init__(self, dry_run=False, options=None, assume_yes=None, ask=False):
         self.dry_run = dry_run
         self.options = options or {}
         self.os_type = self._detect_os()
-        # One-shot clearance (see require_clearance): already granted when the
-        # caller says so, or when $DF_ASSUME_YES=1 — which scripts/bootstrap.py
-        # exports once the user has cleared the plan, so a nested process does
-        # not ask a second time for the same run.
-        self.assume_yes = (
-            os.environ.get(ASSUME_YES_ENV, "") == "1" if assume_yes is None else bool(assume_yes)
-        )
+        # Is a human to be asked at all? NO by default — a bootstrap that blocks
+        # on a question is useless in CI, a container build, a devpod recreation
+        # or an agent's shell, and those are the common cases. `ask` (--interactive)
+        # or $DOTFILE_INTERACTIVE=1 opts back in.
+        self.ask = bool(ask) or os.environ.get(INTERACTIVE_ENV, "") == "1"
+        # One-shot clearance (see require_clearance): granted when the caller says
+        # so, when $DF_ASSUME_YES=1 (scripts/bootstrap.py exports it once the plan
+        # is cleared, so a nested process never asks twice), and otherwise
+        # whenever nobody asked to be asked.
+        if assume_yes is not None:
+            self.assume_yes = bool(assume_yes)
+        elif os.environ.get(ASSUME_YES_ENV, "") == "1":
+            self.assume_yes = True
+        else:
+            self.assume_yes = not self.ask
         self._extend_path()
 
     @staticmethod
@@ -67,9 +102,12 @@ class Ctx:
     def require_clearance(self, prompt="Proceed with the plan above?"):
         """Ask ONCE for clearance to run the printed plan, then remember the
         answer (``assume_yes``) so nothing asks again. Yes -> return True; no ->
-        SystemExit. Returns True without asking when clearance is already
-        granted, under --dry-run (nothing to clear), or with no terminal — so the
-        caller can invoke it unconditionally."""
+        SystemExit.
+
+        Returns True WITHOUT asking in every case but one: the caller opted into
+        being asked (--interactive / $DOTFILE_INTERACTIVE=1) AND a terminal is
+        there to answer. Clearance already granted, --dry-run and a headless run
+        all pass straight through, so the caller can invoke it unconditionally."""
         if self.assume_yes or self.dry_run or not self.interactive:
             self.assume_yes = True
             return True

@@ -7,4 +7,4 @@
 set -eu
 export PATH="$HOME/.local/bin:$PATH"
 command -v uv >/dev/null 2>&1 || { echo "packages: uv not on PATH — run ./bootstrap.sh first" >&2; exit 1; }
-exec uv run --script "{{ .chezmoi.workingTree }}/scripts/packages.py" --yes
+exec uv run --script "{{ .chezmoi.workingTree }}/scripts/packages.py"

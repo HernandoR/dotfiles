@@ -33,12 +33,15 @@ cd dotfiles
 half (uv, chezmoi, mise all land in `~/.local/bin`); root/sudo is used only
 for missing prerequisites, `chsh`, and the opt-in system components.
 
-**On a terminal it asks before it touches anything.** It prints the whole plan
-first — what will be installed, which files are written or linked, every
-existing file it will copy aside — then asks for clearance **once**
+**It prints the whole plan first, then runs it — unattended.** The plan lists
+what will be installed, which files are written or linked, and every existing
+file it will copy aside
 ([ADR-0010](docs/plans/adr-0010-plan-first-one-shot-clearance-2026-08-04.md)).
-A run with no terminal (CI, container build) never asks; `--yes` skips the
-prompt on a terminal too.
+Nothing prompts: this is normally run in CI, a container build, a devpod
+recreation or an agent's shell, where a question hangs the run. Preview with
+`--dry-run`; pass `--interactive` to get the one-shot clearance prompt and the
+`chezmoi init` questions back. Your data is protected by the copy-aside backup,
+not by the prompt.
 
 ## What the bootstrap does
 
@@ -73,9 +76,10 @@ When it finishes, start the new shell with `exec zsh -l` (or re-login).
 
 | Flag | Effect |
 | --- | --- |
-| `--dry-run` | Print every command without executing it (no clearance prompt). |
+| `--dry-run` | Print every command without executing it. |
 | `--verbose` | Echo each command as it runs. |
-| `--yes` / `-y` | Skip the clearance prompt (the plan is still printed). Same as `DF_ASSUME_YES=1`. |
+| `--interactive` / `-i` | Ask before running the plan, and let `chezmoi init` ask its questions. Off by default. Same as `DOTFILE_INTERACTIVE=1`. |
+| `--yes` / `-y` | Accepted for compatibility; already the default. |
 | `--env NAME` | Environment: `default`, `mewtant`, `ec2-wo-fsx` — picks the state root and the env-only links. |
 | `--state-root DIR` | Override the persistent root for the `$HOME` links. |
 | `--network CN` | China mirrors for pypi/uv, rustup and Homebrew's installer. |
@@ -84,15 +88,23 @@ When it finishes, start the new shell with `exec zsh -l` (or re-login).
 
 Every flag has an env-var twin the chezmoi config template reads directly:
 `DOTFILE_ENV`, `DOTFILE_STATE_ROOT`, `DOTFILE_NETWORK_ENV`, `DOTFILE_AGENTS`,
-`DOTFILE_SYSTEM_COMPONENTS`. `DF_ASSUME_YES=1` is exported once you clear the
-plan, so nothing nested asks again.
+`DOTFILE_SYSTEM_COMPONENTS`, plus `DOTFILE_INTERACTIVE=1` for the prompts.
+
+**Nothing in this repo prompts unless you ask it to.** `just apply`, every
+`run_` script chezmoi executes, and each script run by hand are unattended by
+construction; `just init` is the one recipe that asks, because re-answering the
+machine questions is its whole purpose. Two things can still stop and wait, both
+by design and neither during a bootstrap: `dotfiles-postsetup` (OAuth logins
+that genuinely need a human) and `./brew-cask-interactive-install.sh` (a manual
+picker). `sudo` may still ask for your password on a host that requires it.
 
 ## Trying it on a new machine (and how to recover)
 
 **Safety model — nothing is destroyed:**
 
 - **Preview first:** `./bootstrap.sh --dry-run --verbose` runs nothing and shows
-  chezmoi's own diff of what apply would change.
+  chezmoi's own diff of what apply would change. This is the check that replaces
+  the old confirmation prompt — use it before the first real run on a machine.
 - **Existing files are copied, not deleted.** Before `chezmoi apply`, every path
   it would change is copied under its `$HOME`-relative name to
   `~/dotfiles_backup/<stamp>/`. A real file or directory in the way of an env
@@ -109,6 +121,25 @@ chezmoi forget ~/.zshrc                     # stop managing one path (source sta
 chezmoi purge                               # remove chezmoi's config + state (files stay)
 ```
 
+## Migrating a machine off Nix + Home Manager
+
+Run `./bootstrap.sh`. It installs the new generation alongside the old one and
+`chezmoi apply` replaces the files Home Manager owned, so the machine works
+before anything is removed. Note that a tool the bootstrap finds under `/nix` is
+treated as **not** installed and a real copy goes into `~/.local/bin`, because
+Nix's copy disappears with Nix.
+
+What is left afterwards is Home Manager's `$HOME` symlinks into `/nix/store`,
+its profiles under `~/.local/state`, and the Nix store and daemon. Removing them
+is a one-time manual job and deliberately not automated here: the safe part is
+just deleting symlinks that point into `/nix` (never a real file, and never
+inside `~/dotfile_home` or `~/dotfiles_backup/`), and the rest depends on which
+installer put Nix there. A store from the Determinate or Lix installer removes
+itself with `sudo /nix/nix-installer uninstall`; one from the classic
+nixos.org script needs the manual procedure in the
+[NixOS manual](https://nix.dev/manual/nix/stable/installation/uninstall), which
+ends in deleting the APFS store volume and a reboot.
+
 ## Staying in sync
 
 ```bash
@@ -122,8 +153,8 @@ just check      # verify the repo (data, scripts, a full render per environment)
 just doctor     # chezmoi / mise health
 ```
 
-Machine answers can be changed with `just init` (stored answers are the
-defaults) or by re-running the bootstrap with the flag.
+Machine answers can be changed with `just init` (it asks, offering the stored
+answers as defaults) or by re-running the bootstrap with the flag.
 
 ## Layers and ownership
 
@@ -279,6 +310,15 @@ don't cite them as current design.
   via `ctx.run_command` (sudo only when needed, honours dry-run); argument lists
   over `shell=True`; download-then-execute, never `curl | bash`; every step
   registers itself in the plan next to the code that performs it (ADR-0010).
+- **Behave in a pipe.** Every script restores the default `SIGPIPE` disposition
+  (`context.py`, `quiet_broken_pipe`), so `… | head` stops it instead of ending
+  in a `BrokenPipeError` traceback. A script that does not import `context`
+  carries the same three lines inline.
+- **Never block on a prompt.** A new step must run to completion unattended:
+  pass the installer's non-interactive flag, and `stdin_devnull=True` to
+  `ctx.run_command` for anything driven off a list, so an unexpected question
+  fails loudly instead of hanging the run. What truly needs a human goes into
+  the deferred post-login script, not into the apply path.
 - **OS identifiers:** one *family* per id (`context.py` `Ctx._detect_os`);
   never hardcode a package manager — route through `NATIVE` in `packages.py`
   or `PackageManager.supported_os` in `managers.py`.

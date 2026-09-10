@@ -119,9 +119,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--plan", action="store_true", help="print plan rows (section<TAB>text) and exit")
-    ap.add_argument("-y", "--yes", action="store_true", help="accepted for symmetry; nothing here prompts")
     args = ap.parse_args()
-    ctx = Ctx(dry_run=args.dry_run or args.plan, assume_yes=True)
+    ctx = Ctx(dry_run=args.dry_run or args.plan, assume_yes=True)  # never prompts
     key, argv, sudo = detect_manager()
     pkgs = applicable(tomllib.loads(DATA.read_text())["packages"])
     missing = [p for p in pkgs if not present(p)]

@@ -22,11 +22,13 @@ the fourth: packages.py needs it before apply, and no tool manager installs it.
 Privilege model (Ctx.priv, detected live): root runs privileged steps directly,
 sudo runs them via sudo, none skips them (the user-level half still works).
 
-Clearance (ADR-0010): on an interactive terminal the whole plan is printed
+Clearance (ADR-0010, updated 2026-09-10): the whole plan is always printed
 first — what gets installed, from which network, which files are written or
-linked, which existing files are moved aside — and cleared ONCE. No terminal
-(CI, container build, cron) never asks; --yes skips the prompt but still prints
-the plan; --dry-run prints every action and changes nothing.
+linked, which existing files are copied aside. It is NOT confirmed by default:
+a bootstrap that blocks on a question is useless in CI, a container build or a
+devpod recreation. Pass --interactive (or DOTFILE_INTERACTIVE=1) for the
+one-shot clearance prompt and the `chezmoi init` questions; --dry-run prints
+every action and changes nothing.
 """
 import argparse
 import logging
@@ -40,7 +42,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import setup  # noqa: E402
 from components import Homebrew  # noqa: E402
-from context import ASSUME_YES_ENV, Ctx  # noqa: E402
+from context import ASSUME_YES_ENV, INTERACTIVE_ENV, Ctx  # noqa: E402
 from managers import Script  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s",
@@ -154,6 +156,21 @@ def have_brew():
     return bool(shutil.which("brew")) or os.access("/opt/homebrew/bin/brew", os.X_OK)
 
 
+def installed_outside_nix(name):
+    """Where `name` resolves, unless that is Nix's copy — in which case None.
+
+    A tool the retired generation provided does not count as installed: it goes
+    away when Nix does, and skipping the install because it is on PATH today
+    leaves a host that loses uv and mise the moment the store is removed — which
+    is what happened on the reference Mac on 2026-09-10, taking `uv`, `mise` and
+    `just` with it. Treating Nix's copy as absent puts a real one in
+    ~/.local/bin first, so the machine survives the removal."""
+    found = shutil.which(name)
+    if not found or found.startswith("/nix/") or "/.nix-profile/" in found:
+        return None
+    return found
+
+
 def plan_tools(plan):
     if sys.platform == "darwin":
         if have_brew():
@@ -162,9 +179,12 @@ def plan_tools(plan):
             plan.install("Homebrew (its installer; BFSU mirror under --network CN) — packages.toml "
                          "and the fonts need it", priv=True)
     for name, script in TOOLS.items():
-        found = shutil.which(name)
+        found = installed_outside_nix(name)
         if found:
             plan.fact(name, f"already installed ({found}) — not reinstalled")
+        elif shutil.which(name):
+            plan.install(f"{name} via its installer ({script.url}) into {LOCAL_BIN} — the one on "
+                         f"PATH ({shutil.which(name)}) is Nix's and goes away with it")
         else:
             plan.install(f"{name} via its installer ({script.url}) into {LOCAL_BIN}")
 
@@ -178,12 +198,17 @@ def install_tools(ctx):
         if not ctx.dry_run and not have_brew():
             warn("Homebrew did not install — packages.toml and the fonts will be skipped on this run")
     for name, script in TOOLS.items():
-        if shutil.which(name):
+        if installed_outside_nix(name):
             continue
-        log(f"installing {name}")
+        if shutil.which(name):
+            log(f"installing {name} into {LOCAL_BIN} — the one on PATH "
+                f"({shutil.which(name)}) is Nix's and goes away with it")
+        else:
+            log(f"installing {name}")
         ctx.package_manager("scripts").install(ctx, script)
-        if not ctx.dry_run and not shutil.which(name):
-            warn(f"{name} still not on PATH after its installer — the apply may be incomplete")
+        if not ctx.dry_run and not installed_outside_nix(name):
+            warn(f"{name} still not installed outside /nix after its installer — the apply may "
+                 "be incomplete")
 
 
 # ---- chezmoi ----------------------------------------------------------------------
@@ -195,6 +220,11 @@ def chezmoi_bin():
 
 def chezmoi(ctx, *args, capture=False, check=True, config=None):
     cmd = [chezmoi_bin() or "chezmoi", "--source", str(REPO)]
+    # --no-tty: never reach for the terminal behind our back. The config template
+    # already decides whether to ask from $DOTFILE_INTERACTIVE, and this makes an
+    # unattended run fail loudly instead of hanging on a prompt nobody sees.
+    if os.environ.get(INTERACTIVE_ENV, "") != "1":
+        cmd.append("--no-tty")
     if config:
         cmd += ["--config", str(config)]
     cmd += list(args)
@@ -349,8 +379,12 @@ def parse_args(argv):
                     "On a terminal the full plan is printed and cleared once first (ADR-0010).")
     ap.add_argument("--dry-run", action="store_true", help="print every command without executing")
     ap.add_argument("--verbose", action="store_true", help="more logging")
+    ap.add_argument("-i", "--interactive", action="store_true",
+                    help="ask before running the printed plan, and let `chezmoi init` ask its "
+                         "questions (default: neither — everything runs unattended); "
+                         "same as DOTFILE_INTERACTIVE=1")
     ap.add_argument("-y", "--yes", action="store_true",
-                    help="skip the clearance prompt (the plan is still printed); same as DF_ASSUME_YES=1")
+                    help="accepted for compatibility and already the default (nothing prompts)")
     ap.add_argument("--env", default="", help="environment name: default | mewtant | ec2-wo-fsx (DOTFILE_ENV)")
     ap.add_argument("--state-root", default="",
                     help="persistent root for the $HOME links (DOTFILE_STATE_ROOT; default derives from --env)")
@@ -381,7 +415,12 @@ def main(argv=None):
     network = os.environ.get("DOTFILE_NETWORK_ENV", "")
     env_name = os.environ.get("DOTFILE_ENV", "default")
 
-    ctx = Ctx(dry_run=args.dry_run, assume_yes=True if args.yes else None)
+    # --interactive is the only thing that makes this run ask anything; it also
+    # reaches `chezmoi init` (its config template reads the same variable) and
+    # every script this one spawns.
+    if args.interactive:
+        os.environ[INTERACTIVE_ENV] = "1"
+    ctx = Ctx(dry_run=args.dry_run, ask=args.interactive)
     # flag > env > default, the same resolution setup.py uses standalone.
     system_spec, agent_ids = setup.resolve_selection(argparse.Namespace(
         system=args.system, agents=args.agents, no_claude=False))
@@ -448,11 +487,12 @@ def main(argv=None):
 
             with tempfile.TemporaryDirectory() as tmp:
                 cfg = pathlib.Path(tmp) / "chezmoi.toml"
-                res = subprocess.run([chezmoi_bin(), "--source", str(REPO), "--config", str(cfg), "init"],
-                                     capture_output=True, text=True)
+                res = subprocess.run([chezmoi_bin(), "--source", str(REPO), "--no-tty",
+                                      "--config", str(cfg), "init"], capture_output=True, text=True)
                 if res.returncode == 0:
-                    subprocess.run([chezmoi_bin(), "--source", str(REPO), "--config", str(cfg), "apply",
-                                    "--dry-run", "--verbose", "--exclude", "externals,scripts"], check=False)
+                    subprocess.run([chezmoi_bin(), "--source", str(REPO), "--no-tty",
+                                    "--config", str(cfg), "apply", "--dry-run", "--verbose",
+                                    "--exclude", "externals,scripts"], check=False)
                     rels = existing_targets(ctx, cfg)
                     if rels:
                         log("existing paths apply would change (copied to the backup dir first): "

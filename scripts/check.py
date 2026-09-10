@@ -19,10 +19,16 @@ import os
 import pathlib
 import py_compile
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import tomllib
+
+# Die quietly when stdout is closed early (`… | head`) instead of ending in a
+# BrokenPipeError traceback. Full rationale in scripts/context.py.
+if hasattr(signal, "SIGPIPE"):
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 HOME_SRC = REPO / "home"

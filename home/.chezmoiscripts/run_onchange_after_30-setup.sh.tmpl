@@ -9,7 +9,7 @@
 set -eu
 export PATH="$HOME/.local/bin:$PATH"
 command -v uv >/dev/null 2>&1 || { echo "setup: uv not on PATH — run ./bootstrap.sh first" >&2; exit 1; }
-# Under the bootstrap the plan was already cleared (DF_ASSUME_YES=1 is exported);
-# a bare `chezmoi apply` on a terminal gets setup.py's own one-shot clearance.
+# Unattended by construction: setup.py only asks with --interactive, which this
+# never passes — a prompt here would hang the whole `chezmoi apply`.
 exec uv run --script "{{ .chezmoi.workingTree }}/scripts/setup.py" \
   --agents {{ .agents | quote }} --system {{ .system | quote }}

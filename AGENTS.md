@@ -34,6 +34,11 @@ The rules an agent must not learn the hard way:
   capabilities all go through their files in this repo (README: *Adding
   software*, *Coding agents*).
 - **Cite `file:line`** for claims about structure or conventions.
+- **Never block on a prompt.** Everything is unattended by default: a new step
+  must run to completion with no human, using the installer's non-interactive
+  flag and `stdin_devnull=True` for list-driven commands. Being asked is opt-in
+  (`--interactive` / `DOTFILE_INTERACTIVE=1`); what truly needs a human goes to
+  the deferred post-login script.
 - **No test framework.** Verify with `just check` (data + scripts + a full
   render per environment) and `./bootstrap.sh --dry-run --verbose`.
 - **Commits:** Conventional-Commits `type(scope): subject`, in English.

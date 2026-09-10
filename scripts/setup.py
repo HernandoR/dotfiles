@@ -16,9 +16,10 @@ Privilege is self-detected (Ctx.priv, live): privileged calls pass
 root runs bare and privileged steps are skipped when there is no way to escalate.
 
 Clearance: `build_plan()` describes every step *before* anything runs.
-scripts/bootstrap.py merges it into the single full-run plan (ADR-0010). On a
-standalone interactive run the plan is printed and cleared once; `--plan`
-prints it (as plan rows) and exits.
+scripts/bootstrap.py merges it into the single full-run plan (ADR-0010). This
+script never asks unless `--interactive` (or DOTFILE_INTERACTIVE=1) is given —
+it is normally run by `chezmoi apply`, where a prompt would hang the apply.
+`--plan` prints the plan as rows and exits.
 """
 import argparse
 import logging
@@ -306,8 +307,11 @@ def main():
                     help="comma-separated agents to provision, or 'all' / 'none' (unset = all: "
                          + ", ".join(agents.Agent.names()) + ")")
     ap.add_argument("--no-claude", action="store_true", help="deprecated alias for --agents=none")
+    ap.add_argument("-i", "--interactive", action="store_true",
+                    help="print the plan and ask before running it (default: run unattended); "
+                         "same as DOTFILE_INTERACTIVE=1")
     ap.add_argument("-y", "--yes", action="store_true",
-                    help="skip the interactive clearance (also: DF_ASSUME_YES=1)")
+                    help="accepted for compatibility and already the default (nothing prompts)")
     ap.add_argument("--plan", action="store_true",
                     help="print the plan as rows (section<TAB>text[<TAB>privileged]) and exit")
     args = ap.parse_args()
@@ -315,14 +319,14 @@ def main():
     planning = args.plan
     if planning:
         logger.setLevel(logging.ERROR)
-    ctx = Ctx(dry_run=args.dry_run or planning, assume_yes=True if args.yes else None)
+    ctx = Ctx(dry_run=args.dry_run or planning, ask=args.interactive)
     system_spec, agent_ids = resolve_selection(args)
 
     if planning:
         for section, text, priv in build_plan(ctx, system_spec, agent_ids):
             print(f"{section}\t{text}\t{'privileged' if priv else ''}")
         return
-    if not (ctx.assume_yes or ctx.dry_run) and ctx.interactive:
+    if ctx.ask and not ctx.dry_run:
         render_plan(build_plan(ctx, system_spec, agent_ids), ctx=ctx)
         ctx.require_clearance()
 

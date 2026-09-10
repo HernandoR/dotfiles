@@ -27,9 +27,11 @@ cd dotfiles
 只需要 `curl` 和 `git`。用户层（uv、chezmoi、mise，全部装进 `~/.local/bin`）
 不需要 root；root/sudo 只用于缺失的前置依赖、`chsh` 以及可选的系统组件。
 
-在终端里运行时，它会先打印完整计划——安装什么、写入/链接哪些文件、会复制备份哪些
-现有文件——然后**只询问一次**（ADR-0010）。无终端（CI、容器构建）时不会询问；
-`--yes` 也可跳过。
+它会先打印完整计划——安装什么、写入/链接哪些文件、会复制备份哪些现有文件——
+然后**直接执行，不询问**（ADR-0010）。因为它通常运行在 CI、容器构建、devpod 重建
+或 agent 的 shell 里，任何提问都会把整个流程挂住。想先看不想执行就用 `--dry-run`；
+想恢复确认提示和 `chezmoi init` 的提问，加 `--interactive`。保护你数据的是"先复制
+备份"，不是那个提示。
 
 ## bootstrap 做了什么
 
@@ -56,9 +58,25 @@ cd dotfiles
 | `--network CN` | 中国镜像（pypi/uv、rustup、Homebrew 安装器） |
 | `--agents <list>` | 要配置的编码 agent：`claude,codex,pi` / `all` / `none` |
 | `--system <list>` | 可选 Linux 系统组件（`all` / `none` / 名称列表） |
+| `--interactive` / `-i` | 运行前询问，并让 `chezmoi init` 提问（默认全程无人值守） |
 | `just diff` / `just apply` / `just status` | 查看差异 / 应用 / 逐文件状态 |
 | `just check` | 校验仓库：数据文件、脚本、每个环境的完整渲染 |
 | `just update` | `git pull` + apply + 原地升级 uv/chezmoi/mise + `mise up` |
+
+## 从 Nix + Home Manager 迁移
+
+直接运行 `./bootstrap.sh`。它会在旧环境仍然存在的情况下装好新一代，`chezmoi apply`
+接管 Home Manager 原本拥有的文件，所以在移除任何东西之前机器就已经可用。注意：
+bootstrap 把位于 `/nix` 下的工具视为**未安装**，会另装一份到 `~/.local/bin`，因为
+Nix 的那一份会随 Nix 一起消失。
+
+之后残留的是 Home Manager 指向 `/nix/store` 的 `$HOME` 软链、`~/.local/state` 下的
+profile，以及 Nix 的 store 与 daemon。清理它们是一次性的手工活，这里刻意不做自动化：
+安全的部分只是删除指向 `/nix` 的软链（绝不删真实文件，也绝不进入 `~/dotfile_home`
+和 `~/dotfiles_backup/`），其余取决于当初是哪个安装器装的 Nix。Determinate / Lix
+安装器装的可以用 `sudo /nix/nix-installer uninstall` 自行卸载；经典 nixos.org 脚本
+装的则要按 [NixOS 手册](https://nix.dev/manual/nix/stable/installation/uninstall)
+手工处理，最后一步是删除 APFS store 卷并重启。
 
 ## 分层与归属
 
@@ -98,3 +116,11 @@ cd dotfiles
 `--help` 每个脚本、按环境把整棵树渲染进临时 `$HOME` 并用 `zsh -n`、
 `git config --list`、TOML 解析检查结果。`./bootstrap.sh --dry-run --verbose`
 展示完整计划与 chezmoi 的 diff。
+
+## 交互
+
+**默认全程无人值守。** `just apply`、chezmoi 执行的每个 `run_` 脚本、以及手动运行的
+各个脚本都不会提问；`just init` 是唯一会提问的 recipe（重新回答本机的那五个问题正是
+它的用途）。只有两处仍会等待输入，都是刻意为之且不在 bootstrap 路径上：
+`dotfiles-postsetup`（OAuth 登录确实需要人）和 `./brew-cask-interactive-install.sh`
+（手动勾选）。此外 `sudo` 在需要时仍可能索要密码。

@@ -14,7 +14,7 @@ default:
 
 # Apply the source tree to $HOME: files, zsh plugins, then the run_ scripts
 # (env links before; mise / node / packages / fonts / setup after, each only
-# when its inputs changed). A bare apply on a terminal gets setup.py's own clearance.
+# when its inputs changed). Unattended — nothing prompts.
 apply *ARGS:
     chezmoi --source '{{ repo }}' apply {{ ARGS }}
 
@@ -33,9 +33,10 @@ managed:
     @uv run --script scripts/env_links.py --plan | cut -f2 || true
 
 # Re-answer the machine questions (env, state root, network, agents, system).
-# Stored answers are the defaults; DOTFILE_* env vars override without asking.
+# The one place that DOES ask: stored answers are offered as the defaults, and
+# DOTFILE_* env vars still override without asking. Everything else is unattended.
 init:
-    chezmoi --source '{{ repo }}' init
+    DOTFILE_INTERACTIVE=1 chezmoi --source '{{ repo }}' init
 
 # Health of the tools and of the source tree.
 doctor:
