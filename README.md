@@ -271,9 +271,9 @@ apply, choose **Deploy** from Squirrel's menu (or restart Squirrel) to build the
 schema.
 
 Following [issue #968](https://github.com/rime/squirrel/issues/968), Shift and
-CapsLock do not toggle its English mode, and no per-application `ascii_mode`
-overrides are configured. Wanxiang's mixed-input English candidates stay
-available; use macOS ABC when you need direct English input.
+CapsLock do not toggle its English mode, and Squirrel's bundled per-application
+English defaults are overridden to Chinese. Wanxiang's mixed-input English
+candidates stay available; use macOS ABC when you need direct English input.
 
 ### A persistent `$HOME` path → `home/.chezmoidata/envlinks.toml`
 
