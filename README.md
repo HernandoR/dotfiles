@@ -265,9 +265,15 @@ The macOS Squirrel cask is declared in `packages.toml`; its input-method bundle
 is installed at `/Library/Input Methods/Squirrel.app`. `rime.py` then seeds the
 persistent `~/Library/Rime` link with the pinned Wanxiang Base scheme and
 `wanxiang-lts-zh-hans.gram` model, and applies the custom YAML files under
-`rime/`. The defaults use half-width punctuation and CapsLock for Chinese/
-English switching. After the first apply, choose **Deploy** from Squirrel's menu (or
-restart Squirrel) to build the schema.
+`rime/`. The defaults use half-width punctuation. Squirrel stays in Chinese mode
+in every application; direct English input should use macOS ABC. After the first
+apply, choose **Deploy** from Squirrel's menu (or restart Squirrel) to build the
+schema.
+
+Following [issue #968](https://github.com/rime/squirrel/issues/968), Shift and
+CapsLock do not toggle its English mode, and no per-application `ascii_mode`
+overrides are configured. Wanxiang's mixed-input English candidates stay
+available; use macOS ABC when you need direct English input.
 
 ### A persistent `$HOME` path → `home/.chezmoidata/envlinks.toml`
 

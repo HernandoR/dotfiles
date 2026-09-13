@@ -4,3 +4,21 @@ patch:
   # keep character shape half-width.
   switches/@1/reset: 1
   switches/@2/reset: 0
+  # Keep Chinese mode as the default, but retain ascii_composer,
+  # ascii_segmentor and super_english so Wanxiang can offer English words
+  # while composing Chinese (mixed input).
+  switches/@0/reset: 0
+  # Do not let Squirrel switch Chinese/English with Shift or CapsLock.
+  ascii_composer/good_old_caps_lock: true
+  ascii_composer/switch_key/Caps_Lock: noop
+  ascii_composer/switch_key/Shift_L: noop
+  ascii_composer/switch_key/Shift_R: noop
+  # Wanxiang's built-in spelling/phrase correction.
+  translator/enable_correction: true
+  # Enable the requested fuzzy sounds before the standard full-pinyin algebra.
+  speller/algebra:
+    __patch:
+      - wanxiang_algebra:/模糊音_nl
+      - wanxiang_algebra:/模糊音_in_ing
+      - wanxiang_algebra:/模糊音_en_eng
+      - wanxiang_algebra:/base/全拼
