@@ -34,7 +34,7 @@ passthrough), the owner dropped zoi and set the ownership rule recorded below.
 | --- | --- |
 | `.chezmoiroot` → `home/` | the chezmoi source state; `chezmoi init` pins `sourceDir` to the clone |
 | `home/.chezmoi.toml.tmpl` | the per-machine questions: `env`, `stateRoot`, `network`, `agents`, `system` (env vars `DOTFILE_*` win) |
-| `home/.chezmoidata/*.toml` | the reviewed inventories: `mise.toml`, `node.toml`, `packages.toml`, `envlinks.toml` — read by chezmoi templates AND by the scripts (tomllib) |
+| `home/.chezmoidata/*.toml` | the reviewed inventories: `mise.toml`, `node.toml`, `packages.toml`, `envlinks.toml`, `rime.toml` — read by chezmoi templates AND by the scripts (tomllib) |
 | `home/.chezmoiscripts/` | `run_before_05` the bootstrap tools (idempotent), `run_before_10` env links; `run_onchange_after_` mise, node, packages, fonts, setup — each keyed on the hash of its inputs; a final `run_after` promotes the first-apply transaction only on success |
 | `home/.chezmoiexternal.toml` | the four zsh plugins, fetched as archives |
 | `scripts/*.py` | `bootstrap.py` (plan → tools → init → backup → apply), `tools.py` (the shared toolchain phase), `env_links.py`, `runtimes.py`, `node.py`, `packages.py`, `setup.py`, `agents.py`, `components.py`, `managers.py`, `context.py`, `check.py` |

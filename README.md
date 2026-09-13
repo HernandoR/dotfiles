@@ -179,6 +179,7 @@ answers as defaults) or by re-running the bootstrap with the flag.
 | Tools and runtimes (most of the toolset) | `home/.chezmoidata/mise.toml` → `~/.config/mise/config.toml` (seeded, then reconciled: missing tools added, existing versions kept) | mise (`mise use -g`, `mise up`) and `scripts/runtimes.py` |
 | Node ecosystem | `home/.chezmoidata/node.toml` → `~/.nvm` | nvm and `scripts/node.py` |
 | OS-level packages (zsh, GNU userland, git, vim, wget, rsync, tree, xclip) | `home/.chezmoidata/packages.toml` | `scripts/packages.py` (brew / apt / dnf / yum) |
+| Rime/Squirrel input method | `home/.chezmoidata/rime.toml` + `rime/` → persistent `~/Library/Rime` | `scripts/rime.py` (Wanxiang assets and grammar model) |
 | Agent capabilities | `scripts/agents.py` manifest | the agents' own CLIs, projected by `setup.py` |
 
 The rule from ADR-0009 survives: **a file a tool rewrites at runtime is never a
@@ -257,6 +258,15 @@ Only for tools mise has no backend for, or that must be the system's build.
 Say `""` for a manager that has no package. `scripts/packages.py` detects the
 host's manager (brew on macOS; apt, dnf or yum on Linux; brew as a last resort)
 and installs what is missing.
+
+### Rime on macOS
+
+The macOS Squirrel cask is declared in `packages.toml`; its input-method bundle
+is installed at `/Library/Input Methods/Squirrel.app`. `rime.py` then seeds the
+persistent `~/Library/Rime` link with the pinned Wanxiang Base scheme and
+`wanxiang-lts-zh-hans.gram` model, and applies the two custom YAML files under
+`rime/`. After the first apply, choose **Deploy** from Squirrel's menu (or
+restart Squirrel) to build the schema.
 
 ### A persistent `$HOME` path → `home/.chezmoidata/envlinks.toml`
 
@@ -378,7 +388,7 @@ bootstrap.sh      source scripts/uv-bootstrap.sh, exec scripts/bootstrap.py
 Justfile          `just` recipes for the day-to-day commands
 home/
   .chezmoi.toml.tmpl      the per-machine questions (env, stateRoot, network, agents, system)
-  .chezmoidata/           mise.toml, node.toml, packages.toml, envlinks.toml — the inventories
+  .chezmoidata/           mise.toml, node.toml, packages.toml, envlinks.toml, rime.toml — inventories
   .chezmoiscripts/        run_before tools/env links; run_onchange mise, node, packages, fonts, setup; final run_after stamp
   .chezmoiexternal.toml   the zsh plugins
   dot_zshenv/.zprofile/.zshrc.tmpl, private_dot_config/{zsh,git,starship.toml,mise/conf.d,worktrunk,direnv}/,

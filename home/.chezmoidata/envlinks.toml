@@ -135,6 +135,14 @@ seed = """
 kind = "dir"
 mode = "700"
 
+# Squirrel's user directory: Wanxiang's schemas, dictionaries, grammar model,
+# generated builds and the learned user dictionary are all mutable Rime state.
+# Preserve an existing real ~/Library/Rime when the link is introduced.
+[envlinks.entries."Library/Rime"]
+kind = "dir"
+mode = "755"
+preserve_dir = true
+
 # Regenerable completion cache; persisted purely for zsh startup speed.
 [envlinks.entries.".zcompdump"]
 kind = "file"

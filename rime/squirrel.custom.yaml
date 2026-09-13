@@ -1,0 +1,133 @@
+# Wanxiang/Squirrel setup based on:
+# https://zhuanlan.zhihu.com/p/2053131335154373973
+patch:
+  style/color_scheme: solarized_light
+  style/color_scheme_dark: solarized_dark
+  style/horizontal: true
+  style/inline_preedit: false
+  style/display_tray_icon: false
+  preset_color_schemes:
+    solarized_light:
+      border_height: 0x1
+      border_width: 0x1
+      comment_font_point: 0x10
+      corner_radius: 0x5
+      font_point: 0x10
+      hilited_corner_radius: 0x5
+      inline_preedit: true
+      label_font_point: 0xD
+      line_spacing: 0x5
+      spacing: 0xA
+      base_offset: 0x0
+      text_orientation: horizontal
+      candidate_list_layout: linear
+      color_space: srgb
+      candidate_format: '%c %@ '
+      font_face: PingFangSC
+      alpha: 0x1
+      author: 小码哥
+      name: 微信浅色／Wechat Light
+      text_color: 0xFF424242
+      hilited_text_color: 0xFFFFFFFF
+      hilited_back_color: 0xFF79AF22
+      preedit_back_color: 0xFFFFFFFF
+      back_color: 0xFFFFFFFF
+      border_color: 0xFFFFFFFF
+      hilited_candidate_label_color: 0xFFFFFFFF
+      hilited_candidate_text_color: 0xFFFFFFFF
+      hilited_comment_text_color: 0xFFFFFFFF
+      hilited_candidate_back_color: 0xC2B5B05A
+      label_color: 0xFF999999
+      comment_text_color: 0xFF999999
+      candidate_back_color: 0xFFFFFFFF
+      candidate_text_color: 0xFF3C3C3C
+      horizontal: true
+      label_font_face: PingFangSC
+      comment_font_face: PingFangSC
+      translucency: false
+      mutual_exclusive: false
+      surrounding_extra_expansion: 0x0
+      shadow_size: 0x0
+    solarized_dark:
+      border_height: 0x1
+      border_width: 0x1
+      comment_font_point: 0x10
+      corner_radius: 0x5
+      font_point: 0x10
+      hilited_corner_radius: 0x5
+      inline_preedit: true
+      label_font_point: 0xD
+      line_spacing: 0x5
+      spacing: 0xA
+      base_offset: 0x0
+      text_orientation: horizontal
+      candidate_list_layout: linear
+      color_space: srgb
+      candidate_format: '%c %@ '
+      font_face: PingFangSC
+      alpha: 0x1
+      author: 小码哥
+      name: 微信深色／Wechat Dark
+      hilited_text_color: 0xFFFFFFFF
+      text_color: 0xFFBBBBBB
+      hilited_back_color: 0xFF79AF22
+      preedit_back_color: 0xFF151515
+      back_color: 0xFF151515
+      border_color: 0xFF292929
+      candidate_back_color: 0xFF151515
+      label_color: 0xFF999999
+      candidate_text_color: 0xFFBBBBBB
+      comment_text_color: 0xFF999999
+      hilited_candidate_back_color: 0xFF7982DD
+      hilited_candidate_text_color: 0xFFFFFFFF
+      hilited_candidate_label_color: 0xFFFFFFFF
+      hilited_comment_text_color: 0xFFFFFFFF
+      horizontal: true
+      label_font_face: PingFangSC
+      comment_font_face: PingFangSC
+      translucency: false
+      mutual_exclusive: false
+      surrounding_extra_expansion: 0x0
+      shadow_size: 0x0
+  app_options:
+    co.zeit.hyper:
+      ascii_mode: true
+    com.alfredapp.Alfred:
+      ascii_mode: true
+    com.apple.Spotlight:
+      ascii_mode: true
+    com.apple.Terminal:
+      ascii_mode: true
+      no_inline: true
+    com.apple.dt.Xcode:
+      ascii_mode: true
+    com.barebones.textwrangler:
+      ascii_mode: true
+    com.blacktree.Quicksilver:
+      ascii_mode: true
+    com.github.atom:
+      ascii_mode: true
+    com.google.Chrome:
+      inline: true
+    com.googlecode.iterm2:
+      ascii_mode: true
+      no_inline: true
+    com.macromates.TextMate.preview:
+      ascii_mode: true
+    com.microsoft.VSCode:
+      ascii_mode: true
+    com.runningwithcrayons.Alfred-2:
+      ascii_mode: true
+    com.sublimetext.2:
+      ascii_mode: true
+    ' org.gnu.Aquamacs':
+      ascii_mode: true
+    org.gnu.Emacs:
+      ascii_mode: true
+      no_inline: true
+    org.vim.MacVim:
+      ascii_mode: true
+      no_inline: true
+      vim_mode: true
+    ru.keepcoder.Telegram:
+      inline: true

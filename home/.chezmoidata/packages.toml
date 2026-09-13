@@ -115,4 +115,4 @@ apt = ""
 dnf = ""
 mise = ""
 cask = true
-probe_darwin = ["/Applications/Squirrel.app"]
+probe_darwin = ["/Library/Input Methods/Squirrel.app"]

@@ -157,6 +157,28 @@ def preserve_ssh(r, root):
              if not item.is_dir() else shutil.copytree(item, dst / item.name, symlinks=True))
 
 
+def preserve_dir(r, root, name):
+    """Merge a pre-existing real directory into a newly seeded target.
+
+    This is used for mutable application directories whose contents must
+    survive their first migration to stateRoot. Existing stateRoot entries win.
+    """
+    src, dst = HOME / name, root / name
+    if not (src.is_dir() and not src.is_symlink() and dst.is_dir()):
+        return
+    for item in src.iterdir():
+        target = dst / item.name
+        if target.exists() or target.is_symlink():
+            continue
+        r.plan("config", f"preserve ~/{name}/{item.name} into {dst}")
+        if item.is_dir() and not item.is_symlink():
+            r.do(f"cp -a ~/{name}/{item.name} {dst}/",
+                 lambda item=item, target=target: shutil.copytree(item, target, symlinks=True))
+        else:
+            r.do(f"cp -a ~/{name}/{item.name} {dst}/",
+                 lambda item=item, target=target: shutil.copy2(item, target, follow_symlinks=False))
+
+
 def repair_file(r, root, name, e):
     """Fold a regular file back into its target where a link belongs (files
     only: a real directory in the way is not this failure mode and goes through
@@ -216,6 +238,9 @@ def run(state_root, env, dry_run, plan_only):
         seed_target(r, root, name, e)
     if ".ssh" in live:
         preserve_ssh(r, root)
+    for name, e in live.items():
+        if e.get("preserve_dir"):
+            preserve_dir(r, root, name)
     for name, e in live.items():
         repair_file(r, root, name, e)
     backups = []

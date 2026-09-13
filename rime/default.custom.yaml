@@ -1,0 +1,4 @@
+# Wanxiang/Squirrel setup based on:
+# https://zhuanlan.zhihu.com/p/2053131335154373973
+patch:
+  menu/page_size: 7

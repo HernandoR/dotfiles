@@ -1,0 +1,16 @@
+#!/bin/sh
+# Squirrel is macOS-only. The Rime directory is an env link because Squirrel
+# writes userdb/build files at runtime; this step installs the reviewed
+# Wanxiang assets and custom YAML into that persistent directory.
+#   rime.toml: {{ include ".chezmoidata/rime.toml" | sha256sum }}
+#   rime.py: {{ include (joinPath .chezmoi.workingTree "scripts" "rime.py") | sha256sum }}
+#   custom YAML: {{ include (joinPath .chezmoi.workingTree "rime" "default.custom.yaml") | sha256sum }} {{ include (joinPath .chezmoi.workingTree "rime" "squirrel.custom.yaml") | sha256sum }}
+set -eu
+{{ if eq .chezmoi.os "darwin" -}}
+export PATH="$HOME/.local/bin:$PATH"
+. "{{ .chezmoi.workingTree }}/scripts/uv-bootstrap.sh"
+command -v uv >/dev/null 2>&1 || { echo "rime: uv not on PATH — run ./bootstrap.sh first" >&2; exit 1; }
+exec uv run --script "{{ .chezmoi.workingTree }}/scripts/rime.py" --state-root "{{ .stateRoot }}"
+{{- else -}}
+exit 0
+{{- end }}

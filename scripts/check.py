@@ -100,6 +100,15 @@ def check_data():
             fail(f"packages.{p['name']}: say \"\" explicitly for {', '.join(missing)}")
     ok(f"packages.toml: {len(pkgs)} packages")
 
+    rime = tomllib.loads((DATA / "rime.toml").read_text()).get("rime", {})
+    for key in ("base_url", "base_sha256", "grammar_url", "grammar_sha256", "version"):
+        if not rime.get(key):
+            fail(f"rime.toml: missing {key}")
+    for key in ("base_sha256", "grammar_sha256"):
+        if rime.get(key) and not re.fullmatch(r"[0-9a-f]{64}", rime[key]):
+            fail(f"rime.toml: {key} must be a SHA-256 hex digest")
+    ok("rime.toml: pinned Wanxiang scheme and grammar model")
+
 
 def check_scripts():
     print("scripts")
