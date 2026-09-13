@@ -83,7 +83,11 @@ def main():
     target = pathlib.Path(args.state_root) / "Library" / "Rime"
     marker = target / ".dotfiles-wanxiang-version"
     needs_assets = not marker.exists() or marker.read_text().strip() != config["version"]
-    custom = (SOURCE / "default.custom.yaml", SOURCE / "squirrel.custom.yaml")
+    custom = (
+        SOURCE / "default.custom.yaml",
+        SOURCE / "squirrel.custom.yaml",
+        SOURCE / "wanxiang.custom.yaml",
+    )
     if args.plan:
         if needs_assets:
             print("install\tRime: Wanxiang Base + wanxiang-lts-zh-hans grammar model")

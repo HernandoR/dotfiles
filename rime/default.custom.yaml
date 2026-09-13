@@ -2,3 +2,6 @@
 # https://zhuanlan.zhihu.com/p/2053131335154373973
 patch:
   menu/page_size: 7
+  # CapsLock toggles Chinese/English; clear unfinished pinyin first.
+  ascii_composer/good_old_caps_lock: false
+  ascii_composer/switch_key/Caps_Lock: commit_code

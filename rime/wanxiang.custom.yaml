@@ -1,0 +1,6 @@
+# Wanxiang scheme defaults.
+patch:
+  # Use English/half-width punctuation while remaining in Chinese mode, and
+  # keep character shape half-width.
+  switches/@1/reset: 1
+  switches/@2/reset: 0

@@ -264,8 +264,9 @@ and installs what is missing.
 The macOS Squirrel cask is declared in `packages.toml`; its input-method bundle
 is installed at `/Library/Input Methods/Squirrel.app`. `rime.py` then seeds the
 persistent `~/Library/Rime` link with the pinned Wanxiang Base scheme and
-`wanxiang-lts-zh-hans.gram` model, and applies the two custom YAML files under
-`rime/`. After the first apply, choose **Deploy** from Squirrel's menu (or
+`wanxiang-lts-zh-hans.gram` model, and applies the custom YAML files under
+`rime/`. The defaults use half-width punctuation and CapsLock for Chinese/
+English switching. After the first apply, choose **Deploy** from Squirrel's menu (or
 restart Squirrel) to build the schema.
 
 ### A persistent `$HOME` path → `home/.chezmoidata/envlinks.toml`
