@@ -103,3 +103,16 @@ only = "linux"
 brew = ""
 apt = "xclip"
 dnf = "xclip"
+
+# Rime input method for macOS. mise-zerobrew can manage Homebrew formulae, but
+# its current backend does not support casks; Squirrel is a GUI cask. Probe
+# the installed app so repeated applies stay no-op.
+[[packages]]
+name = "squirrel-app"
+only = "darwin"
+brew = "squirrel-app"
+apt = ""
+dnf = ""
+mise = ""
+cask = true
+probe_darwin = ["/Applications/Squirrel.app"]
