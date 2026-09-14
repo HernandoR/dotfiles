@@ -54,7 +54,7 @@ cd dotfiles
 
 | 命令 | 作用 |
 | --- | --- |
-| `--env NAME` | 环境：`default` / `mewtant` / `ec2-wo-fsx`（取代原 `prod/*` 分支） |
+| `--env NAME` | 环境：`default` / `mewtant`（`ec2-wo-fsx` 为兼容旧配置保留的 `default` 别名） |
 | `--network CN` | 中国镜像（pypi/uv、rustup、Homebrew 安装器） |
 | `--agents <list>` | 要配置的编码 agent：`claude,codex,pi` / `all` / `none` |
 | `--system <list>` | 可选 Linux 系统组件（`all` / `none` / 名称列表） |

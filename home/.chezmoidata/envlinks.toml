@@ -170,13 +170,13 @@ seed_from = "mise"
 [envlinks.entries.".jcc.yaml"]
 kind = "file"
 mode = "600"
-envs = ["mewtant", "ec2-wo-fsx"]
+envs = ["mewtant"]
 
 # lark-cli: intranet Lark tooling — auth tokens, cache and logs, all mutable.
 [envlinks.entries.".lark-cli"]
 kind = "dir"
 mode = "700"
-envs = ["mewtant", "ec2-wo-fsx"]
+envs = ["mewtant"]
 
 # Remote-IDE server trees: these hosts are only reached over SSH from a local
 # editor, so every container recreation re-downloads the server otherwise.
@@ -184,14 +184,14 @@ envs = ["mewtant", "ec2-wo-fsx"]
 [envlinks.entries.".vscode-server"]
 kind = "dir"
 mode = "700"
-envs = ["mewtant", "ec2-wo-fsx"]
+envs = ["mewtant"]
 
 # Zed Remote — note the UNDERSCORE: Zed's own path is ~/.zed_server. Only the
 # remote-server binary, no credentials, hence 755.
 [envlinks.entries.".zed_server"]
 kind = "dir"
 mode = "755"
-envs = ["mewtant", "ec2-wo-fsx"]
+envs = ["mewtant"]
 
 # --- plain links to targets OUTSIDE stateRoot (never seeded) -------------------
 # The jcc binary is distributed on /fsx, not through a package manager, so its
@@ -199,4 +199,4 @@ envs = ["mewtant", "ec2-wo-fsx"]
 # dangling link, which at least fails loudly when the binary is missing.
 [envlinks.links.".local/bin/jcc"]
 target = "/fsx/hernando/local/bin/jcc"
-envs = ["mewtant", "ec2-wo-fsx"]
+envs = ["mewtant"]

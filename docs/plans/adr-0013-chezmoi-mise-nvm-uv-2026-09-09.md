@@ -90,10 +90,12 @@ repo has **two entry points**:
 
 ### Environments
 
-`--env mewtant` and `--env ec2-wo-fsx` replace the two prod branches: the state
-root and the extra links (`.jcc.yaml`, `.lark-cli`, `.vscode-server`,
-`.zed_server`, `~/.local/bin/jcc`) are gated on `envs = [...]` in
-`envlinks.toml`. `main` is the only branch.
+`--env mewtant` replaces the old `prod/mewtant` branch: its state root and the
+extra links (`.jcc.yaml`, `.lark-cli`, `.vscode-server`, `.zed_server`,
+`~/.local/bin/jcc`) are gated on `envs = [...]` in `envlinks.toml`. The default
+state root is `$HOME/dotfile_home`, which already covers the old EC2 path
+`/home/ec2-user/dotfile_home`; `ec2-wo-fsx` therefore remains only as a
+backwards-compatible alias for `default`. `main` is the only branch.
 
 ### Interactivity (2026-09-10)
 

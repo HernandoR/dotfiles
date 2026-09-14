@@ -212,7 +212,7 @@ def parse_args(argv):
     ap.add_argument(
         "--env",
         default="",
-        help="environment name: default | mewtant | ec2-wo-fsx (DOTFILE_ENV)",
+        help="environment name: default | mewtant (DOTFILE_ENV; ec2-wo-fsx is a legacy alias for default)",
     )
     ap.add_argument(
         "--state-root",

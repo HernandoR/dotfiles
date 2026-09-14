@@ -94,7 +94,7 @@ When it finishes, start the new shell with `exec zsh -l` (or re-login).
 | `--verbose` | Echo each command as it runs. |
 | `--interactive` / `-i` | Ask before running the plan, and let `chezmoi init` ask its questions. Off by default. Same as `DOTFILE_INTERACTIVE=1`. |
 | `--yes` / `-y` | Accepted for compatibility; already the default. |
-| `--env NAME` | Environment: `default`, `mewtant`, `ec2-wo-fsx` — picks the state root and the env-only links. |
+| `--env NAME` | Environment: `default` or `mewtant` — picks the state root and the env-only links. `ec2-wo-fsx` remains a legacy alias for `default`. |
 | `--state-root DIR` | Override the persistent root for the `$HOME` links. |
 | `--network CN` | China mirrors for pypi/uv, rustup and Homebrew's installer. |
 | `--agents <list>` | Which coding agents to provision: `claude,codex,pi` / `all` (default) / `none`. |
@@ -187,11 +187,13 @@ chezmoi source entry.** It is an env-link entry.
 
 ### Environments
 
-`--env mewtant` and `--env ec2-wo-fsx` replaced the old `prod/*` branches. They
-change the state root (`/fsx/hernando/dotfile_home_link_src`,
-`/home/ec2-user/dotfile_home`) and enable the entries gated with
+`--env mewtant` replaces the old `prod/mewtant` branch: it uses
+`/fsx/hernando/dotfile_home_link_src` and enables the entries gated with
 `envs = [...]` in `envlinks.toml` (`.jcc.yaml`, `.lark-cli`, `.vscode-server`,
-`.zed_server`, `~/.local/bin/jcc`). `main` is the only branch.
+`.zed_server`, `~/.local/bin/jcc`). `default` uses
+`$HOME/dotfile_home`; the former `ec2-wo-fsx` value is retained as a
+backwards-compatible alias and follows `default` exactly. `main` is the only
+branch.
 
 ### Machine-local escape hatches
 
