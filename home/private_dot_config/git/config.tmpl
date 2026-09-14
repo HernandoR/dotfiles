@@ -49,8 +49,9 @@
 [credential "https://github.com"]
 	helper = !gh auth git-credential
 
-# SSH commit signing, working both with an external agent (1Password et al.
-# via SSH_AUTH_SOCK) and with plain ~/.ssh/id_* key files. The two helpers are
+# SSH commit signing is available when explicitly enabled per command or repo,
+# working with plain ~/.ssh/id_* key files and, as a fallback, an external
+# agent (1Password et al. via SSH_AUTH_SOCK). The two helpers are
 # ~/.local/bin/git-ssh-signing-key and ~/.local/bin/git-ssh-sign (chezmoi-managed).
 [gpg]
 	format = ssh
@@ -58,9 +59,9 @@
 	defaultKeyCommand = {{ .chezmoi.homeDir }}/.local/bin/git-ssh-signing-key
 	program = {{ .chezmoi.homeDir }}/.local/bin/git-ssh-sign
 [commit]
-	gpgsign = true
+	gpgsign = false
 [tag]
-	gpgsign = true
+	gpgsign = false
 
 # difftastic as the external differ (`difft`, from packages.toml).
 [diff]
