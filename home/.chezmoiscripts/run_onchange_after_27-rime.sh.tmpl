@@ -6,6 +6,10 @@
 #   rime.py: {{ include (joinPath .chezmoi.workingTree "scripts" "rime.py") | sha256sum }}
 #   custom YAML: {{ include (joinPath .chezmoi.workingTree "rime" "default.custom.yaml") | sha256sum }} {{ include (joinPath .chezmoi.workingTree "rime" "squirrel.custom.yaml") | sha256sum }} {{ include (joinPath .chezmoi.workingTree "rime" "wanxiang.custom.yaml") | sha256sum }}
 set -eu
+# A stale VIRTUAL_ENV in the caller's shell makes `uv run --script` try to use
+# that venv's interpreter and fail. These are PEP 723 standalone scripts; uv
+# must resolve their interpreter itself.
+unset VIRTUAL_ENV
 {{ if eq .chezmoi.os "darwin" -}}
 export PATH="$HOME/.local/bin:$PATH"
 . "{{ .chezmoi.workingTree }}/scripts/uv-bootstrap.sh"

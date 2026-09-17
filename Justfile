@@ -6,6 +6,11 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# A stale VIRTUAL_ENV in the caller's shell makes every `uv run --script`
+# below fail on that venv's interpreter. These are PEP 723 standalone
+# scripts; uv must resolve their interpreter itself.
+unexport VIRTUAL_ENV
+
 repo := justfile_directory()
 
 # List every recipe.

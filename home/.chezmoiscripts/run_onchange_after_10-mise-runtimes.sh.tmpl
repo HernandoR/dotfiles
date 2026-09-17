@@ -6,6 +6,10 @@
 #   mise.toml:   {{ include ".chezmoidata/mise.toml" | sha256sum }}
 #   runtimes.py: {{ include (joinPath .chezmoi.workingTree "scripts" "runtimes.py") | sha256sum }}
 set -eu
+# A stale VIRTUAL_ENV in the caller's shell makes `uv run --script` try to use
+# that venv's interpreter and fail. These are PEP 723 standalone scripts; uv
+# must resolve their interpreter itself.
+unset VIRTUAL_ENV
 export PATH="$HOME/.local/bin:$PATH"
 command -v uv >/dev/null 2>&1 || { echo "runtimes: uv not on PATH — run ./bootstrap.sh first" >&2; exit 1; }
 exec uv run --script "{{ .chezmoi.workingTree }}/scripts/runtimes.py"

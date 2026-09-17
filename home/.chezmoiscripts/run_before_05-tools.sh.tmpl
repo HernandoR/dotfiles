@@ -1,6 +1,10 @@
 #!/bin/sh
 # Bootstrap uv, Homebrew, chezmoi and mise before any other chezmoi script.
 set -eu
+# A stale VIRTUAL_ENV in the caller's shell makes `uv run --script` try to use
+# that venv's interpreter and fail. These are PEP 723 standalone scripts; uv
+# must resolve their interpreter itself.
+unset VIRTUAL_ENV
 export PATH="$HOME/.local/bin:$PATH"
 . "{{ .chezmoi.workingTree }}/scripts/uv-bootstrap.sh"
 ensure_uv

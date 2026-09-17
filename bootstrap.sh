@@ -15,6 +15,10 @@
 # uv is what provides the Python the scripts run on (no system python needed).
 # The shared prelude is also used by chezmoi's run_before tool phase.
 set -euo pipefail
+# A stale VIRTUAL_ENV in the caller's shell makes `uv run --script` try to use
+# that venv's interpreter and fail. These are PEP 723 standalone scripts; uv
+# must resolve their interpreter itself.
+unset VIRTUAL_ENV
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$HOME/.local/bin:$PATH"
 . "$DIR/scripts/uv-bootstrap.sh"
