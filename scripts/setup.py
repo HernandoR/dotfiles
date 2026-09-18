@@ -198,7 +198,11 @@ def write_deferred_setup(ctx, agent_ids):
         # bottom of this script. NMEM_OPT_OUT is checked first and unconditionally,
         # so it is the one escape hatch out of every one of those branches.
         'if [ -n "${NMEM_OPT_OUT:-}" ]; then',
-        '  echo "nmem: NMEM_OPT_OUT is set — leaving nowledge-mem unconfigured and not asking again."',
+        # Also undoes a prior run that registered nowledge-mem before failing
+        # (header didn't land, or another opt-out came after an earlier success) —
+        # without this, opting out leaves that broken entry registered forever.
+        '  command -v claude >/dev/null 2>&1 && claude mcp remove nowledge-mem --scope user >/dev/null 2>&1',
+        '  echo "nmem: NMEM_OPT_OUT is set — nowledge-mem left unregistered and not asking again."',
         'elif [ -z "${NMEM_API_KEY:-}" ]; then',
         '  echo "nmem: NMEM_API_KEY is not set — leaving the nowledge-mem MCP server unconfigured."',
         '  echo "nmem: set NMEM_API_KEY in ~/.exports (export NMEM_API_KEY=nmem_...), and"',
