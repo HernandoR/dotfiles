@@ -192,6 +192,9 @@ def write_deferred_setup(ctx, agent_ids):
         "# with, so this writes NO config at all and only says where to put one. Set it in",
         "# ~/.exports (NMEM_API_URL overrides the default endpoint on a machine that needs to).",
         f'_nmem_url="${{NMEM_API_URL:-{NMEM_DEFAULT_URL}}}"',
+        # _keep_deferred marks a run that left nmem not-working (no token, or a
+        # header that silently didn't land) so post-login-setup.sh survives for a
+        # retry instead of self-removing at the bottom of this script.
         'if [ -z "${NMEM_API_KEY:-}" ]; then',
         '  if [ -n "${NMEM_OPT_OUT:-}" ]; then',
         '    echo "nmem: NMEM_OPT_OUT is set — leaving nowledge-mem unconfigured and not asking again."',
@@ -201,8 +204,6 @@ def write_deferred_setup(ctx, agent_ids):
         '    echo "nmem: NMEM_API_URL there too if ${_nmem_url} is not the right endpoint."',
         '    echo "nmem: then open a new shell and re-run: dotfiles-postsetup"',
         '    echo "nmem: on a machine that will never use nmem, export NMEM_OPT_OUT=1 to silence this for good"',
-        # The only branch that leaves work undone, so it is the only one that keeps
-        # this script (and the zsh reminder that points at it) alive for a second run.
         '    _keep_deferred=1',
         "  fi",
         "elif command -v claude >/dev/null 2>&1; then",
@@ -212,7 +213,7 @@ def write_deferred_setup(ctx, agent_ids):
         '    --header "X-NMEM-API-Key: ${NMEM_API_KEY}" \\',
         '    --header "APP: Claude Code" \\',
         '    --header "X-Nmem-Tool-Set: external-agent" \\',
-        '    --header "X-Nowledge-Tool-Schema-Profile: slim"; then',
+        '    --header "X-Nowledge-Tool-Schema-Profile: slim" >/dev/null; then',
         # claude mcp add has shipped versions that silently drop --header while
         # still exiting 0 (anthropics/claude-code#17069); this read-back turns
         # that into a visible warning instead of a 401 the next time a tool runs.
@@ -221,9 +222,11 @@ def write_deferred_setup(ctx, agent_ids):
         "    else",
         '      echo "nmem: claude mcp add reported success but the Authorization header did not land"',
         '      echo "nmem: (claude $(claude --version 2>/dev/null)); check with: claude mcp get nowledge-mem"',
+        '      _keep_deferred=1',
         "    fi",
         "  else",
         '    echo "nmem: claude mcp add failed"',
+        '    _keep_deferred=1',
         "  fi",
         "else",
         '  echo "nmem: claude CLI not on PATH; skipping nowledge-mem MCP"',

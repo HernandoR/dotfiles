@@ -84,12 +84,19 @@ seed = """
 
 # --- nmem (hosted memory; scripts/setup.py wires the nowledge-mem MCP server) --
 # The bearer token is per-account, so it can only live here — never in the repo.
-# With NMEM_API_KEY unset, `dotfiles-postsetup` writes no nmem config at all and
-# prints a notice instead; set it, open a new shell, and run dotfiles-postsetup.
-# NMEM_API_URL is optional: leave it commented to use the default endpoint below.
+# With NMEM_API_KEY unset, `dotfiles-postsetup` writes no nmem config at all; it
+# also keeps ~/.local/share/dotfiles/post-login-setup.sh around and the zsh
+# "interactive agent extras pending" reminder firing on every shell, so you can
+# set the key later and re-run dotfiles-postsetup. NMEM_API_URL is optional:
+# leave it commented to use the default endpoint below.
+#
+# On a machine that will never use nmem (throwaway devpod, CI container), set
+# NMEM_OPT_OUT=1 instead: dotfiles-postsetup then leaves nmem unconfigured
+# without keeping the deferred script or the reminder alive.
 #
 # export NMEM_API_KEY="nmem_…"
 # export NMEM_API_URL="https://mem.lzhen.fun:9443"
+# export NMEM_OPT_OUT=1
 """
 
 [envlinks.entries.".path"]
