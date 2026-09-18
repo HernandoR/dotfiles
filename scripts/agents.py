@@ -61,11 +61,18 @@ than the history:
   now a third-party extension (``PI_PACKAGES``), and that price was accepted
   knowingly.
 
-Memory is the one plane that is genuinely cross-agent: a single MCP
-knowledge-graph store at ``~/.agents/memory/memory.jsonl``, declared once in
-``MCP_SERVERS`` and reaching all three agents. It sits under ``~/.agents``
-deliberately — that root is a Tier-B env link onto the Lustre state volume, so the
-store is cross-machine with no service, no credential and no egress.
+Memory is no longer a plane this manifest owns (2026-09-17). The local
+``@modelcontextprotocol/server-memory`` knowledge graph at
+``~/.agents/memory/memory.jsonl`` is retired — it read-modify-wrote the whole file
+with no lock, and Claude's own auto-memory duplicated it a third time. Both are
+off: the server is in ``RETIRED_MCP_SERVERS`` (so the files this repo writes whole
+drop it), and Claude's auto-memory is disabled by ``CLAUDE_CODE_DISABLE_AUTO_MEMORY``
+(``home/private_dot_config/zsh/env.zsh.tmpl``). The replacement is **nmem**
+(`https://mem.lzhen.fun:9443`), a hosted service, and it is NOT declared here: it
+needs a per-account bearer token, which is machine-local by definition. It is wired
+by the deferred post-login setup in ``scripts/setup.py`` from ``NMEM_API_KEY`` in
+``~/.exports``, and when that token is absent nothing is written and the script says
+so. The existing store file is left on disk untouched; only the declaration goes.
 """
 
 import json
@@ -97,15 +104,10 @@ SHARED_SKILLS = AGENTS_DIR / "skills"
 # single point.
 SHARED_MCP = AGENTS_DIR / "mcp.json"
 
-# The shared memory plane (ADR-0012). One MCP knowledge-graph store that all
-# three agents reach, deliberately inside ~/.agents rather than under any one
-# agent's dir: ~/.agents is a Tier-B env link whose target is on the Lustre
-# stateRoot, so the store is cross-machine by construction — no service, no
-# credential, no egress. MEMORY_FILE must be ABSOLUTE: a relative
-# MEMORY_FILE_PATH resolves against the server's own package dir, and the
-# default store lives there too, where an `npx` reinstall would discard it.
-SHARED_MEMORY_DIR = AGENTS_DIR / "memory"
-SHARED_MEMORY_FILE = SHARED_MEMORY_DIR / "memory.jsonl"
+# The retired local memory plane (ADR-0012, retired 2026-09-17). The store file
+# ~/.agents/memory/memory.jsonl still exists on disk — nothing here deletes it —
+# but no agent is pointed at it any more; see the module docstring for why and for
+# what replaced it.
 # Where the retired mnemopi banks are exported to (scripts/export-mnemopi-banks.py).
 # Read by a human or grepped by an agent; deliberately NOT auto-loaded as context.
 SHARED_MEMORY_ARCHIVE = AGENTS_DIR / "memory-archive"
@@ -312,21 +314,11 @@ MCP_SERVERS = (
         note="code-intelligence graph; `codegraph install` wires Claude + Codex itself "
              "(and writes Claude's auto-allow list), so only pi is projected from here",
     ),
-    McpServer(
-        "memory", agents=("claude", "codex", "pi"),
-        command="npx", args=["-y", "@modelcontextprotocol/server-memory"],
-        env={"MEMORY_FILE_PATH": str(SHARED_MEMORY_FILE)},
-        note="the toolchain's shared memory plane (ADR-0012): one knowledge graph of "
-             "entities/relations/observations at ~/.agents/memory/memory.jsonl. It lives in "
-             "~/.agents on purpose — that root is a Tier-B env link onto the Lustre "
-             "stateRoot, so the store is cross-machine with no service, no credential and "
-             "no egress. This is the FIRST env-carrying server ever projected to Claude, "
-             "which is what the `claude mcp add` argument-order fix (2026-08-13) was written "
-             "for. Known trade: the server read-modify-writes the whole file with no lock, "
-             "so concurrent writers lose each other's recent additions — most likely the "
-             "three agents on ONE host, not two hosts. Accepted on the same "
-             "one-writer-at-a-time basis the Lustre stateRoot already relies on",
-    ),
+    # `memory` (@modelcontextprotocol/server-memory over ~/.agents/memory/memory.jsonl)
+    # was declared here until 2026-09-17 and is now in RETIRED_MCP_SERVERS. Its
+    # replacement, nmem, is a hosted service behind a per-account bearer token, so it
+    # cannot live in the repo at all — scripts/setup.py wires it from ~/.exports.
+    #
     # The Smithery *namespace* endpoint (https://mcp.smithery.run/<namespace>) is
     # deliberately NOT here: its name comes from the logged-in Smithery account,
     # not from the repo, so it stays in the deferred interactive setup that can
@@ -340,7 +332,7 @@ MCP_SERVERS = (
 # ~/.agents/mcp.json on 2026-08-28 pointing at a port nothing serves. A name here
 # is removed only from files this repo writes, and only when the manifest no longer
 # declares it; servers the manifest never knew about are still left alone.
-RETIRED_MCP_SERVERS = ("agentmemory",)
+RETIRED_MCP_SERVERS = ("agentmemory", "memory")
 
 # --- pi's extension set ------------------------------------------------------
 # pi refuses MCP, sub-agents, memory, plan mode, permission prompts and background
@@ -374,9 +366,11 @@ PI_PACKAGES = (
                    "keys in pi's settings.json are where omp's modelRoles land"),
     PiPackage("npm:pi-memory",
               note="pi's LOCAL memory layer (markdown+JSON under ~/.pi/agent/memory). "
-                   "'Local' means one agent, not one machine — ~/.pi is an env link too. The "
-                   "shared layer is the `memory` MCP server above. Leave its optional qmd "
-                   "index off: it is the package's only egress path"),
+                   "'Local' means one agent, not one machine — ~/.pi is an env link too. "
+                   "There is no shared layer beside it any more — the `memory` MCP server "
+                   "was retired on 2026-09-17 (see the module docstring) and its hosted "
+                   "replacement, nmem, is wired by scripts/setup.py, not from here. Leave "
+                   "its optional qmd index off: it is the package's only egress path"),
     PiPackage("npm:pi-claude-marketplace",
               note="the skills/plugins bridge to Claude. Does NOT read "
                    "~/.claude/plugins/cache — it is an independent marketplace client that "
@@ -1043,18 +1037,6 @@ def write_shared_mcp(ctx):
     SHARED_MCP.parent.mkdir(parents=True, exist_ok=True)
     SHARED_MCP.write_text(json.dumps(data, indent=2) + "\n")
     logger.info("declared %s in %s", ", ".join(sorted(wanted)), SHARED_MCP)
-
-
-def ensure_shared_memory(ctx):
-    """Create the shared memory store's directory.
-
-    The MCP server creates the JSONL file itself on first write, but not its
-    parent. ~/.agents already exists (ensure_shared_root), so this is one mkdir.
-    """
-    if ctx.dry_run:
-        logger.info("[DRY-RUN] would create %s", SHARED_MEMORY_DIR)
-        return
-    SHARED_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _seed_missing_leaves(current, seed):
@@ -1867,7 +1849,6 @@ class PiAgent(Agent):
         _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS)
         _link(ctx, self.SKILLS, SHARED_SKILLS)
         write_shared_mcp(ctx)
-        ensure_shared_memory(ctx)
         write_pi_claude_plugins(ctx)
         # Before seed_pi_settings: that call is what declares `packages`, and pi
         # installs them on its next startup — allowScripts has to already be there.
@@ -1916,9 +1897,6 @@ class PiAgent(Agent):
         if not _shared_mcp_is_usable():
             add("backup", "{} -> {}.backup (it is not a JSON object, so it cannot be "
                           "merged into)".format(SHARED_MCP, SHARED_MCP.name))
-        add("config", "{} <- the shared memory store for all three agents (cross-machine "
-                      "via the ~/.agents env link; no service, credential or egress)".format(
-                          SHARED_MEMORY_FILE))
         add("config", "{} <- {} marketplace(s) + {} plugin(s) from the manifest (the repo "
                       "owns this base file; the machine owns claude-plugins.local.json)".format(
                           PI_CLAUDE_PLUGINS,
@@ -2097,8 +2075,6 @@ def main():
     print("  instructions -> {}".format(SHARED_INSTRUCTIONS))
     print("  loose skills -> {}".format(SHARED_SKILLS))
     print("  MCP (pi)     -> {}".format(SHARED_MCP))
-    print("  memory       -> {} (all three agents; cross-machine via the env link)".format(
-        SHARED_MEMORY_FILE))
     print("  bank archive -> {}".format(SHARED_MEMORY_ARCHIVE))
 
 

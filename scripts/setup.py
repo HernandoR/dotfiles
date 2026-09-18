@@ -43,6 +43,14 @@ logger = logging.getLogger("dotfiles")
 REPO_DIR = pathlib.Path(__file__).resolve().parent.parent
 DEFERRED_AGENT_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-setup.sh"
 
+# nmem (https://nowledge.co) — the hosted memory service that replaced the local
+# `@modelcontextprotocol/server-memory` knowledge graph on 2026-09-17 (see the
+# scripts/agents.py docstring). Only the URL is repo-knowledge; the bearer token is
+# per-account, so it comes from $NMEM_API_KEY in ~/.exports (seeded by
+# home/.chezmoidata/envlinks.toml) and NOTHING is written when it is absent. That is
+# why nmem is here and not in agents.MCP_SERVERS: the manifest must stay committable.
+NMEM_DEFAULT_URL = "https://mem.lzhen.fun:9443"
+
 
 # --- steps -------------------------------------------------------------------------
 
@@ -119,13 +127,14 @@ def write_deferred_setup(ctx, agent_ids):
     smithery_servers = ("upstash/context7-mcp",)
     lines = [
         "#!/usr/bin/env bash",
-        "# Interactive agent extras (written by scripts/setup.py). Run manually via",
+        "# Interactive agent extras (written by scripts/setup.py): Smithery, the Lark CLI",
+        "# and nmem. Run manually via",
         "# the `dotfiles-postsetup` shell function (needs a TTY); self-removes on",
         "# success. The Smithery CLI is a global npm package (scripts/node.py), so it",
         "# is called directly (no npx); only the Lark CLI still needs npx (node from nvm).",
         "#",
         "# Everything that can run unattended — marketplaces, plugins, MCP servers,",
-        "# the shared memory store, pi's declarative MCP/marketplace files and its",
+        "# pi's declarative MCP/marketplace files and its",
         "# settings preset — is projected from scripts/agents.py during the bootstrap",
         "# (ADR-0011, ADR-0012) and is deliberately NOT repeated here.",
         "",
@@ -178,12 +187,67 @@ def write_deferred_setup(ctx, agent_ids):
         r'  echo "npx missing (mise node?); skipping Lark CLI install"',
         "fi",
         "",
-        'rm -f "${BASH_SOURCE[0]}"',
+        "# --- nmem (hosted memory; replaces the retired local `memory` MCP server) ---",
+        "# Token-gated on purpose: with no $NMEM_API_KEY there is nothing to authenticate",
+        "# with, so this writes NO config at all and only says where to put one. Set it in",
+        "# ~/.exports (NMEM_API_URL overrides the default endpoint on a machine that needs to).",
+        f'_nmem_url="${{NMEM_API_URL:-{NMEM_DEFAULT_URL}}}"',
+        # _keep_deferred marks a run that left nmem not-working (no token, or a
+        # header that silently didn't land, or claude mcp add itself failing) so
+        # post-login-setup.sh survives for a retry instead of self-removing at the
+        # bottom of this script. NMEM_OPT_OUT is checked first and unconditionally,
+        # so it is the one escape hatch out of every one of those branches.
+        'if [ -n "${NMEM_OPT_OUT:-}" ]; then',
+        # Also undoes a prior run that registered nowledge-mem before failing
+        # (header didn't land, or another opt-out came after an earlier success) —
+        # without this, opting out leaves that broken entry registered forever.
+        '  command -v claude >/dev/null 2>&1 && claude mcp remove nowledge-mem --scope user >/dev/null 2>&1',
+        '  echo "nmem: NMEM_OPT_OUT is set — nowledge-mem left unregistered and not asking again."',
+        'elif [ -z "${NMEM_API_KEY:-}" ]; then',
+        '  echo "nmem: NMEM_API_KEY is not set — leaving the nowledge-mem MCP server unconfigured."',
+        '  echo "nmem: set NMEM_API_KEY in ~/.exports (export NMEM_API_KEY=nmem_...), and"',
+        '  echo "nmem: NMEM_API_URL there too if ${_nmem_url} is not the right endpoint."',
+        '  echo "nmem: then open a new shell and re-run: dotfiles-postsetup"',
+        '  echo "nmem: on a machine that will never use nmem, export NMEM_OPT_OUT=1 to silence this for good"',
+        '  _keep_deferred=1',
+        "elif command -v claude >/dev/null 2>&1; then",
+        '  claude mcp remove nowledge-mem --scope user >/dev/null 2>&1 || true',
+        '  if claude mcp add --transport http --scope user nowledge-mem "${_nmem_url}/mcp" \\',
+        '    --header "Authorization: Bearer ${NMEM_API_KEY}" \\',
+        '    --header "X-NMEM-API-Key: ${NMEM_API_KEY}" \\',
+        '    --header "APP: Claude Code" \\',
+        '    --header "X-Nmem-Tool-Set: external-agent" \\',
+        '    --header "X-Nowledge-Tool-Schema-Profile: slim" >/dev/null; then',
+        # claude mcp add has shipped versions that silently drop --header while
+        # still exiting 0 (anthropics/claude-code#17069); this read-back turns
+        # that into a visible warning instead of a 401 the next time a tool runs.
+        '    if claude mcp get nowledge-mem 2>/dev/null | grep -q "Authorization:"; then',
+        '      echo "nmem: nowledge-mem -> ${_nmem_url}/mcp"',
+        "    else",
+        '      echo "nmem: claude mcp add reported success but the Authorization header did not land"',
+        '      echo "nmem: (claude $(claude --version 2>/dev/null)); check with: claude mcp get nowledge-mem,"',
+        '      echo "nmem: or export NMEM_OPT_OUT=1 to stop retrying on this machine"',
+        '      _keep_deferred=1',
+        "    fi",
+        "  else",
+        '    echo "nmem: claude mcp add failed; export NMEM_OPT_OUT=1 to stop retrying on this machine"',
+        '    _keep_deferred=1',
+        "  fi",
+        "else",
+        '  echo "nmem: claude CLI not on PATH; skipping nowledge-mem MCP"',
+        "fi",
+        'unset _nmem_url',
+        "",
+        'if [ -n "${_keep_deferred:-}" ]; then',
+        r'  echo "post-login setup: kept at ${BASH_SOURCE[0]} — rerun dotfiles-postsetup once the nmem issue above is resolved"',
+        "else",
+        '  rm -f "${BASH_SOURCE[0]}"',
+        "fi",
     ]
     deferred.parent.mkdir(parents=True, exist_ok=True)
     deferred.write_text("\n".join(lines) + "\n")
     deferred.chmod(0o755)
-    logger.info("interactive agent extras (Smithery/Lark) written -> %s (run: dotfiles-postsetup)",
+    logger.info("interactive agent extras (Smithery/Lark/nmem) written -> %s (run: dotfiles-postsetup)",
                 deferred)
 
 
@@ -232,7 +296,7 @@ def build_plan(ctx, system_spec, agent_ids):
 
     agents.plan_items(ctx, agent_ids, add)
     if agent_ids:
-        add("config", f"interactive agent extras (Smithery/Lark) -> {DEFERRED_AGENT_SETUP} "
+        add("config", f"interactive agent extras (Smithery/Lark/nmem) -> {DEFERRED_AGENT_SETUP} "
                       "(run later via dotfiles-postsetup)")
 
     if system_spec:
