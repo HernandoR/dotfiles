@@ -239,7 +239,7 @@ that should *not* be in the repo.
 ```toml
 [node]
 version = "lts/*"
-globals = ["pnpm", "@larksuite/cli", "@smithery/cli", "typescript"]
+globals = ["pnpm", "@larksuite/cli", "typescript"]
 ```
 
 `scripts/node.py` installs nvm (pinned installer, edits no rc file), the Node
@@ -312,7 +312,7 @@ and [ADR-0012](docs/plans/adr-0012-third-slot-upstream-pi-2026-08-28.md)
 describe: what the agents *have* is a reviewed table there, what each agent *is*
 stays in its own config, which lives on the state root through the env links.
 `setup.py` projects the manifest whenever it changes; the two steps that need a
-human (Smithery auth, the Lark CLI installer) are written to
+human (the Lark CLI installer) are written to
 `~/.local/share/dotfiles/post-login-setup.sh` — run `dotfiles-postsetup` once.
 
 ```bash

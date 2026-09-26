@@ -12,9 +12,9 @@ pi, only as a seed, and only because ADR-0012 says so explicitly:
 
 - **① instruction — single-sourced.** ``~/.agents/AGENTS.md`` is the only
   instruction source. ``~/.codex/AGENTS.md`` and ``~/.pi/agent/AGENTS.md`` symlink
-  to it; ``~/.claude/CLAUDE.md`` is a thin shell that imports it (Claude Code does
-  not read ``AGENTS.md``). Standing rule: nothing cross-agent may be written into
-  the Claude shell.
+  to it; ``~/.claude/CLAUDE.md`` is a thin shell that imports it because Claude
+  only discovers ``AGENTS.md`` when no ``CLAUDE.md`` exists. Standing rule:
+  nothing cross-agent may be written into the Claude shell.
 - **② capability — one manifest, projected per agent.** The ``MARKETPLACES`` /
   ``PLUGINS`` / ``MCP_SERVERS`` / ``PI_PACKAGES`` tables below are the single
   reviewed source for what the agents *have*. Claude and Codex get theirs through
@@ -241,7 +241,7 @@ MARKETPLACES = (
                      "same drift ADR-0011 was written to stop, found again on 2026-08-28"),
 )
 
-# Plugins, one per marketplace entry that has one. `agent-skillset` ships four
+# Plugins, one per marketplace entry that has one. `agent-skillset` ships several
 # separate plugins and there is still no bulk-install command.
 PLUGINS = (
     Plugin("discuss", "agent-skillset", agents=ALL_MARKETS),
@@ -253,6 +253,8 @@ PLUGINS = (
     Plugin("fetch-external-knowledge", "agent-skillset", agents=ALL_MARKETS),
     Plugin("reclaim-code-entropy", "agent-skillset", agents=ALL_MARKETS,
            note="drift found 2026-08-28: enabled on the machine, absent from this table"),
+    Plugin("subagents", "agent-skillset", agents=("claude",),
+           note="Claude-only model-tiered subagents: haiku-task, opus-dev, fable-review"),
     Plugin("astral", "astral-sh", agents=ALL_MARKETS),
     Plugin("worktrunk", "worktrunk", agents=ALL_MARKETS),
     Plugin("composio", "composio", agents=ALL_MARKETS),
@@ -302,6 +304,8 @@ SKILL_PACKAGES = (
                  note="Dagster's agent skills (one skill today: dagster-expert, the "
                       "dg-CLI/asset/pipeline guidance) — a skills-only repo with no "
                       "plugin marketplace to install it from"),
+    SkillPackage("cathrynlavery/diagram-design", agents=("claude", "codex", "pi"),
+                 note="diagram design skills"),
 )
 
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
@@ -319,10 +323,6 @@ MCP_SERVERS = (
     # replacement, nmem, is a hosted service behind a per-account bearer token, so it
     # cannot live in the repo at all — scripts/setup.py wires it from ~/.exports.
     #
-    # The Smithery *namespace* endpoint (https://mcp.smithery.run/<namespace>) is
-    # deliberately NOT here: its name comes from the logged-in Smithery account,
-    # not from the repo, so it stays in the deferred interactive setup that can
-    # ask `smithery namespace show`.
 )
 
 # Servers this repo used to declare and no longer does. Projection is otherwise
@@ -1574,10 +1574,9 @@ class ClaudeAgent(Agent):
     description = "Claude Code"
     config_dir = "~/.claude"
 
-    # The thin instruction shell (ADR-0011 plane ①). Claude Code does not read
-    # AGENTS.md, so it imports the shared source and holds Claude-only lines —
-    # and nothing else. `@~/…` is the home-anchored import form, so the shell does
-    # not need a second symlink next to it.
+    # The thin instruction shell (ADR-0011 plane ①). Claude only discovers
+    # AGENTS.md when CLAUDE.md does not exist, so this shell imports the shared
+    # source and holds Claude-only lines — and nothing else.
     SHELL = HOME / ".claude" / "CLAUDE.md"
     IMPORT_LINE = "@~/.agents/AGENTS.md"
     SHELL_SEED = """\
@@ -1593,6 +1592,10 @@ class ClaudeAgent(Agent):
     # shell grows past a plausible size for "an import plus a few Claude-only
     # lines".
     SHELL_MAX_LINES = 40
+    LEGACY_PLUGIN_ALIASES = (
+        "dev_loop@agent-skillset",
+        "fetch_external_knowledge@agent-skillset",
+    )
 
     def install(self, ctx):
         if shutil.which(self.binary):
@@ -1612,6 +1615,20 @@ class ClaudeAgent(Agent):
             if not ctx.dry_run:
                 logger.warning("claude CLI not resolvable; skipping its projection")
             return
+        # agent-skillset renamed these bundles from snake_case to kebab-case.
+        # Claude keeps old enabledPlugins keys additively, so remove only these
+        # known aliases before installing the canonical IDs; otherwise the same
+        # skills/hooks are loaded twice.
+        settings = HOME / ".claude" / "settings.json"
+        try:
+            enabled = json.loads(settings.read_text()).get("enabledPlugins", {})
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            enabled = {}
+        for plugin in self.LEGACY_PLUGIN_ALIASES:
+            if plugin not in enabled:
+                continue
+            ctx.run_command([claude, "plugin", "uninstall", plugin, "--scope", "user"],
+                            check=False, stdin_devnull=True)
         for market in self._marketplaces():
             ctx.run_command([claude, "plugin", "marketplace", "add", market.source],
                             check=False, stdin_devnull=True)

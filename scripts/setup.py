@@ -124,59 +124,22 @@ def write_deferred_setup(ctx, agent_ids):
     if ctx.dry_run:
         logger.info("[DRY-RUN] would write %s", deferred)
         return
-    smithery_servers = ("upstash/context7-mcp",)
     lines = [
         "#!/usr/bin/env bash",
-        "# Interactive agent extras (written by scripts/setup.py): Smithery, the Lark CLI",
-        "# and nmem. Run manually via",
+        "# Interactive agent extras (written by scripts/setup.py): the Lark CLI and nmem.",
+        "# Run manually via",
         "# the `dotfiles-postsetup` shell function (needs a TTY); self-removes on",
-        "# success. The Smithery CLI is a global npm package (scripts/node.py), so it",
-        "# is called directly (no npx); only the Lark CLI still needs npx (node from nvm).",
+        "# success. The Lark CLI needs npx (node from nvm).",
         "#",
         "# Everything that can run unattended — marketplaces, plugins, MCP servers,",
         "# pi's declarative MCP/marketplace files and its",
         "# settings preset — is projected from scripts/agents.py during the bootstrap",
         "# (ADR-0011, ADR-0012) and is deliberately NOT repeated here.",
         "",
-        "# Node (npx, smithery) comes from nvm (scripts/node.py); source it so this",
+        "# Node (npx) comes from nvm (scripts/node.py); source it so this",
         "# works from a bare bash subshell too. mise shims cover the rest.",
         'export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" || true',
         '[ -d "$HOME/.local/share/mise/shims" ] && export PATH="$HOME/.local/share/mise/shims:$PATH"',
-        "",
-        "# --- Smithery MCP ----------------------------------------------------------",
-        "# The namespace endpoint is per-account (its name comes from the logged-in",
-        "# Smithery account, not from the repo), which is why it lives here and not in",
-        "# the manifest's MCP_SERVERS.",
-        "if command -v smithery >/dev/null 2>&1; then",
-        '  if [ -n "${SMITHERY_API_KEY:-}" ]; then',
-        r'    printf "Detected SMITHERY_API_KEY. Authenticate Smithery with this API key? [Y/n] "',
-        "    read -r _ans",
-        '    case "$_ans" in',
-        '      [Nn]*) echo "smithery: skipping API-key auth" ;;',
-        '      *) smithery auth whoami || echo "smithery: API key did not resolve" ;;',
-        "    esac",
-        "  else",
-        r'    printf "No SMITHERY_API_KEY set. Log in to Smithery interactively now? [y/N] "',
-        "    read -r _ans",
-        '    case "$_ans" in',
-        "      [Yy]*) smithery auth login || true ;;",
-        '      *) echo "smithery: skipping login" ;;',
-        "    esac",
-        "  fi",
-        '  _ns="$(smithery namespace show 2>/dev/null | tr -d "[:space:]")"',
-        '  if [ -n "$_ns" ]; then',
-        r'    printf "Add Smithery namespace \"%s\" (https://mcp.smithery.run/%s) to Claude? [Y/n] " "$_ns" "$_ns"',
-        "    read -r _ans",
-        '    case "$_ans" in',
-        '      [Nn]*) echo "smithery: skipping namespace add" ;;',
-        '      *) smithery mcp add "https://mcp.smithery.run/$_ns" --name "$_ns" --client claude || claude mcp add --transport http "$_ns" "https://mcp.smithery.run/$_ns" || true ;;',
-        "    esac",
-        "  fi",
-        "  # Add a separate registry server here (uncomment / copy this line):",
-        *[f'  # smithery mcp add "{s}" --client claude || true' for s in smithery_servers],
-        "else",
-        r'  echo "smithery CLI not on PATH; skipping Smithery MCP (expected pre-installed)"',
-        "fi",
         "",
         "# --- Lark CLI (needs npx / node from nvm) ----------------------------------",
         "# Its installer asks which agents to wire and drops the skills into",
@@ -247,7 +210,7 @@ def write_deferred_setup(ctx, agent_ids):
     deferred.parent.mkdir(parents=True, exist_ok=True)
     deferred.write_text("\n".join(lines) + "\n")
     deferred.chmod(0o755)
-    logger.info("interactive agent extras (Smithery/Lark/nmem) written -> %s (run: dotfiles-postsetup)",
+    logger.info("interactive agent extras (Lark/nmem) written -> %s (run: dotfiles-postsetup)",
                 deferred)
 
 
@@ -296,7 +259,7 @@ def build_plan(ctx, system_spec, agent_ids):
 
     agents.plan_items(ctx, agent_ids, add)
     if agent_ids:
-        add("config", f"interactive agent extras (Smithery/Lark/nmem) -> {DEFERRED_AGENT_SETUP} "
+        add("config", f"interactive agent extras (Lark/nmem) -> {DEFERRED_AGENT_SETUP} "
                       "(run later via dotfiles-postsetup)")
 
     if system_spec:

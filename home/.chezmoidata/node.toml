@@ -18,6 +18,4 @@ globals = [
   # Lark CLI — `npx @larksuite/cli@latest install` runs in the post-login setup;
   # the package is kept installed so the runtime is present.
   "@larksuite/cli",
-  # Smithery MCP CLI — called directly by the post-login setup.
-  "@smithery/cli",
 ]
