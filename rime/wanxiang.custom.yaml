@@ -15,6 +15,43 @@ patch:
   ascii_composer/switch_key/Shift_R: noop
   # Wanxiang's built-in spelling/phrase correction.
   translator/enable_correction: true
+  # Markdown- and code-friendly punctuation while composing Chinese. Based on
+  # https://mednoter.com/rime-1.html
+  punctuator/half_shape:
+    "!": "！"
+    "\"":
+      pair: ["“", "”"]
+    "#": "#"
+    "$": "$"
+    "%": "%"
+    "&": "&"
+    "'":
+      pair: ["‘", "’"]
+    "*": "*"
+    "+": "+"
+    ",": "，"
+    "-": "-"
+    ".": "。"
+    "/": "/"
+    "\\": "、"
+    ":": ":"
+    ";": "；"
+    "=": "="
+    "?": "？"
+    "@": "@"
+    "(": "("
+    ")": ")"
+    "[": "["
+    "]": "]"
+    "{": "「"
+    "}": "」"
+    "<": "《"
+    ">": "》"
+    "^": "……"
+    "_": "——"
+    "`": "`"
+    "|": "|"
+    "~": "~"
   # Enable the requested fuzzy sounds before the standard full-pinyin algebra.
   speller/algebra:
     __patch:
