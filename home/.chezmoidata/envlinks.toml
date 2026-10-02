@@ -16,8 +16,8 @@
 
 # --- agents (ADR-0011: all three rewrite their own config at runtime) ---------
 
-# Cross-agent instruction + loose-skills root (ADR-0011 plane 1), and since
-# ADR-0012 the shared MCP source and memory store too:
+# Cross-agent instruction + loose-skills root (ADR-0011 plane 1), shared MCP
+# source, and the retired shared memory archive:
 #   AGENTS.md  skills/  mcp.json  memory/  memory-archive/
 # Written by the owner and the agents; being on the shared state volume is what
 # makes the memory plane cross-machine with no service and no credential.

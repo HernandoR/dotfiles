@@ -5,6 +5,14 @@
 | Status | accepted |
 | Date | 2026-08-28 |
 
+## Update — 2026-10-02
+
+Pi 0.99.0 made MCP and codemode built-in. The former `pi-mcp-adapter` extension
+is therefore retired. The manifest keeps `~/.agents/mcp.json` as the shared
+canonical file and symlinks Pi's native `~/.pi/agent/mcp.json` to it. The
+remaining Pi packages still provide capabilities that are not native Pi
+features.
+
 ## Context
 
 ADR-0011 partitioned agent configuration into three planes and gave the

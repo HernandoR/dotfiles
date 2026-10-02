@@ -19,9 +19,8 @@ pi, only as a seed, and only because ADR-0012 says so explicitly:
   ``PLUGINS`` / ``MCP_SERVERS`` / ``PI_PACKAGES`` tables below are the single
   reviewed source for what the agents *have*. Claude and Codex get theirs through
   their own CLIs (``claude plugin install``, ``claude mcp add``, ``codex mcp
-  add``); pi, which has no MCP and no marketplace CLI, gets its through three
-  declarative files this repo owns — ``~/.agents/mcp.json`` (read by
-  ``pi-mcp-adapter`` at precedence layer 2, never written back to),
+  add``); pi, which has no marketplace CLI, gets its through two declarative
+  files this repo owns — native ``~/.pi/agent/mcp.json`` and
   ``~/.pi/agent/claude-plugins.json`` (``pi-claude-marketplace``'s documented
   user-authored desired state) and the ``packages`` array in pi's settings.
 - **③ preference — not unified, and for pi seeded rather than owned.** Model,
@@ -36,7 +35,7 @@ pi, only as a seed, and only because ADR-0012 says so explicitly:
 **Projection is add-only** (ADR-0011, Consequences): deleting an entry here does
 not uninstall it from a machine that already applied it. That gap cost something
 twice on 2026-08-28 — a retired ``agentmemory`` server still declared in
-``~/.agents/mcp.json``, and a manifest six plugins and one marketplace behind the
+the native Pi MCP file, and a manifest six plugins and one marketplace behind the
 live machine — so the two files this repo *writes whole* now also remove names
 they used to declare (``RETIRED_MCP_SERVERS``, ``RETIRED_PI_PACKAGES``). Anything
 the manifest never knew about is still left alone.
@@ -96,13 +95,11 @@ HOME = pathlib.Path.home()
 AGENTS_DIR = HOME / ".agents"
 SHARED_INSTRUCTIONS = AGENTS_DIR / "AGENTS.md"
 SHARED_SKILLS = AGENTS_DIR / "skills"
-# The tool-agnostic MCP source (ADR-0012). `pi-mcp-adapter` reads this file at
-# precedence layer 2 of 6 and NEVER writes back to it — `/mcp disable|enable`
-# writes only a `disabled` field to `.pi/mcp.json` — so unlike omp's own
-# ~/.omp/agent/mcp.json this is a file the repo genuinely owns. Claude and Codex
-# still get their servers through their own CLIs; this is pi's half of the same
-# single point.
+# Pi 0.99.0 added native MCP and codemode support. Keep the shared MCP file as
+# the canonical source and link Pi's documented user-level path to it; an
+# adapter would replace the built-in support.
 SHARED_MCP = AGENTS_DIR / "mcp.json"
+PI_MCP = HOME / ".pi" / "agent" / "mcp.json"
 
 # The retired local memory plane (ADR-0012, retired 2026-09-17). The store file
 # ~/.agents/memory/memory.jsonl still exists on disk — nothing here deletes it —
@@ -180,8 +177,7 @@ class McpServer:
         self.note = note
 
     def block(self):
-        """The server as the standard ``mcpServers`` JSON block (what SHARED_MCP
-        holds, and the shape every MCP host but Codex uses)."""
+        """The server as the standard ``mcpServers`` JSON block used by Pi."""
         if self.url:
             return {"url": self.url}
         block = {"command": self.command, "args": self.args}
@@ -309,8 +305,8 @@ SKILL_PACKAGES = (
 )
 
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
-# Claude via `claude mcp add`, Codex via `codex mcp add`, and pi via SHARED_MCP
-# (pi has no native MCP at all, so pi-mcp-adapter reads that file for it).
+# Claude via `claude mcp add`, Codex via `codex mcp add`, and pi via its native
+# `~/.pi/agent/mcp.json`.
 MCP_SERVERS = (
     McpServer(
         "codegraph", agents=("claude", "codex", "pi"),
@@ -327,7 +323,7 @@ MCP_SERVERS = (
 
 # Servers this repo used to declare and no longer does. Projection is otherwise
 # add-only, which is why this list has to exist: without it a retired server stays
-# in SHARED_MCP forever. `agentmemory` is the case that proved it — retired on
+# in the native Pi MCP file forever. `agentmemory` is the case that proved it — retired on
 # 2026-08-20 with its unit, env link and npm install, but still declared in
 # ~/.agents/mcp.json on 2026-08-28 pointing at a port nothing serves. A name here
 # is removed only from files this repo writes, and only when the manifest no longer
@@ -335,11 +331,12 @@ MCP_SERVERS = (
 RETIRED_MCP_SERVERS = ("agentmemory", "memory")
 
 # --- pi's extension set ------------------------------------------------------
-# pi refuses MCP, sub-agents, memory, plan mode, permission prompts and background
-# bash BY DESIGN (its own README: "Build CLI tools with READMEs, or build an
-# extension"). So every capability omp had natively is an extension here. The owner
-# chose full parity knowingly (ADR-0012); the *composition* below is mostly forced
-# by peer dependencies and tool-name collisions, not preferred.
+# pi still leaves sub-agents, memory, plan mode, permission prompts and background
+# bash to extensions BY DESIGN (its own README: "Build CLI tools with READMEs, or
+# build an extension"). MCP and codemode became built-in in Pi 0.99.0, so the
+# adapter that previously supplied MCP is retired. The owner chose full parity
+# knowingly (ADR-0012); the *composition* below is mostly forced by peer
+# dependencies and tool-name collisions, not preferred.
 #
 # These are NOT installed by a `pi install` subprocess from this module. They are
 # seeded into `packages` in pi's settings.json, and pi installs any missing one
@@ -353,11 +350,6 @@ RETIRED_MCP_SERVERS = ("agentmemory", "memory")
 # local path is skipped SILENTLY — so a bare "pi-lens" yields no extension and no
 # warning. pi's own docs/settings.md example gets this wrong.
 PI_PACKAGES = (
-    PiPackage("npm:pi-mcp-adapter",
-              note="MCP for pi, which has none natively. Reads SHARED_MCP at precedence "
-                   "layer 2 of 6 and never writes back to it. Keep hostConfigDiscovery at "
-                   "its default `off` — turning it on re-imports whatever Claude and Codex "
-                   "happen to have, i.e. re-imports drift"),
     PiPackage("npm:pi-subagents",
               note="sub-agents. FORCED choice: pi-claude-marketplace declares a peer on "
                    "`pi-subagents >= 0.35.0`, which only this unscoped package satisfies — "
@@ -443,7 +435,7 @@ PI_PACKAGES = (
     #   pi-web-access. The retired set's web-search entry is not restored as-is.
     # - @gotgenes/pi-permission-system: pairs with @gotgenes/pi-subagents, which the
     #   forced sub-agent choice above rules out; and it would be a SECOND approval
-    #   broker over the same MCP calls as pi-mcp-adapter ("first synchronous claim
+    #   broker over the same MCP calls as another adapter ("first synchronous claim
     #   wins") with no documented coordination protocol between them.
 )
 
@@ -513,6 +505,7 @@ PI_NPM_LOCKFILE = PI_AGENT_DIR / "npm" / "package-lock.json"
 # settings.json on this host still lists it, and it is abandoned upstream (0.1.1,
 # last published 2026-05-15, peer range `*`).
 RETIRED_PI_PACKAGES = (
+    "npm:pi-mcp-adapter",
     "npm:pi-tinyfish",
     "npm:pi-claude-marketplace@0.13.0",
     "npm:pi-web-search",
@@ -770,7 +763,7 @@ PI_NPM_PROJECT_SEED = {
 }
 
 # Agent ids that `codegraph install --target` accepts (a bad id makes it print the
-# list). pi is not one of them — it gets codegraph through SHARED_MCP instead.
+# list). pi is not one of them — it gets codegraph through its native MCP file.
 CODEGRAPH_TARGETS = ("claude", "codex")
 
 
@@ -956,7 +949,7 @@ def _absorb_into_target(link, target):
 
 
 def _shared_mcp_is_usable():
-    """True when SHARED_MCP is absent or already a JSON object we can merge into."""
+    """True when the shared MCP file is absent or mergeable."""
     if not SHARED_MCP.exists():
         return True
     try:
@@ -988,30 +981,31 @@ def ensure_shared_root(ctx):
 
 
 def write_shared_mcp(ctx):
-    """Project every ``pi``-targeting MCP server into ``~/.agents/mcp.json``.
-
-    This is pi's half of the MCP single point. ``pi-mcp-adapter`` reads this path
-    as its *tool-agnostic* source at precedence layer 2 of 6, and — verified
-    against the adapter's own documentation — **never writes back to it**:
-    ``/mcp disable|enable`` persists only a ``disabled`` field into
-    ``.pi/mcp.json``. So unlike omp's ``~/.omp/agent/mcp.json``, this is a file
-    the repo genuinely owns rather than shares with the agent.
+    """Project every ``pi``-targeting MCP server into the shared MCP file.
 
     The merge is still add-only: declared servers are updated, anything else the
     owner put here is kept, and an unparseable file is moved aside (``.backup``)
     rather than discarded.
 
-    One condition travels with this file: the adapter's ``hostConfigDiscovery``
-    must stay at its default ``off``. Turning it on imports whatever Claude and
-    Codex happen to have, which is re-importing drift rather than projecting the
-    manifest.
+    Pi's native MCP path is then symlinked to that shared file, so Pi, Claude,
+    and Codex see the same schema and server set.
     """
     wanted = {s.name: s.block() for s in MCP_SERVERS if "pi" in s.agents}
     if ctx.dry_run:
-        logger.info("[DRY-RUN] would declare %s in %s", ", ".join(wanted) or "nothing", SHARED_MCP)
+        logger.info("[DRY-RUN] would declare %s in %s and link %s -> %s",
+                    ", ".join(wanted) or "nothing", SHARED_MCP, PI_MCP, SHARED_MCP)
         return
     data = {}
-    if SHARED_MCP.exists():
+    # Preserve a native file created by Pi before the shared link existed.
+    if not SHARED_MCP.exists() and PI_MCP.exists() and not PI_MCP.is_symlink():
+        try:
+            data = json.loads(PI_MCP.read_text())
+        except ValueError:
+            data = {}
+        backup = PI_MCP.with_name(PI_MCP.name + ".backup")
+        shutil.move(str(PI_MCP), str(backup))
+        logger.info("migrated native Pi MCP file to %s", SHARED_MCP)
+    elif SHARED_MCP.exists():
         try:
             data = json.loads(SHARED_MCP.read_text())
         except ValueError:
@@ -1036,7 +1030,8 @@ def write_shared_mcp(ctx):
     data["mcpServers"] = servers
     SHARED_MCP.parent.mkdir(parents=True, exist_ok=True)
     SHARED_MCP.write_text(json.dumps(data, indent=2) + "\n")
-    logger.info("declared %s in %s", ", ".join(sorted(wanted)), SHARED_MCP)
+    _link(ctx, PI_MCP, SHARED_MCP)
+    logger.info("declared %s in %s; Pi path linked to shared source", ", ".join(sorted(wanted)), SHARED_MCP)
 
 
 def _seed_missing_leaves(current, seed):
@@ -1789,9 +1784,9 @@ class PiAgent(Agent):
     slot as of ADR-0012 — chosen over the oh-my-pi fork for interoperability, not
     for features.
 
-    pi refuses MCP, sub-agents, memory, plan mode, permission prompts and
-    background bash by design, so every capability omp had natively is an
-    extension here (PI_PACKAGES). What pi has that omp does not is *presence*: the
+    pi still leaves sub-agents, memory, plan mode, permission prompts and
+    background bash to extensions by design. MCP and codemode are now built in;
+    the former adapter is retired. What pi has that omp does not is *presence*: the
     ACP registry, Zed, JetBrains Air, agentic.nvim, Homebrew, nixpkgs, a
     devcontainer Feature, a GitHub Action, several VS Code extensions, seven
     Neovim plugins. omp appears in none of those lists, and — measured on this
@@ -1808,8 +1803,8 @@ class PiAgent(Agent):
       ``~/.agents/skills`` natively as a global discovery location. (One caveat
       worth knowing: pi ignores root-level ``.md`` files there — only ``SKILL.md``
       directories and nested ``.md`` in grouping folders are discovered.)
-    - ``~/.agents/mcp.json`` ← the manifest's MCP servers, read by
-      ``pi-mcp-adapter`` at precedence layer 2 and never written back to.
+    - ``~/.agents/mcp.json`` ← the manifest's MCP servers; Pi's native
+      ``~/.pi/agent/mcp.json`` is a symlink to this shared file.
     - ``~/.pi/agent/claude-plugins.json`` ← MARKETPLACES + PLUGINS, the base file
       the repo owns while the machine owns ``claude-plugins.local.json``.
     - ``~/.pi/agent/settings.json`` ← the plane-③ preset, seeded leaf by leaf,
@@ -1908,12 +1903,16 @@ class PiAgent(Agent):
                 add("backup", "{} -> {}.backup (it is a real file/dir, not a link)".format(
                     link, link.name))
         pi_servers = [s.name for s in MCP_SERVERS if "pi" in s.agents]
-        add("config", "{} <- MCP server(s) {} (pi-mcp-adapter reads it at precedence "
-                      "layer 2 and never writes back)".format(
+        add("config", "{} <- MCP server(s) (shared; Pi native path links here) {}".format(
                           SHARED_MCP, ", ".join(pi_servers)))
         if not _shared_mcp_is_usable():
             add("backup", "{} -> {}.backup (it is not a JSON object, so it cannot be "
                           "merged into)".format(SHARED_MCP, SHARED_MCP.name))
+        if not _link_is_current(PI_MCP, SHARED_MCP):
+            add("config", "{} -> {} (Pi native MCP path)".format(PI_MCP, SHARED_MCP))
+            if PI_MCP.exists() and not PI_MCP.is_symlink():
+                add("backup", "{} -> {}.backup (it is a real file)".format(
+                    PI_MCP, PI_MCP.name))
         add("config", "{} <- {} marketplace(s) + {} plugin(s) from the manifest (the repo "
                       "owns this base file; the machine owns claude-plugins.local.json)".format(
                           PI_CLAUDE_PLUGINS,
@@ -2054,7 +2053,7 @@ def plan_items(ctx, ids, add):
     targets = [i for i in ids if i in CODEGRAPH_TARGETS]
     into = (" + its MCP server into: " + ", ".join(targets)) if targets else (
         " (no selected agent is a codegraph --target; pi gets it through {})".format(
-            SHARED_MCP.name))
+            PI_MCP.name))
     if shutil.which("codegraph"):
         add("install", "CodeGraph self-update (codegraph upgrade)" + into)
     else:
@@ -2091,7 +2090,7 @@ def main():
     print("\nShared roots")
     print("  instructions -> {}".format(SHARED_INSTRUCTIONS))
     print("  loose skills -> {}".format(SHARED_SKILLS))
-    print("  MCP (pi)     -> {}".format(SHARED_MCP))
+    print("  MCP (pi)     -> {}".format(PI_MCP))
     print("  bank archive -> {}".format(SHARED_MEMORY_ARCHIVE))
 
 
