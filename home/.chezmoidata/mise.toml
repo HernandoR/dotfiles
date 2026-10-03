@@ -60,6 +60,9 @@ bottom = "latest"
 # 1Password CLI (`op`): vfox plugin fetching 1Password's own release.
 1password = "latest"
 
+# cloudflare/cf through npm
+"npm:cf" = "latest"
+
 # Linux only: the docker CLI is the client half; the daemon is an opt-in system
 # component (`--system docker`, scripts/components.py). macOS never gets a
 # daemon from this repo, so the client would be dead weight there.
