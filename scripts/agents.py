@@ -1737,6 +1737,12 @@ class CodexAgent(Agent):
         for market in self._marketplaces():
             ctx.run_command([codex, "plugin", "marketplace", "add", market.source],
                             check=False, stdin_devnull=True)
+        # `marketplace add` is a no-op for a marketplace Codex already has, and
+        # unlike Claude's it never refreshes the git snapshot, so a plugin added
+        # to the manifest after the first bootstrap is "not found" forever.
+        # Refresh every snapshot before resolving plugins against them.
+        ctx.run_command([codex, "plugin", "marketplace", "upgrade"],
+                        check=False, stdin_devnull=True)
         for plugin in self._plugins():
             ctx.run_command([codex, "plugin", "add", plugin.qualified],
                             check=False, stdin_devnull=True)
