@@ -147,6 +147,12 @@ def main():
     log("mise install (everything the live config declares)")
     rc = run([mise, "install", "-y"], dry)
     if rc != 0:
+        # A failed download (a 404 from raw.githubusercontent.com for a tool's
+        # declared skill files has been seen) is usually transient. One retry
+        # before giving up; `mise install` skips what already succeeded.
+        warn("some tools failed to install — retrying once")
+        rc = run([mise, "install", "-y"], dry)
+    if rc != 0:
         warn("some tools failed to install — see above; re-run `just runtimes`")
         sys.exit(rc)
 

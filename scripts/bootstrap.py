@@ -415,7 +415,13 @@ def main(argv=None):
     log(
         "chezmoi apply — files, zsh plugins, then the run_ scripts (env links, packages, fonts, mise, setup)"
     )
-    chezmoi(ctx, "apply")
+    # --force: a target edited since chezmoi last wrote it would otherwise make
+    # apply ask diff/overwrite/skip on stdin, even with --no-tty, and an
+    # unattended run must never stop on a prompt. Every such target was just
+    # copied to backup_dir by backup_targets, so overwriting loses nothing.
+    # In --interactive mode the prompt stays: there the owner wants to decide.
+    apply_args = ["apply"] if os.environ.get(INTERACTIVE_ENV, "") == "1" else ["apply", "--force"]
+    chezmoi(ctx, *apply_args)
 
     log("Bootstrap complete.")
     zsh = setup.target_zsh() or "zsh"
