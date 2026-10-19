@@ -49,7 +49,7 @@ DEFERRED_AGENT_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-s
 # per-account, so it comes from $NMEM_API_KEY in ~/.exports (seeded by
 # home/.chezmoidata/envlinks.toml) and NOTHING is written when it is absent. That is
 # why nmem is here and not in agents.MCP_SERVERS: the manifest must stay committable.
-NMEM_DEFAULT_URL = "https://mem.lzhen.fun:9443"
+NMEM_DEFAULT_URL = "https://mem.lzhen.fun"
 
 
 # --- steps -------------------------------------------------------------------------
