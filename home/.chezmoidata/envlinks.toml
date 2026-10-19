@@ -97,7 +97,7 @@ seed = """
 # devpod, CI container), or to stop one whose `claude` drops --header retrying.
 #
 # export NMEM_API_KEY="nmem_…"
-# export NMEM_API_URL="https://mem.lzhen.fun"
+# export NMEM_API_URL="https://mem.lzhen.fun:9443"
 # export NMEM_OPT_OUT=1
 """
 

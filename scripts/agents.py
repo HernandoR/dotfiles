@@ -67,7 +67,7 @@ with no lock, and Claude's own auto-memory duplicated it a third time. Both are
 off: the server is in ``RETIRED_MCP_SERVERS`` (so the files this repo writes whole
 drop it), and Claude's auto-memory is disabled by ``CLAUDE_CODE_DISABLE_AUTO_MEMORY``
 (``home/private_dot_config/zsh/env.zsh.tmpl``). The replacement is **nmem**
-(`https://mem.lzhen.fun`), a hosted service, and it is NOT declared here: it
+(`https://mem.lzhen.fun:9443`), a hosted service, and it is NOT declared here: it
 needs a per-account bearer token, which is machine-local by definition. It is wired
 by the deferred post-login setup in ``scripts/setup.py`` from ``NMEM_API_KEY`` in
 ``~/.exports``, and when that token is absent nothing is written and the script says
