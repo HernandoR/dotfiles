@@ -7,8 +7,9 @@ ADR-0012).
 
 Three coding agents are provisioned from this one file: **Claude Code**, **Codex
 CLI** and **pi**. ADR-0011 partitions their configuration into three planes and
-treats each differently — this module implements ① and ②, and touches ③ only for
-pi, only as a seed, and only because ADR-0012 says so explicitly:
+treats each differently — this module implements ① and ②, and touches ③ only as
+a seed: pi's settings because ADR-0012 says so explicitly, and one Claude leaf
+(``env.CLAUDE_CODE_SHELL``, ADR-0011 update log 2026-10-20):
 
 - **① instruction — single-sourced.** ``~/.agents/AGENTS.md`` is the only
   instruction source. ``~/.codex/AGENTS.md`` and ``~/.pi/agent/AGENTS.md`` symlink
@@ -1582,6 +1583,7 @@ class ClaudeAgent(Agent):
 <!-- Claude-specific rules ONLY. Anything another agent would also want belongs
      in ~/.agents/AGENTS.md — see ADR-0011 plane ①. -->
 """
+    SETTINGS = HOME / ".claude" / "settings.json"
     # The single point is protected by discipline alone (ADR-0011, Consequences),
     # so do the cheap check the ADR asks for instead of trusting it: warn when the
     # shell grows past a plausible size for "an import plus a few Claude-only
@@ -1605,6 +1607,7 @@ class ClaudeAgent(Agent):
 
     def project(self, ctx):
         self._instruction_shell(ctx)
+        self._seed_settings(ctx)
         claude = self.cli(ctx)
         if not claude:
             if not ctx.dry_run:
@@ -1614,9 +1617,8 @@ class ClaudeAgent(Agent):
         # Claude keeps old enabledPlugins keys additively, so remove only these
         # known aliases before installing the canonical IDs; otherwise the same
         # skills/hooks are loaded twice.
-        settings = HOME / ".claude" / "settings.json"
         try:
-            enabled = json.loads(settings.read_text()).get("enabledPlugins", {})
+            enabled = json.loads(self.SETTINGS.read_text()).get("enabledPlugins", {})
         except (FileNotFoundError, OSError, json.JSONDecodeError):
             enabled = {}
         for plugin in self.LEGACY_PLUGIN_ALIASES:
@@ -1632,6 +1634,43 @@ class ClaudeAgent(Agent):
                             check=False, stdin_devnull=True)
         for server in self._mcp_servers():
             ctx.run_command(self._mcp_add(claude, server), check=False, stdin_devnull=True)
+
+    @staticmethod
+    def _settings_seed():
+        """The plane-③ leaves seeded into Claude's settings (ADR-0011 update log,
+        2026-10-20). Today one: pin the Bash tool to zsh whatever ``$SHELL`` the
+        launcher handed down. A Claude started by a process older than the
+        ``chsh`` — the desktop app's remote server, say — inherits SHELL=/bin/bash,
+        whose .bashrc returns for a non-interactive shell before any of env.zsh's
+        environment (~/.jc_env.sh, ~/.exports) is read."""
+        zsh = shutil.which("zsh")
+        return {"env": {"CLAUDE_CODE_SHELL": zsh}} if zsh else {}
+
+    def _seed_settings(self, ctx):
+        """Seed ``~/.claude/settings.json`` leaf by leaf, add-only — the contract
+        ADR-0012 gave pi's settings, so ``/config`` and hand edits survive."""
+        seed = self._settings_seed()
+        if not seed:
+            return
+        if ctx.dry_run:
+            logger.info("[DRY-RUN] would seed %s with %s", self.SETTINGS, seed)
+            return
+        current = {}
+        if self.SETTINGS.exists():
+            try:
+                current = json.loads(self.SETTINGS.read_text())
+            except ValueError:
+                current = None
+            if not isinstance(current, dict):
+                # Claude rewrites this file itself; never move or clobber it.
+                logger.warning("%s is not a JSON object; not seeding it", self.SETTINGS)
+                return
+        if not _seed_missing_leaves(current, seed):
+            logger.info("%s already carries the seeded settings", self.SETTINGS)
+            return
+        self.SETTINGS.parent.mkdir(parents=True, exist_ok=True)
+        self.SETTINGS.write_text(json.dumps(current, indent=2) + "\n")
+        logger.info("seeded %s with %s", self.SETTINGS, seed)
 
     @staticmethod
     def _mcp_add(claude, server):

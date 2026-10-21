@@ -511,3 +511,25 @@ the one genuine Tier A addition is the agentmemory service unit.
   written leaf by leaf only when absent, so runtime writes survive. Claude's and
   Codex's config files are still never written from `platform/`.
 
+
+- **2026-10-20 — Claude's settings get one seeded leaf: `env.CLAUDE_CODE_SHELL`.**
+  On the jcc devpod the desktop app's remote server was started before
+  `/etc/passwd` moved root's login shell to zsh, so it — and every Claude it
+  spawns — kept `SHELL=/bin/bash`. Claude's Bash tool follows `$SHELL`, and the
+  image's `.bashrc` returns for a non-interactive shell before it reads anything,
+  so the agent ran without `~/.jc_env.sh` and `~/.exports` (both reach zsh only,
+  through `.zshenv` -> `env.zsh`). Nothing in `$HOME` can repair an inherited
+  `SHELL` of a process that is already running; Claude's own `env` setting is
+  the one place that pins the shell regardless of it.
+
+  So `scripts/agents.py` (`ClaudeAgent._seed_settings`) seeds
+  `~/.claude/settings.json` with `env.CLAUDE_CODE_SHELL = $(which zsh)` under
+  ADR-0012's **seed** contract — leaf by leaf, only when absent, never moving or
+  rewriting a file Claude wrote. That narrows the rule above: Claude's settings
+  are seeded with that one leaf and are otherwise still never written from the
+  repo; Codex's are never written. A further Claude leaf needs the same
+  justification — a value the agent's runtime cannot set for itself.
+
+  The same change gives the agent a clean zsh: `home/dot_zshrc.tmpl` returns
+  early when `CLAUDECODE` is set, keeping only `~/.proxy` / `~/.extra`, so the
+  Bash-tool snapshot carries no prompt, widgets, hooks or colour aliases.
