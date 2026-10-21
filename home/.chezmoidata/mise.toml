@@ -16,12 +16,14 @@
 # sed/grep (mise's coreutils is uutils, not GNU), vim, wget, rsync, tree, xclip.
 
 [mise]
-# Tools whose mise shim scripts/setup.py also links into /usr/local/bin (Linux,
-# privileged): for a process that runs with the bare system PATH because it was
+# On: scripts/setup.py links EVERY mise shim into /usr/local/bin (Linux,
+# privileged), for a process that runs with the bare system PATH because it was
 # started before the login shell became zsh. The standing case is the Claude
 # desktop app's remote server, which calls `gh` for PR status and Auto-fix and
-# reported "gh isn't signed in" when it could not find it.
-system_links = ["gh"]
+# reported "gh isn't signed in" when it could not find it. A name the system
+# already has (uv, uvx on the jcc devpod) is never linked over; a link whose shim
+# is gone is removed. A tool added here is linked on the next `just setup`.
+system_links = true
 
 [mise.tools]
 # --- runtimes ---
