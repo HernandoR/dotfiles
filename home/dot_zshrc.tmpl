@@ -7,6 +7,22 @@
 #   LAST -> ~/.proxy, ~/.extra
 # fzf-tab must bind the completion widget after compinit and before any plugin
 # that wraps widgets (autosuggestions); zsh-syntax-highlighting must be last.
+# An agent shell returns before any of it — see the next block.
+
+# --- agent shells stop here: clean, not dressed -----------------------------------
+# Claude Code (CLAUDECODE=1) sources this file once into a snapshot that every
+# Bash-tool command replays. Everything below is for a human at a prompt —
+# completion, widgets, the prompt, precmd hooks, colour aliases — and in an
+# agent's replay it only adds functions and aliases that change what a plain
+# command does. Returning loses no environment: .zshenv -> env.zsh runs in every
+# zsh, agent shells included (PATH, mise shims, the default Node, ~/.jc_env.sh,
+# ~/.exports). Only the machine-local hatches are kept, for ~/.proxy above all.
+if [[ -n $CLAUDECODE ]]; then
+  for f in "$HOME/.proxy" "$HOME/.extra"; do
+    [ -r "$f" ] && . "$f"
+  done
+  return
+fi
 
 typeset -U path cdpath fpath manpath
 
