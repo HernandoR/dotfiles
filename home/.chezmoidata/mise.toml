@@ -15,6 +15,14 @@
 # Deliberately NOT here — see packages.toml: zsh, git, GNU coreutils/findutils/
 # sed/grep (mise's coreutils is uutils, not GNU), vim, wget, rsync, tree, xclip.
 
+[mise]
+# Tools whose mise shim scripts/setup.py also links into /usr/local/bin (Linux,
+# privileged): for a process that runs with the bare system PATH because it was
+# started before the login shell became zsh. The standing case is the Claude
+# desktop app's remote server, which calls `gh` for PR status and Auto-fix and
+# reported "gh isn't signed in" when it could not find it.
+system_links = ["gh"]
+
 [mise.tools]
 # --- runtimes ---
 go = "latest"

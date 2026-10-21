@@ -90,6 +90,42 @@ def set_login_shell(ctx):
         ctx.run_command(["usermod", "-s", zsh_path, user], with_sudo=True, check=False)
 
 
+MISE_DATA = REPO_DIR / "home" / ".chezmoidata" / "mise.toml"
+MISE_SHIMS = pathlib.Path.home() / ".local/share/mise/shims"
+SYSTEM_BIN = pathlib.Path("/usr/local/bin")
+
+
+def system_links():
+    """[(link, shim)] for mise.toml's `system_links` — Linux only."""
+    if sys.platform != "linux":
+        return []
+    import tomllib
+
+    names = tomllib.loads(MISE_DATA.read_text())["mise"].get("system_links", [])
+    return [(SYSTEM_BIN / n, MISE_SHIMS / n) for n in names]
+
+
+def link_system_bins(ctx):
+    """Link the `system_links` mise shims into /usr/local/bin (idempotent,
+    non-fatal). Needs privilege. A shim is a symlink to mise, which dispatches on
+    argv[0], so the link works from the bare system PATH of a process started
+    before the login shell became zsh — the desktop app's remote server running
+    `gh` for PR status, say. A file already at the link path is the host's own
+    and is left alone."""
+    for link, shim in system_links():
+        if link.is_symlink() and os.readlink(link) == str(shim):
+            logger.info("%s already links %s", link, shim)
+            continue
+        if link.exists() or link.is_symlink():
+            logger.warning("%s exists and is not the mise shim; leaving it", link)
+            continue
+        if ctx.priv == "none":
+            logger.warning("no privilege: cannot link %s; run manually: ln -s %s %s", link, shim, link)
+            continue
+        logger.info("linking %s -> %s", link, shim)
+        ctx.run_command(["ln", "-s", str(shim), str(link)], with_sudo=True, check=False)
+
+
 def setup_runtimes(ctx):
     """Runtimes and tools: mise (scripts/runtimes.py — declare missing tools, then
     `mise install`) and the Node ecosystem through nvm (scripts/node.py). Both are
@@ -286,6 +322,17 @@ def build_plan(ctx, system_spec, agent_ids):
     else:
         add("config", f"login shell {current or '?'} -> {target} (chsh; adds it to /etc/shells)",
             privileged=True)
+
+    for link, shim in system_links():
+        if link.is_symlink() and os.readlink(link) == str(shim):
+            add("config", f"{link} already links the mise shim — unchanged")
+        elif link.exists() or link.is_symlink():
+            add("config", f"{link} exists and is not the mise shim — left alone")
+        elif ctx.priv == "none":
+            add("config", f"{link} -> {shim}: SKIPPED (no root/sudo)")
+        else:
+            add("config", f"{link} -> {shim} (for processes on the bare system PATH)",
+                privileged=True)
     return items
 
 
@@ -359,6 +406,7 @@ def main():
 
     logger.info("setup | os=%s priv=%s dry_run=%s", ctx.os_type, ctx.priv, ctx.dry_run)
     set_login_shell(ctx)
+    link_system_bins(ctx)
     if agent_ids:
         setup_runtimes(ctx)
         setup_agents(ctx, agent_ids)

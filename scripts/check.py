@@ -77,6 +77,9 @@ def check_data():
     for k, v in {**mise.get("tools", {}), **mise.get("linux_tools", {})}.items():
         if isinstance(v, dict) and "version" not in v:
             fail(f"mise.tools.{k}: table form needs a version")
+    for name in mise.get("system_links", []):
+        if name not in mise.get("tools", {}) and name not in mise.get("linux_tools", {}):
+            fail(f"mise.system_links: {name} is not a declared mise tool, so it has no shim")
     ok(f"mise.toml: {len(mise.get('tools', {}))} tools (+{len(mise.get('linux_tools', {}))} linux-only)")
 
     node = tomllib.loads((DATA / "node.toml").read_text())["node"]
