@@ -377,7 +377,8 @@ don't cite them as current design.
 - **Agent config files** (`~/.claude/settings.json`, `~/.codex/config.toml`,
   `~/.pi/agent/settings.json`): rewritten by the agents; never make one a
   chezmoi source entry. pi's is seeded leaf-by-leaf under ADR-0012's contract;
-  Claude's gets one seeded leaf, `env.CLAUDE_CODE_SHELL` (ADR-0011 update log).
+  Claude's gets two seeded leaves, `env.CLAUDE_CODE_SHELL` and `env.CLAUDE_ENV_FILE`
+  (ADR-0011 update log).
 - **CN mirror gating:** everything goes through `DOTFILE_NETWORK_ENV`.
 - **`~/.claude/CLAUDE.md`** is the thin Claude-only shell importing
   `~/.agents/AGENTS.md`; cross-agent rules go in the latter.

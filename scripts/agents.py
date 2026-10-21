@@ -8,8 +8,8 @@ ADR-0012).
 Three coding agents are provisioned from this one file: **Claude Code**, **Codex
 CLI** and **pi**. ADR-0011 partitions their configuration into three planes and
 treats each differently — this module implements ① and ②, and touches ③ only as
-a seed: pi's settings because ADR-0012 says so explicitly, and one Claude leaf
-(``env.CLAUDE_CODE_SHELL``, ADR-0011 update log 2026-10-20):
+a seed: pi's settings because ADR-0012 says so explicitly, and two Claude leaves
+(``env.CLAUDE_CODE_SHELL``, ``env.CLAUDE_ENV_FILE``; ADR-0011 update log 2026-10-20):
 
 - **① instruction — single-sourced.** ``~/.agents/AGENTS.md`` is the only
   instruction source. ``~/.codex/AGENTS.md`` and ``~/.pi/agent/AGENTS.md`` symlink
@@ -1638,13 +1638,21 @@ class ClaudeAgent(Agent):
     @staticmethod
     def _settings_seed():
         """The plane-③ leaves seeded into Claude's settings (ADR-0011 update log,
-        2026-10-20). Today one: pin the Bash tool to zsh whatever ``$SHELL`` the
-        launcher handed down. A Claude started by a process older than the
-        ``chsh`` — the desktop app's remote server, say — inherits SHELL=/bin/bash,
-        whose .bashrc returns for a non-interactive shell before any of env.zsh's
-        environment (~/.jc_env.sh, ~/.exports) is read."""
+        2026-10-20). Both make the Bash tool see env.zsh's environment whatever
+        the launcher handed down:
+
+        - ``CLAUDE_CODE_SHELL`` pins the tool to zsh. A Claude started by a
+          process older than the ``chsh`` — the desktop app's remote server, say —
+          inherits SHELL=/bin/bash, whose .bashrc returns for a non-interactive
+          shell before ~/.jc_env.sh or ~/.exports is read.
+        - ``CLAUDE_ENV_FILE`` re-runs env.zsh after the shell snapshot, whose
+          ``export PATH=`` would otherwise put back the process's bare PATH (no
+          mise shims, so no ``gh``). See claude-env.zsh."""
         zsh = shutil.which("zsh")
-        return {"env": {"CLAUDE_CODE_SHELL": zsh}} if zsh else {}
+        if not zsh:
+            return {}
+        return {"env": {"CLAUDE_CODE_SHELL": zsh,
+                        "CLAUDE_ENV_FILE": str(HOME / ".config" / "zsh" / "claude-env.zsh")}}
 
     def _seed_settings(self, ctx):
         """Seed ``~/.claude/settings.json`` leaf by leaf, add-only — the contract

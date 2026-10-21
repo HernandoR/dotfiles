@@ -533,3 +533,13 @@ the one genuine Tier A addition is the agentmemory service unit.
   The same change gives the agent a clean zsh: `home/dot_zshrc.tmpl` returns
   early when `CLAUDECODE` is set, keeping only `~/.proxy` / `~/.extra`, so the
   Bash-tool snapshot carries no prompt, widgets, hooks or colour aliases.
+
+  **2026-10-21 — a second leaf, `env.CLAUDE_ENV_FILE`.** zsh alone did not bring
+  back `gh`: every Bash-tool command replays Claude's shell snapshot, which ends
+  in `export PATH=<the Claude process's own PATH>`, and that overwrites the PATH
+  `.zshenv` -> `env.zsh` built moments earlier. The process PATH came from the
+  same bare remote server, so the mise shims (`gh`), `~/.local/bin` and the
+  default Node were gone. Claude inlines `CLAUDE_ENV_FILE` into each command
+  *after* the snapshot, so the seed points it at `~/.config/zsh/claude-env.zsh`
+  (a chezmoi source file), which runs `env.zsh` once more. Same justification as
+  the first leaf: nothing in `$HOME` can reach that point in the command.
