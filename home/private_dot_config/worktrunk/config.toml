@@ -1,13 +1,21 @@
 # Worktrunk (`wt`) user config — chezmoi-managed, read-only for wt: its runtime
 # state goes to ~/.config/worktrunk/approvals.toml and .git/wt/, never here.
 #
-# Where `wt switch --create` puts a worktree. Claude Code hard-codes
-# `<repo>/.claude/worktrees/<name>` for the worktrees it creates itself and
-# exposes no setting for the path, so the two tools meet on wt's side: this
-# template lands wt-created worktrees exactly where Claude-created ones are.
-# One directory to look in, one `wt list`.
+# Where `wt switch --create` puts a worktree. This is GitLens's own layout, so
+# `wt` and GitLens's "Create Worktree" land on the same path and one `wt list`
+# still shows everything. GitLens derives the root per repository as
+# `<parent>/<repo>.worktrees` and creates `<root>/<branch>`, and that
+# derivation is not configurable — hence wt moves, not GitLens
+# (~/.vscode-server/data/Machine/settings.json only has to keep GitLens's
+# `worktrees.defaultLocation` unset).
 #
-# `split("/") | last` drops a `<user>/` or `feat/` prefix, because that is what
-# Claude does. Two branches differing only in prefix would collide on a path;
-# wt refuses the second rather than overwriting.
-worktree-path = "{{ repo_path }}/.claude/worktrees/{{ branch | split(\"/\") | last | sanitize }}"
+# Raw `{{ branch }}`, NOT `sanitize`: GitLens splits the branch on `/` into
+# nested directories, so `feat/auth` must land at `.worktrees/feat/auth`. With
+# `sanitize` it would flatten to `.worktrees/feat-auth` and the two tools would
+# disagree on every prefixed branch. Nested names cannot collide, because git
+# already refuses to hold both `feat` and `feat/auth` as branches.
+#
+# Claude Code is the one holdout: it hard-codes `<repo>/.claude/worktrees/<name>`
+# for the worktrees it creates itself and exposes no setting for the path. That
+# is what the `.claude/worktrees/` line in ~/.config/git/ignore is for.
+worktree-path = "{{ repo_path }}/../{{ repo }}.worktrees/{{ branch }}"
