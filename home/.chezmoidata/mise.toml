@@ -48,6 +48,9 @@ cargo-binstall = "latest"
 # can (verified 2026-09-10, v0.19.1 aarch64-apple-darwin). Falls back to a
 # cargo build with the rust above only if no prebuilt artifact exists.
 "cargo:mergiraf" = "latest"
+# nmem: the Nowledge Mem CLI (memory search/add, thread sync). PyPI only; the
+# pipx backend installs it through uv. The MCP wiring is scripts/setup.py's.
+"pipx:nmem-cli" = "latest"
 
 # --- shell and prompt ---
 starship = "latest"
