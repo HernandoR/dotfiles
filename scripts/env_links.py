@@ -13,8 +13,11 @@ Reads the inventory in home/.chezmoidata/envlinks.toml and makes it true:
   3. repair a REGULAR FILE left where a link belongs (some writers rename a
      temp file over the path — Claude Code does this to ~/.claude.json — which
      silently turns the link into a file; the newer side wins, and it says so);
-  4. place the symlink $HOME/<name> -> <stateRoot>/<name>, moving a real
+  4. place the symlink $HOME/<name> -> <stateRoot>/<target>, moving a real
      file/dir in the way to <name>.backup (never deleting anything).
+
+<target> is the entry's `target` (a path relative to the state root) and
+defaults to <name>; it lets a $HOME name change without moving the state.
 
 chezmoi runs this as a `run_before_` script on every apply (home/.chezmoiscripts)
 with --state-root/--env from its config; run by hand (or `just env-links`) it
@@ -59,6 +62,10 @@ def warn(msg):
 def load_inventory():
     data = tomllib.loads((DATA / "envlinks.toml").read_text())["envlinks"]
     return data.get("entries", {}), data.get("links", {})
+
+
+def target_of(root, name, e):
+    return root / e.get("target", name)
 
 
 def mise_seed():
@@ -124,7 +131,7 @@ class Runner:
 
 
 def seed_target(r, root, name, e):
-    target = root / name
+    target = target_of(root, name, e)
     if target.exists() or target.is_symlink():
         return
     mode = int(e["mode"], 8)
@@ -183,7 +190,7 @@ def repair_file(r, root, name, e):
     """Fold a regular file back into its target where a link belongs (files
     only: a real directory in the way is not this failure mode and goes through
     the .backup path in place_link)."""
-    link, target = HOME / name, root / name
+    link, target = HOME / name, target_of(root, name, e)
     if e["kind"] != "file" or link.is_symlink() or not link.is_file():
         return
     r.repaired.add(name)
@@ -244,8 +251,8 @@ def run(state_root, env, dry_run, plan_only):
     for name, e in live.items():
         repair_file(r, root, name, e)
     backups = []
-    for name in live:
-        place_link(r, name, root / name, backups)
+    for name, e in live.items():
+        place_link(r, name, target_of(root, name, e), backups)
     for name, spec in links.items():
         if applies(spec, env):
             place_link(r, name, pathlib.Path(spec["target"]), backups)

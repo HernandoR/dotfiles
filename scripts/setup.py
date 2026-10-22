@@ -46,7 +46,7 @@ DEFERRED_AGENT_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-s
 # nmem (https://nowledge.co) — the hosted memory service that replaced the local
 # `@modelcontextprotocol/server-memory` knowledge graph on 2026-09-17 (see the
 # scripts/agents.py docstring). Only the URL is repo-knowledge; the bearer token is
-# per-account, so it comes from $NMEM_API_KEY in ~/.exports (seeded by
+# per-account, so it comes from $NMEM_API_KEY in ~/.exports.local (seeded by
 # home/.chezmoidata/envlinks.toml) and NOTHING is written when it is absent. That is
 # why nmem is here and not in agents.MCP_SERVERS: the manifest must stay committable.
 NMEM_DEFAULT_URL = "https://mem.lzhen.fun:9443"
@@ -225,7 +225,7 @@ def write_deferred_setup(ctx, agent_ids):
         "# --- nmem (hosted memory; replaces the retired local `memory` MCP server) ---",
         "# Token-gated on purpose: with no $NMEM_API_KEY there is nothing to authenticate",
         "# with, so this writes NO config at all and only says where to put one. Set it in",
-        "# ~/.exports (NMEM_API_URL overrides the default endpoint on a machine that needs to).",
+        "# ~/.exports.local (NMEM_API_URL overrides the default endpoint on a machine that needs to).",
         f'_nmem_url="${{NMEM_API_URL:-{NMEM_DEFAULT_URL}}}"',
         # _keep_deferred marks a run that left nmem not-working (no token, or a
         # header that silently didn't land, or claude mcp add itself failing) so
@@ -240,7 +240,7 @@ def write_deferred_setup(ctx, agent_ids):
         '  echo "nmem: NMEM_OPT_OUT is set — nowledge-mem left unregistered and not asking again."',
         'elif [ -z "${NMEM_API_KEY:-}" ]; then',
         '  echo "nmem: NMEM_API_KEY is not set — leaving the nowledge-mem MCP server unconfigured."',
-        '  echo "nmem: set NMEM_API_KEY in ~/.exports (export NMEM_API_KEY=nmem_...), and"',
+        '  echo "nmem: set NMEM_API_KEY in ~/.exports.local (export NMEM_API_KEY=nmem_...), and"',
         '  echo "nmem: NMEM_API_URL there too if ${_nmem_url} is not the right endpoint."',
         '  echo "nmem: then open a new shell and re-run: dotfiles-postsetup"',
         '  echo "nmem: on a machine that will never use nmem, export NMEM_OPT_OUT=1 to silence this for good"',

@@ -55,7 +55,7 @@ def nvm(ctx, *cmd, capture=False):
 
 
 def installed_node_bins():
-    """Newest first — the same choice env.zsh makes for non-interactive shells."""
+    """Newest first — the same choice ~/.path makes for non-interactive shells."""
     versions = NVM_DIR / "versions" / "node"
     if not versions.is_dir():
         return []

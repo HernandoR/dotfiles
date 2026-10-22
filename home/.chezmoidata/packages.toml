@@ -23,7 +23,7 @@
 #   only     "linux" | "darwin"
 
 # --- GNU userland: `ls --color=auto`, `sed -i`, `grep --color` behave the same
-# on macOS as on Linux. macOS gets them from brew (env.zsh puts the gnubin dirs
+# on macOS as on Linux. macOS gets them from brew (~/.path puts the gnubin dirs
 # on PATH); Linux ships them.
 [[packages]]
 name = "coreutils"

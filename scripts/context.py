@@ -73,10 +73,10 @@ class Ctx:
         """Put the per-user bin dirs that upstream installers link into on this
         process' PATH. Those installers (codegraph, the Claude CLI, uv, …) drop a
         symlink in ~/.local/bin and print "add this to your PATH" — the login
-        shell gets it from the zsh env (env.zsh), but a bootstrap run that installs
+        shell gets it from the zsh env (~/.path), but a bootstrap run that installs
         and then *uses* a tool in the same process would not, so `shutil.which`
         and the exec lookup would both miss it. Prepending is safe: these dirs
-        are exactly where env.zsh puts them for the interactive shell."""
+        are exactly where ~/.path puts them for the interactive shell."""
         user_bins = [pathlib.Path.home() / ".local/bin", pathlib.Path.home() / "bin"]
         path = os.environ.get("PATH", "").split(os.pathsep)
         missing = [str(p) for p in user_bins if str(p) not in path]

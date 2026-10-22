@@ -3,7 +3,7 @@
 # the declared Node, pnpm, and the global npm packages; a chezmoi run_onchange
 # script re-runs it when this file or the script changes.
 #
-# Shells: dot_zshrc.tmpl sources $NVM_DIR/nvm.sh for interactive use; env.zsh
+# Shells: dot_zshrc.tmpl sources $NVM_DIR/nvm.sh for interactive use; ~/.path
 # puts the newest installed Node's bin on PATH for everything else (editor
 # hosts, ACP servers, `just` recipes, the setup scripts), since nvm.sh itself
 # is interactive-only and slow.
@@ -12,7 +12,7 @@
 version = "lts/*"
 
 # `npm install -g` targets, installed into the active Node (so they follow the
-# version). pnpm first: PNPM_HOME (env.zsh) is where pnpm's OWN globals go.
+# version). pnpm first: PNPM_HOME (~/.exports) is where pnpm's OWN globals go.
 globals = [
   "pnpm",
   # Lark CLI — `npx @larksuite/cli@latest install` runs in the post-login setup;

@@ -1,0 +1,49 @@
+# ~/.path — PATH for EVERY zsh (managed by chezmoi: home/dot_path.tmpl). Second
+# link of the chain .zshenv runs, after ~/.exports (it reads PNPM_HOME and
+# NVM_DIR from there). Machine-local dirs go in ~/.path.local, sourced at the end.
+#
+# Sourced twice in a login shell — from .zshenv and again via .zprofile —
+# because macOS's /etc/zprofile runs path_helper between the two and re-orders
+# PATH; the second pass puts our dirs back in front. `typeset -U path` makes a
+# re-prepend move an entry to the front instead of duplicating it.
+
+# --- Node via nvm (home/.chezmoidata/node.toml) --------------------------------
+# nvm.sh is sourced by .zshrc (interactive only — it is slow and a shell
+# function). For everything else — editor hosts, ACP servers, `just` recipes,
+# the setup scripts — put the newest installed Node's bin on PATH directly.
+_node_bins=("${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin(N/On))
+[ ${#_node_bins} -gt 0 ] && _node_default="${_node_bins[1]}" || _node_default=""
+unset _node_bins
+
+# --- PATH ----------------------------------------------------------------------
+typeset -U path PATH
+path=(
+  "$HOME/bin"
+  "$HOME/.local/bin"           # uv / chezmoi / mise installers, agent CLIs
+{{- if eq .chezmoi.os "darwin" }}
+  # GNU userland first, unprefixed (brew installs g-prefixed names by default).
+  /opt/homebrew/opt/coreutils/libexec/gnubin
+  /opt/homebrew/opt/findutils/libexec/gnubin
+  /opt/homebrew/opt/gnu-sed/libexec/gnubin
+  /opt/homebrew/opt/grep/libexec/gnubin
+  /opt/homebrew/bin
+  /opt/homebrew/sbin
+{{- end }}
+  "$PNPM_HOME/bin"
+  ${_node_default:+"$_node_default"}
+  "$HOME/.pixi/bin"
+  "$HOME/miniconda3/bin"
+  /usr/local/cuda/bin
+  $path
+  # mise shims LAST, as a fallback: `mise activate zsh` (in .zshrc) prepends the
+  # real tool dirs at the first prompt, but a process that is not an interactive
+  # zsh — an editor extension host, an ACP server, a `just` recipe, .zshrc itself
+  # before that first prompt — can still resolve every mise tool through here.
+  "$HOME/.local/share/mise/shims"
+)
+export PATH
+unset _node_default
+
+# --- the machine-local hatch (created by scripts/env_links.py) -----------------
+# Sourced last, so what it prepends lands in front of the dirs above.
+[ -r "$HOME/.path.local" ] && . "$HOME/.path.local"

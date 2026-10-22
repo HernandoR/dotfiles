@@ -57,7 +57,7 @@ than the history:
   ACP client's supported-agent list, and its mise-installed binary cannot even be
   resolved by a process that is not an interactive zsh, because mise's shims reach
   PATH only through ``mise activate``. pi installs to ``~/.local/bin``, which is
-  on ``PATH (env.zsh)``. The price is that every capability omp had natively is
+  on ``PATH (~/.path)``. The price is that every capability omp had natively is
   now a third-party extension (``PI_PACKAGES``), and that price was accepted
   knowingly.
 
@@ -67,11 +67,11 @@ Memory is no longer a plane this manifest owns (2026-09-17). The local
 with no lock, and Claude's own auto-memory duplicated it a third time. Both are
 off: the server is in ``RETIRED_MCP_SERVERS`` (so the files this repo writes whole
 drop it), and Claude's auto-memory is disabled by ``CLAUDE_CODE_DISABLE_AUTO_MEMORY``
-(``home/private_dot_config/zsh/env.zsh.tmpl``). The replacement is **nmem**
+(``home/dot_exports.tmpl``). The replacement is **nmem**
 (`https://mem.lzhen.fun:9443`), a hosted service, and it is NOT declared here: it
 needs a per-account bearer token, which is machine-local by definition. It is wired
 by the deferred post-login setup in ``scripts/setup.py`` from ``NMEM_API_KEY`` in
-``~/.exports``, and when that token is absent nothing is written and the script says
+``~/.exports.local``, and when that token is absent nothing is written and the script says
 so. The existing store file is left on disk untouched; only the declaration goes.
 """
 
@@ -318,7 +318,7 @@ MCP_SERVERS = (
     # `memory` (@modelcontextprotocol/server-memory over ~/.agents/memory/memory.jsonl)
     # was declared here until 2026-09-17 and is now in RETIRED_MCP_SERVERS. Its
     # replacement, nmem, is a hosted service behind a per-account bearer token, so it
-    # cannot live in the repo at all — scripts/setup.py wires it from ~/.exports.
+    # cannot live in the repo at all — scripts/setup.py wires it from ~/.exports.local.
     #
 )
 
@@ -448,7 +448,7 @@ CODEX_INSTALLER = "https://chatgpt.com/codex/install.sh"
 # pi's install channel, and it is a constraint rather than a preference (ADR-0012).
 # `npm install -g --prefix ~/.local` is the only channel satisfying all three of:
 #
-#   1. the binary lands at ~/.local/bin/pi, which IS on PATH (env.zsh) — the
+#   1. the binary lands at ~/.local/bin/pi, which IS on PATH (~/.path) — the
 #      whole point of the switch, since mise's shims reach PATH only through the
 #      interactive-zsh `mise activate` integration, so nothing that is not an
 #      interactive shell (a VS Code extension host, an editor spawning an ACP
@@ -811,7 +811,7 @@ def _mise_which(ctx, name):
 def _nvm_bin(name):
     """``$NVM_DIR/versions/node/<newest>/bin/<name>`` or None. Node is nvm's
     (home/.chezmoidata/node.toml, scripts/node.py) and nvm.sh only reaches an
-    interactive zsh, so resolve the newest installed Node here the way env.zsh
+    interactive zsh, so resolve the newest installed Node here the way ~/.path
     does for non-interactive shells."""
     versions = pathlib.Path(os.environ.get("NVM_DIR") or HOME / ".nvm") / "versions" / "node"
     if not versions.is_dir():
@@ -1638,14 +1638,14 @@ class ClaudeAgent(Agent):
     @staticmethod
     def _settings_seed():
         """The plane-③ leaves seeded into Claude's settings (ADR-0011 update log,
-        2026-10-20). Both make the Bash tool see env.zsh's environment whatever
+        2026-10-20). Both make the Bash tool see the .zshenv chain's environment whatever
         the launcher handed down:
 
         - ``CLAUDE_CODE_SHELL`` pins the tool to zsh. A Claude started by a
           process older than the ``chsh`` — the desktop app's remote server, say —
           inherits SHELL=/bin/bash, whose .bashrc returns for a non-interactive
-          shell before ~/.jc_env.sh or ~/.exports is read.
-        - ``CLAUDE_ENV_FILE`` re-runs env.zsh after the shell snapshot, whose
+          shell before ~/.exports or ~/.jc_env.sh is read.
+        - ``CLAUDE_ENV_FILE`` re-runs .zshenv after the shell snapshot, whose
           ``export PATH=`` would otherwise put back the process's bare PATH (no
           mise shims, so no ``gh``). See claude-env.zsh."""
         zsh = shutil.which("zsh")
@@ -1941,7 +1941,7 @@ class PiAgent(Agent):
             add("install", "pi already present — left as is")
         else:
             add("install", "pi via npm -g --prefix {} --ignore-scripts ({}), node from "
-                           "mise — the prefix puts it on PATH (env.zsh), which mise "
+                           "mise — the prefix puts it on PATH (~/.path), which mise "
                            "shims are not".format(PI_NPM_PREFIX, PI_NPM_PACKAGE))
         add("install", "{} pi extension(s) declared in {} — pi installs any missing one "
                        "itself at startup, so nothing is `pi install`ed from here: {}".format(

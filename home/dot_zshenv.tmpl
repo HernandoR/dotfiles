@@ -1,4 +1,11 @@
 # ~/.zshenv — read by EVERY zsh (managed by chezmoi: home/dot_zshenv.tmpl).
-# All the content lives in one file so .zprofile can source it a second time;
-# see the header of ~/.config/zsh/env.zsh for why.
-[ -r "$HOME/.config/zsh/env.zsh" ] && . "$HOME/.config/zsh/env.zsh"
+# The whole environment is this chain, each link optional:
+#   ~/.exports     variables (repo), ending in ~/.exports.local (machine-local)
+#   ~/.path        PATH (repo), ending in ~/.path.local (machine-local)
+#   ~/.jc_env.sh   the job-controller (jcc devpod) env, injected by the platform;
+#                  last, so the platform's values win
+# .zprofile and Claude Code's CLAUDE_ENV_FILE re-run this file; see each.
+for f in "$HOME/.exports" "$HOME/.path" "$HOME/.jc_env.sh"; do
+  [ -r "$f" ] && . "$f"
+done
+unset f

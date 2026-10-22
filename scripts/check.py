@@ -68,6 +68,8 @@ def check_data():
             fail(f"envlinks.{name}: mode must be octal text")
         if e.get("seed") and e.get("kind") != "file":
             fail(f"envlinks.{name}: seed on a dir entry")
+        if e.get("target", "").startswith("/"):
+            fail(f"envlinks.{name}: target must be relative to the state root")
     for name, l in env.get("links", {}).items():
         if not l.get("target", "").startswith("/"):
             fail(f"envlinks.links.{name}: target must be absolute")
@@ -206,7 +208,7 @@ def check_render():
             ok(f"[{env_name}] rendered {len(rendered)} files")
             for rel in rendered:
                 p = dest / rel
-                if rel.suffix == ".zsh" or rel.name in (".zshenv", ".zprofile", ".zshrc"):
+                if rel.suffix == ".zsh" or rel.name in (".zshenv", ".zprofile", ".zshrc", ".exports", ".path"):
                     r = subprocess.run(["zsh", "-n", str(p)], capture_output=True, text=True)
                     (ok if r.returncode == 0 else fail)(f"[{env_name}] zsh -n {rel}" + ("" if r.returncode == 0 else f": {r.stderr.strip()}"))
                 elif rel.suffix == ".toml":
@@ -218,10 +220,9 @@ def check_render():
                 elif rel == pathlib.Path(".config/git/config"):
                     r = subprocess.run(["git", "config", "--file", str(p), "--list"], capture_output=True, text=True)
                     (ok if r.returncode == 0 else fail)(f"[{env_name}] git config {rel}" + ("" if r.returncode == 0 else f": {r.stderr.strip()}"))
-            for rel in (".config/zsh/env.zsh",):
-                text = (dest / rel).read_text()
-                want = extra.get("DOTFILE_STATE_ROOT", str(pathlib.Path.home() / "dotfile_home"))
-                (ok if want in text else fail)(f"[{env_name}] env.zsh carries stateRoot {want}")
+            text = (dest / ".exports").read_text()
+            want = extra.get("DOTFILE_STATE_ROOT", str(pathlib.Path.home() / "dotfile_home"))
+            (ok if want in text else fail)(f"[{env_name}] .exports carries stateRoot {want}")
             # the scripts chezmoi would run must render too
             res = subprocess.run([*base, "apply", "--dry-run", "--verbose", "--include", "scripts"],
                                  env=env, capture_output=True, text=True)

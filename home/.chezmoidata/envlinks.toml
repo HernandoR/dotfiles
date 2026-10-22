@@ -62,22 +62,27 @@ mode = "700"
 
 # --- shell / machine state ---------------------------------------------------
 
-# Machine-local escape hatches, sourced by zsh (home/private_dot_config/zsh/env.zsh.tmpl
-# and dot_zshrc.tmpl). Persisted because their contents are per-machine by
-# definition — exactly what does NOT survive a container recreation otherwise.
-# Seeded as comment-only files so sourcing one changes nothing until written.
-[envlinks.entries.".exports"]
+# Machine-local escape hatches, sourced by zsh (the tail of the managed ~/.exports
+# and ~/.path, and dot_zshrc.tmpl). Persisted because their contents are
+# per-machine by definition — exactly what does NOT survive a container
+# recreation otherwise. Seeded as comment-only files so sourcing one changes
+# nothing until written.
+#
+# The two .local hatches keep their pre-rename state files (`target`): ~/.exports
+# and ~/.path became chezmoi-managed, and a machine's secrets stay where they were.
+[envlinks.entries.".exports.local"]
 kind = "file"
 mode = "600"
+target = ".exports"
 seed = """
-# ~/.exports — machine-local environment variables. Yours to edit; the
+# ~/.exports.local — machine-local environment variables. Yours to edit; the
 # dotfiles repo only creates this file and keeps it out of the repo.
 #
-# Sourced by every zsh, from .zshenv and again from .zprofile — the second
-# pass runs after the repo's own exports, so overriding one works here.
+# Sourced by every zsh, at the end of the repo's ~/.exports (itself sourced
+# from .zshenv), so overriding one of the repo's variables works here.
 #
 # Real content belongs in the repo when it is not machine-specific:
-# home/private_dot_config/zsh/env.zsh.tmpl for anything portable.
+# home/dot_exports.tmpl for anything portable.
 #
 #   export SOME_API_TOKEN="…"
 #   export MANPAGER="less -R"
@@ -101,19 +106,19 @@ seed = """
 # export NMEM_OPT_OUT=1
 """
 
-[envlinks.entries.".path"]
+[envlinks.entries.".path.local"]
 kind = "file"
 mode = "644"
+target = ".path"
 seed = """
-# ~/.path — machine-local PATH additions. Yours to edit; the dotfiles repo
-# only creates this file and keeps it out of the repo.
+# ~/.path.local — machine-local PATH additions. Yours to edit; the dotfiles
+# repo only creates this file and keeps it out of the repo.
 #
-# Sourced by every zsh, from .zshenv and again from .zprofile — the second
-# pass runs after the repo prepends its own dirs, so what you prepend here
-# ends up in front of them. `typeset -U path` means the two passes re-order
-# rather than duplicate.
+# Sourced by every zsh, at the end of the repo's ~/.path, so what you prepend
+# here ends up in front of the repo's dirs. `typeset -U path` means a second
+# pass (.zprofile) re-orders rather than duplicates.
 #
-# A path every machine should have belongs in home/private_dot_config/zsh/env.zsh.tmpl.
+# A path every machine should have belongs in home/dot_path.tmpl.
 #
 #   export PATH="$HOME/some/tool/bin:$PATH"
 """
@@ -128,7 +133,7 @@ seed = """
 # Interactive only, and after everything else in .zshrc — so this is where
 # something has to go to beat an alias, a function or a PATH entry that this
 # repo or Homebrew set. Non-interactive shells never read it: variables
-# belong in ~/.exports, paths in ~/.path.
+# belong in ~/.exports.local, paths in ~/.path.local.
 #
 #   alias deploy="…"
 #   unalias ls

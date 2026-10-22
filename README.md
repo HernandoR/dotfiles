@@ -74,7 +74,7 @@ The whole run is one Python process (`scripts/bootstrap.py`; the root
 4. **`chezmoi apply`**, which runs, in order:
    - `run_before` — **bootstrap tools**, then **env links**
      (`scripts/env_links.py`): seed, repair and
-     place the persistent `$HOME` symlinks (`~/.claude`, `~/.ssh`, `~/.exports`, …);
+     place the persistent `$HOME` symlinks (`~/.claude`, `~/.ssh`, `~/.exports.local`, …);
    - the **files** from `home/` and the four **zsh plugins** (chezmoi externals);
    - `run_onchange_after` — **mise tools** (`scripts/runtimes.py`: declare
      what the live config lacks, `mise install`), **Node via nvm**
@@ -197,19 +197,31 @@ branch.
 
 ### Machine-local escape hatches
 
+The environment of every zsh is one chain, run by `~/.zshenv` (and again by
+`~/.zprofile`):
+
+```text
+~/.exports    repo variables (home/dot_exports.tmpl)  -> ~/.exports.local
+~/.path       repo PATH      (home/dot_path.tmpl)     -> ~/.path.local
+~/.jc_env.sh  the jcc devpod environment, injected by the platform — last, so it wins
+```
+
 Four files under the state root, linked into `$HOME`, seeded as comment-only
 and never touched again by the repo:
 
 | File | Sourced | For |
 | --- | --- | --- |
-| `~/.path` | every zsh, from `.zshenv` and again from `.zprofile` | PATH additions — they land in front of the repo's dirs |
-| `~/.exports` | every zsh, both passes | environment variables — they override the repo's |
+| `~/.exports.local` | every zsh, at the end of `~/.exports` | environment variables and secrets (`NMEM_API_KEY`) — they override the repo's |
+| `~/.path.local` | every zsh, at the end of `~/.path` | PATH additions — they land in front of the repo's dirs |
 | `~/.proxy` | interactive zsh, just before `~/.extra` | proxy on/off |
 | `~/.extra` | interactive zsh, last | anything that has to beat an alias, function or PATH entry |
 
+The two `.local` hatches keep the state files they had as `~/.exports` and
+`~/.path` (`target` in `envlinks.toml`), so renaming them lost nothing.
 The double sourcing is deliberate: macOS's `/etc/zprofile` reorders PATH between
 the two passes, and `typeset -U path` makes a re-prepend move an entry instead
-of duplicating it. Portable settings belong in `home/private_dot_config/zsh/env.zsh.tmpl`.
+of duplicating it. Portable settings belong in `home/dot_exports.tmpl` or
+`home/dot_path.tmpl`.
 
 ## Adding software (tutorial)
 
@@ -244,7 +256,7 @@ globals = ["pnpm", "@larksuite/cli", "typescript"]
 
 `scripts/node.py` installs nvm (pinned installer, edits no rc file), the Node
 line, and `npm install -g` for the globals. Interactive zsh sources `nvm.sh`;
-everything else gets the newest installed Node on PATH from `env.zsh`.
+everything else gets the newest installed Node on PATH from `~/.path`.
 
 ### An OS-level package → `home/.chezmoidata/packages.toml`
 

@@ -130,7 +130,7 @@ logins) and `brew-cask-interactive-install.sh` (a picker).
 - **A tool added to `mise.toml` reaches existing hosts** through the add-only
   reconcile in `runtimes.py`; versions a host chose are never overwritten.
 - **Node is nvm's**: no `node`/`npm:` mise tools, so the two never race for
-  `npm`; non-interactive callers get the newest installed Node from `env.zsh`.
+  `npm`; non-interactive callers get the newest installed Node from `~/.path` (was `env.zsh` until 2026-10-22).
 - **Nothing prompts in the apply path.** A step that cannot run unattended does
   not belong there; `stdin_devnull=True` makes an unexpected question fail
   loudly rather than block.

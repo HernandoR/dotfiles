@@ -1,0 +1,3 @@
+# Targets chezmoi deletes on apply: files an earlier layout managed.
+# env.zsh was split into ~/.exports and ~/.path.
+.config/zsh/env.zsh
