@@ -37,9 +37,10 @@ a seed: pi's settings because ADR-0012 says so explicitly, and two Claude leaves
 not uninstall it from a machine that already applied it. That gap cost something
 twice on 2026-08-28 — a retired ``agentmemory`` server still declared in
 the native Pi MCP file, and a manifest six plugins and one marketplace behind the
-live machine — so the two files this repo *writes whole* now also remove names
-they used to declare (``RETIRED_MCP_SERVERS``, ``RETIRED_PI_PACKAGES``). Anything
-the manifest never knew about is still left alone.
+live machine — so the files this repo *writes whole* — and its shared skills
+root — now also remove names they used to declare (``RETIRED_MCP_SERVERS``,
+``RETIRED_PI_PACKAGES``, ``RETIRED_SKILLS``). Anything the manifest never knew
+about is still left alone.
 
 The third slot has changed occupant twice, and the current reasons matter more
 than the history:
@@ -236,6 +237,11 @@ MARKETPLACES = (
                 note="the team's own plugins (mldatakit / spdl-pipeline / hugging-face-buckets "
                      "/ feedback). Was installed by hand and existed nowhere in the repo — the "
                      "same drift ADR-0011 was written to stop, found again on 2026-08-28"),
+    Marketplace("dagster", "dagster-io/skills", agents=ALL_MARKETS,
+                note="Dagster's agent skills. This repo used to install the same source as a "
+                     "loose skill package (`npx skills add dagster-io/skills`); it is a plugin "
+                     "marketplace now, and the loose copy it leaves is a deprecation notice "
+                     "that points at the `dagster` plugin (see RETIRED_SKILLS)"),
 )
 
 # Plugins, one per marketplace entry that has one. `agent-skillset` ships several
@@ -260,6 +266,13 @@ PLUGINS = (
     Plugin("spdl-pipeline", "mewtant-plugins", agents=ALL_MARKETS),
     Plugin("hugging-face-buckets", "mewtant-plugins", agents=ALL_MARKETS),
     Plugin("feedback-mewtant-plugins", "mewtant-plugins", agents=ALL_MARKETS),
+    Plugin("dagster", "dagster", agents=ALL_MARKETS,
+           note="Dagster's skill plus the bundled Dagster+ MCP server (the plugin also "
+                "ships `.codex-mcp.json` for Codex). Replaced the deprecated "
+                "`dagster-expert` package on 2026-10-23; its skill is still invoked as "
+                "`dagster-expert`, which is exactly why the loose copy has to go — two "
+                "providers leave the deprecated one selectable. pi's marketplace bridge "
+                "needs pi-mcp-adapter for the MCP half, so pi gets the skill only"),
     # `pyright-lsp@claude-plugins-official` is enabled on the machine and is NOT
     # here on purpose: its marketplace is a Claude *builtin*, absent from
     # extraKnownMarketplaces, so there is nothing for the Codex or pi projections
@@ -297,13 +310,19 @@ class SkillPackage:
 SKILLS_CLI_AGENT_NAMES = {"claude": "claude-code", "codex": "codex", "pi": "pi"}
 
 SKILL_PACKAGES = (
-    SkillPackage("dagster-io/skills", agents=("claude", "codex", "pi"),
-                 note="Dagster's agent skills (one skill today: dagster-expert, the "
-                      "dg-CLI/asset/pipeline guidance) — a skills-only repo with no "
-                      "plugin marketplace to install it from"),
     SkillPackage("cathrynlavery/diagram-design", agents=("claude", "codex", "pi"),
                  note="diagram design skills"),
 )
+
+# Skills this repo used to install through `npx skills` and no longer does. The
+# skills track has the same add-only gap as the rest of the projection: dropping
+# a package from SKILL_PACKAGES leaves its canonical copy in SHARED_SKILLS on
+# every machine that already applied it. `dagster-expert` retired on 2026-10-23
+# because its source (dagster-io/skills) is a plugin marketplace now and the
+# `dagster` plugin carries the real skill; the loose copy is only a deprecation
+# notice, and — because it answers to the same skill name — it shadows the plugin
+# for Codex and pi, which read SHARED_SKILLS natively.
+RETIRED_SKILLS = ("dagster-expert",)
 
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
 # Claude via `claude mcp add`, Codex via `codex mcp add`, and pi via its native
@@ -2034,6 +2053,37 @@ def install_skill_packages(ctx, ids):
                         check=False, stdin_devnull=True)
 
 
+def retire_skills(ctx):
+    """Remove skills this repo no longer installs (``RETIRED_SKILLS``).
+
+    The skills track is add-only, so dropping a package from SKILL_PACKAGES
+    leaves its canonical directory in SHARED_SKILLS on every machine that
+    already applied it. Remove that directory plus any per-skill link an agent's
+    own skills dir holds. Claude keeps real symlinks in ``~/.claude/skills``;
+    Codex's and pi's skills dirs are themselves links onto SHARED_SKILLS, so the
+    canonical copy is all they have and nothing else needs touching there.
+    """
+    for name in RETIRED_SKILLS:
+        canonical = SHARED_SKILLS / name
+        links = [d / name for d in (HOME / ".claude" / "skills",
+                                    HOME / ".codex" / "skills",
+                                    HOME / ".pi" / "agent" / "skills")
+                 if (d / name).is_symlink()]
+        if not (canonical.is_symlink() or canonical.exists() or links):
+            continue
+        if ctx.dry_run:
+            logger.info("[DRY-RUN] would remove retired skill %s from %s and %d link(s)",
+                        name, SHARED_SKILLS, len(links))
+            continue
+        if canonical.is_symlink() or canonical.is_file():
+            canonical.unlink()
+        elif canonical.is_dir():
+            shutil.rmtree(canonical)
+        for link in links:
+            link.unlink()
+        logger.info("removed retired skill %s (now provided by a plugin)", name)
+
+
 def provision(ctx, ids, codegraph_installer):
     """Install every selected agent and project the manifest onto it.
 
@@ -2065,6 +2115,11 @@ def provision(ctx, ids, codegraph_installer):
     # onto SHARED_SKILLS already exist and the CLI's symlink step lands on the
     # shared root instead of creating a real dir the links would then displace.
     install_skill_packages(ctx, ids)
+
+    # A retired package's canonical copy shadows the plugin that replaced it, so
+    # removal belongs after the installs and runs even when no package is left to
+    # install for the selected agents.
+    retire_skills(ctx)
 
     # codegraph installs its own MCP server into the agents it knows, which is
     # why MCP_SERVERS marks it delegated. Only the agents actually selected are
@@ -2101,6 +2156,11 @@ def plan_items(ctx, ids, add):
             add("config", "skills package {} -> npx skills add --global (agents: {}; "
                           "canonical copies land in {})".format(
                               pkg.source, ", ".join(targets), SHARED_SKILLS))
+    retired = [name for name in RETIRED_SKILLS
+               if (SHARED_SKILLS / name).exists() or (SHARED_SKILLS / name).is_symlink()]
+    if retired:
+        add("config", "remove retired skill(s) {} from {} (they now ship in a "
+                      "plugin)".format(", ".join(retired), SHARED_SKILLS))
     # pi is not a `codegraph install --target` id, so a pi-only run installs the
     # binary and wires nothing — say that rather than printing an empty list.
     targets = [i for i in ids if i in CODEGRAPH_TARGETS]
@@ -2130,6 +2190,10 @@ def main():
     print("\nSkills packages (npx skills add --global)")
     for pkg in SKILL_PACKAGES:
         print("  {:36} -> {}".format(pkg.source, ",".join(pkg.agents)))
+    if RETIRED_SKILLS:
+        print("\nRetired skills (removed on apply)")
+        for name in RETIRED_SKILLS:
+            print("  {}".format(name))
     print("\nMCP servers")
     for server in MCP_SERVERS:
         where = "delegated to its own installer" if server.delegated else "projected by CLI"
