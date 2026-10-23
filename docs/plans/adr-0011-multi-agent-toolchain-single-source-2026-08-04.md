@@ -543,3 +543,21 @@ the one genuine Tier A addition is the agentmemory service unit.
   *after* the snapshot, so the seed points it at `~/.config/zsh/claude-env.zsh`
   (a chezmoi source file), which runs `env.zsh` once more. Same justification as
   the first leaf: nothing in `$HOME` can reach that point in the command.
+
+- **2026-10-23 — Codex dropped; the roster is DSH + Claude Code + pi.** The
+  owner's working set became DSH (DeepSeek Harness), Claude Code and pi, and DSH
+  reads `~/.agents/AGENTS.md` and `~/.agents/skills` directly, so it needs no
+  projection of its own — that is why it is not an `Agent` subclass. Codex's
+  removal is recorded here because its projection was the one agent that existed
+  only as a second copy of the same manifest, and on the reference host that copy
+  had already drifted: five marketplace snapshots in
+  `~/.codex/.tmp/marketplaces` no longer matched `config.toml`, so every
+  `codex plugin marketplace add` failed with "already added from a different
+  source" and only newly added plugins installed.
+
+  `scripts/agents.py` loses `CodexAgent`, `CODEX_INSTALLER`, the `~/.codex` env
+  link and Codex's entries in `ALL_MARKETS` / `CODEGRAPH_TARGETS`; the README,
+  bootstrap help and the init prompt now say `claude,pi`. Machine cleanup — the
+  CLI, `~/.codex` and its plugin cache — is a one-time action rather than
+  something apply can do: the projection is add-only, and an env-link entry that
+  disappears from the inventory leaves its `$HOME` link in place.

@@ -40,13 +40,6 @@ kind = "file"
 mode = "600"
 seed = "{}"
 
-# Codex CLI: whole-dir — config.toml is rewritten by /model, and the dir holds
-# auth.json, history and sessions. The AGENTS.md and skills links into ~/.agents
-# live *inside* it, so they are part of the persistent volume.
-[envlinks.entries.".codex"]
-kind = "dir"
-mode = "700"
-
 # pi: whole-dir (ADR-0012). settings.json is rewritten by /settings, /model,
 # /theme and `pi install`; the dir also holds auth.json, trust.json, sessions and
 # the npm/ + git/ trees extensions install into. 700 — OAuth material.

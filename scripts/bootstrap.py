@@ -228,7 +228,7 @@ def parse_args(argv):
     ap.add_argument(
         "--agents",
         default="",
-        help="coding agents: claude,codex,pi / all (default) / none (DOTFILE_AGENTS)",
+        help="coding agents: claude,pi / all (default) / none (DOTFILE_AGENTS)",
     )
     ap.add_argument(
         "--system",

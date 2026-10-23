@@ -97,7 +97,7 @@ When it finishes, start the new shell with `exec zsh -l` (or re-login).
 | `--env NAME` | Environment: `default` or `mewtant` — picks the state root and the env-only links. `ec2-wo-fsx` remains a legacy alias for `default`. |
 | `--state-root DIR` | Override the persistent root for the `$HOME` links. |
 | `--network CN` | China mirrors for pypi/uv, rustup and Homebrew's installer. |
-| `--agents <list>` | Which coding agents to provision: `claude,codex,pi` / `all` (default) / `none`. |
+| `--agents <list>` | Which coding agents to provision: `claude,pi` / `all` (default) / `none`. |
 | `--system <list>` | Opt-in Linux system components (`all` = every one; `none` = skip). |
 
 Every flag has an env-var twin the chezmoi config template reads directly:
@@ -317,19 +317,22 @@ Never install one by hand on a machine.
 
 ## Coding agents
 
-Three agents — **Claude Code**, **Codex CLI** and **pi** — are provisioned from
-one in-repo manifest (`scripts/agents.py`), exactly as
+Two CLIs — **Claude Code** and **pi** — are provisioned from one in-repo
+manifest (`scripts/agents.py`), exactly as
 [ADR-0011](docs/plans/adr-0011-multi-agent-toolchain-single-source-2026-08-04.md)
 and [ADR-0012](docs/plans/adr-0012-third-slot-upstream-pi-2026-08-28.md)
 describe: what the agents *have* is a reviewed table there, what each agent *is*
 stays in its own config, which lives on the state root through the env links.
+**DSH** (DeepSeek Harness) is the owner's harness and reads the shared
+`~/.agents` instruction and skills roots directly, so it needs no projection.
+Codex was dropped on 2026-10-23 (ADR-0011 update log).
 `setup.py` projects the manifest whenever it changes; the two steps that need a
 human (the Lark CLI installer) are written to
 `~/.local/share/dotfiles/post-login-setup.sh` — run `dotfiles-postsetup` once.
 
 ```bash
 just agents                         # what the agents have, and who gets what
-./bootstrap.sh --agents claude,codex
+./bootstrap.sh --agents claude,pi
 ```
 
 ## China mirrors
@@ -386,8 +389,8 @@ don't cite them as current design.
   source entry, and do not "fix" the reconcile into an overwrite.
 - **Node stays with nvm.** No `node`/`npm:` tools in `mise.toml`; the two must
   not race for `npm` on PATH.
-- **Agent config files** (`~/.claude/settings.json`, `~/.codex/config.toml`,
-  `~/.pi/agent/settings.json`): rewritten by the agents; never make one a
+- **Agent config files** (`~/.claude/settings.json`, `~/.pi/agent/settings.json`,
+  `~/.dsh/`): rewritten by the agents; never make one a
   chezmoi source entry. pi's is seeded leaf-by-leaf under ADR-0012's contract;
   Claude's gets two seeded leaves, `env.CLAUDE_CODE_SHELL` and `env.CLAUDE_ENV_FILE`
   (ADR-0011 update log).

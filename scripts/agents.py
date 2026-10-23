@@ -5,28 +5,33 @@
 """The multi-agent capability manifest and its per-agent projection (ADR-0011,
 ADR-0012).
 
-Three coding agents are provisioned from this one file: **Claude Code**, **Codex
-CLI** and **pi**. ADR-0011 partitions their configuration into three planes and
-treats each differently — this module implements ① and ②, and touches ③ only as
-a seed: pi's settings because ADR-0012 says so explicitly, and two Claude leaves
-(``env.CLAUDE_CODE_SHELL``, ``env.CLAUDE_ENV_FILE``; ADR-0011 update log 2026-10-20):
+Two CLI agents are provisioned from this one file: **Claude Code** and **pi**.
+**DSH** (DeepSeek Harness) is the owner's harness and needs no projection — it
+reads the shared instruction and skills roots directly, which is also why it
+never appears in the tables below. ADR-0011 partitions configuration into three
+planes and treats each differently — this module implements ① and ②, and touches
+③ only as a seed: pi's settings because ADR-0012 says so explicitly, and two
+Claude leaves (``env.CLAUDE_CODE_SHELL``, ``env.CLAUDE_ENV_FILE``; ADR-0011
+update log 2026-10-20):
 
 - **① instruction — single-sourced.** ``~/.agents/AGENTS.md`` is the only
-  instruction source. ``~/.codex/AGENTS.md`` and ``~/.pi/agent/AGENTS.md`` symlink
-  to it; ``~/.claude/CLAUDE.md`` is a thin shell that imports it because Claude
-  only discovers ``AGENTS.md`` when no ``CLAUDE.md`` exists. Standing rule:
-  nothing cross-agent may be written into the Claude shell.
+  instruction source. DSH loads it as its workspace instructions;
+  ``~/.pi/agent/AGENTS.md`` symlinks to it; ``~/.claude/CLAUDE.md`` is a thin
+  shell that imports it because Claude only discovers ``AGENTS.md`` when no
+  ``CLAUDE.md`` exists. Standing rule: nothing cross-agent may be written into
+  the Claude shell.
 - **② capability — one manifest, projected per agent.** The ``MARKETPLACES`` /
   ``PLUGINS`` / ``MCP_SERVERS`` / ``PI_PACKAGES`` tables below are the single
-  reviewed source for what the agents *have*. Claude and Codex get theirs through
-  their own CLIs (``claude plugin install``, ``claude mcp add``, ``codex mcp
-  add``); pi, which has no marketplace CLI, gets its through two declarative
-  files this repo owns — native ``~/.pi/agent/mcp.json`` and
-  ``~/.pi/agent/claude-plugins.json`` (``pi-claude-marketplace``'s documented
-  user-authored desired state) and the ``packages`` array in pi's settings.
+  reviewed source for what the agents *have*. Claude gets its through its CLI
+  (``claude plugin install``, ``claude mcp add``); pi, which has no marketplace
+  CLI, gets its through two declarative files this repo owns — native
+  ``~/.pi/agent/mcp.json`` and ``~/.pi/agent/claude-plugins.json``
+  (``pi-claude-marketplace``'s documented user-authored desired state) and the
+  ``packages`` array in pi's settings. DSH reads ``~/.agents/skills`` directly,
+  so the loose-skills track reaches it with no per-agent step.
 - **③ preference — not unified, and for pi seeded rather than owned.** Model,
-  theme and approval policy stay per-agent. All three agents rewrite their own
-  config at runtime (Claude ``/model``+``/config``, Codex ``/model``, pi
+  theme and approval policy stay per-agent. The agents rewrite their own config
+  at runtime (Claude ``/model``+``/config``, pi
   ``/settings``+``/model``+``pi install``), which is why none of these files can
   be a chezmoi-managed file — a repo-owned copy is excluded by construction, not
   by preference. pi is the one exception ADR-0012 grants, and it keeps that rule's
@@ -42,15 +47,13 @@ root — now also remove names they used to declare (``RETIRED_MCP_SERVERS``,
 ``RETIRED_PI_PACKAGES``, ``RETIRED_SKILLS``). Anything the manifest never knew
 about is still left alone.
 
-The third slot has changed occupant twice, and the current reasons matter more
-than the history:
+The roster is **Claude Code + pi**, both provisioned here, with **DSH** as the
+owner's harness: DSH reads the shared instruction and skills roots directly, so
+it needs no entry. **Codex was dropped on 2026-10-23** (ADR-0011 update log) —
+its plugin projection was a third, silently drifting copy of the same manifest
+and the owner no longer uses it. The third slot changed occupant twice before
+that, and those reasons still explain the manifest's shape:
 
-- **Codex has a plugin marketplace** (``codex plugin marketplace add <SOURCE>`` /
-  ``codex plugin add PLUGIN@MARKETPLACE``, verified on the machine), so ADR-0011's
-  accepted "Codex cannot see ``agent-skillset``" gap is closed. The dual-track
-  skills decision is unchanged — marketplaces stay marketplace-managed, loose
-  skills stay in ``~/.agents/skills`` — only the *reach* of the marketplace track
-  grew, and it now reaches pi as well.
 - **pi replaced omp in the third slot (2026-08-28; ADR-0012), for
   interoperability rather than features.** omp is the richer binary: it ships MCP,
   sub-agents, memory and a browser natively, all of which upstream pi refuses by
@@ -115,8 +118,9 @@ SHARED_INSTRUCTIONS_SEED = """\
 # AGENTS.md — shared agent instructions
 
 The single instruction source for every coding agent on this machine (ADR-0011
-plane ①). Codex reads it as `~/.codex/AGENTS.md`; Claude Code reads it through the
-`@~/.agents/AGENTS.md` import at the top of `~/.claude/CLAUDE.md`.
+plane ①). DSH reads it directly as its workspace instructions; Claude Code reads
+it through the `@~/.agents/AGENTS.md` import at the top of `~/.claude/CLAUDE.md`;
+pi symlinks it to `~/.pi/agent/AGENTS.md`.
 
 Anything that applies to more than one agent belongs **here**. Claude-only rules
 go in the `~/.claude/CLAUDE.md` shell — nothing else does.
@@ -163,8 +167,8 @@ class McpServer:
     Either a stdio server (``command`` + ``args``) or a remote one (``url``).
     ``delegated=True`` means some other installer already writes this server into
     the agents' config and the projection must not add it a second time (codegraph
-    installs itself into Claude *and* Codex, including Claude's auto-allow list,
-    which we could not reproduce from here).
+    installs itself into Claude, including Claude's auto-allow list, which we
+    could not reproduce from here).
     """
 
     def __init__(self, name, agents, command=None, args=(), env=None, url=None,
@@ -202,26 +206,23 @@ class PiPackage:
         self.note = note
 
 
-# Marketplaces — all four that the reference host actually has, and both agents
+# Marketplaces — every entry the reference host actually has, for both agents
 # that have a marketplace mechanism. `worktrunk` and `composio` were installed by
 # hand and existed nowhere in the repo; closing that drift is the whole reason
 # ADR-0011 supersedes ADR-0005, so do not remove them because they look
 # unfamiliar.
 #
-# Codex joined these after the ADR: it grew a plugin marketplace (2026-03-26) that
-# takes the same source shapes Claude's does, which retires the ADR's accepted
-# "Codex cannot see agent-skillset" gap. Projection is best-effort per entry, so a
-# plugin Codex cannot use fails as one warning rather than as a broken run.
-# Every agent with a marketplace mechanism. Claude and Codex have real CLIs; pi
-# reads marketplaces through `pi-claude-marketplace`, whose declarative config
-# (~/.pi/agent/claude-plugins.json) is generated from these same two tables
-# (ADR-0012). An entry that genuinely cannot reach one of the three should name its
-# agents explicitly rather than using this tuple, so the exception stays visible.
+# Claude has a real CLI; pi reads marketplaces through `pi-claude-marketplace`,
+# whose declarative config (~/.pi/agent/claude-plugins.json) is generated from
+# these same two tables (ADR-0012). Projection is best-effort per entry, so a
+# plugin one agent cannot use fails as one warning rather than as a broken run.
+# An entry that genuinely cannot reach one of the two should name its agents
+# explicitly rather than using this tuple, so the exception stays visible.
 #
 # A marketplace MUST target every agent its plugins do: pi-claude-marketplace
 # resolves a plugin against the declared marketplaces and reports
 # "<marketplace not declared>" otherwise.
-ALL_MARKETS = ("claude", "codex", "pi")
+ALL_MARKETS = ("claude", "pi")
 
 MARKETPLACES = (
     Marketplace("agent-skillset", "hernandor/agent-skillset", agents=ALL_MARKETS,
@@ -250,9 +251,9 @@ PLUGINS = (
     Plugin("discuss", "agent-skillset", agents=ALL_MARKETS),
     Plugin("implement", "agent-skillset", agents=ALL_MARKETS),
     Plugin("dev-loop", "agent-skillset", agents=ALL_MARKETS,
-           note="its hooks are the only non-skill content in agent-skillset; Codex has a "
-                "hook engine, and pi-claude-marketplace supports hooks only partially — "
-                "expected to degrade, not a defect to chase"),
+           note="its hooks are the only non-skill content in agent-skillset; "
+                "pi-claude-marketplace supports hooks only partially — expected to "
+                "degrade, not a defect to chase"),
     Plugin("fetch-external-knowledge", "agent-skillset", agents=ALL_MARKETS),
     Plugin("reclaim-code-entropy", "agent-skillset", agents=ALL_MARKETS,
            note="drift found 2026-08-28: enabled on the machine, absent from this table"),
@@ -267,16 +268,15 @@ PLUGINS = (
     Plugin("hugging-face-buckets", "mewtant-plugins", agents=ALL_MARKETS),
     Plugin("feedback-mewtant-plugins", "mewtant-plugins", agents=ALL_MARKETS),
     Plugin("dagster", "dagster", agents=ALL_MARKETS,
-           note="Dagster's skill plus the bundled Dagster+ MCP server (the plugin also "
-                "ships `.codex-mcp.json` for Codex). Replaced the deprecated "
-                "`dagster-expert` package on 2026-10-23; its skill is still invoked as "
-                "`dagster-expert`, which is exactly why the loose copy has to go — two "
-                "providers leave the deprecated one selectable. pi's marketplace bridge "
-                "needs pi-mcp-adapter for the MCP half, so pi gets the skill only"),
+           note="Dagster's skill plus the bundled Dagster+ MCP server. Replaced the "
+                "deprecated `dagster-expert` package on 2026-10-23; its skill is still "
+                "invoked as `dagster-expert`, which is exactly why the loose copy has to "
+                "go — two providers leave the deprecated one selectable. pi's marketplace "
+                "bridge needs pi-mcp-adapter for the MCP half, so pi gets the skill only"),
     # `pyright-lsp@claude-plugins-official` is enabled on the machine and is NOT
     # here on purpose: its marketplace is a Claude *builtin*, absent from
-    # extraKnownMarketplaces, so there is nothing for the Codex or pi projections
-    # to add it from. Recording the exception beats silently dropping it.
+    # extraKnownMarketplaces, so there is nothing for the pi projection to add it
+    # from. Recording the exception beats silently dropping it.
 )
 
 # --- the loose-skills track (`npx skills`) -----------------------------------
@@ -285,9 +285,10 @@ PLUGINS = (
 # (vercel-labs/skills) instead. A global install writes ONE canonical copy per
 # skill into ~/.agents/skills/<name> — exactly SHARED_SKILLS, the Tier-B
 # env-linked root this repo already declares — and symlinks it into each named
-# agent's own skills dir. Codex and pi read ~/.agents/skills natively (their
-# per-agent dirs are links onto the same root, so their symlink step degrades
-# to a copy-in-place); Claude gets real per-skill links in ~/.claude/skills.
+# agent's own skills dir. pi reads ~/.agents/skills natively (its per-agent dir
+# is a link onto the same root, so the symlink step degrades to a copy-in-place);
+# DSH reads it directly, so the canonical copy reaches it with no extra step.
+# Claude gets real per-skill links in ~/.claude/skills.
 #
 # This track is for skills-only sources. Anything that is ALSO a plugin
 # (agent-skillset, astral-sh, …) stays on the marketplace track above — a loose
@@ -306,11 +307,12 @@ class SkillPackage:
         self.note = note
 
 
-# dotfiles agent id -> skills-CLI agent name (`--agent`).
-SKILLS_CLI_AGENT_NAMES = {"claude": "claude-code", "codex": "codex", "pi": "pi"}
+# dotfiles agent id -> skills-CLI agent name (`--agent`). DSH reads the shared
+# root directly, so it needs no name here.
+SKILLS_CLI_AGENT_NAMES = {"claude": "claude-code", "pi": "pi"}
 
 SKILL_PACKAGES = (
-    SkillPackage("cathrynlavery/diagram-design", agents=("claude", "codex", "pi"),
+    SkillPackage("cathrynlavery/diagram-design", agents=("claude", "pi"),
                  note="diagram design skills"),
 )
 
@@ -321,17 +323,16 @@ SKILL_PACKAGES = (
 # because its source (dagster-io/skills) is a plugin marketplace now and the
 # `dagster` plugin carries the real skill; the loose copy is only a deprecation
 # notice, and — because it answers to the same skill name — it shadows the plugin
-# for Codex and pi, which read SHARED_SKILLS natively.
+# for pi, which reads SHARED_SKILLS natively.
 RETIRED_SKILLS = ("dagster-expert",)
 
 # MCP servers. `agents` is the single point ADR-0011 promises: one entry reaches
-# Claude via `claude mcp add`, Codex via `codex mcp add`, and pi via its native
-# `~/.pi/agent/mcp.json`.
+# Claude via `claude mcp add` and pi via its native `~/.pi/agent/mcp.json`.
 MCP_SERVERS = (
     McpServer(
-        "codegraph", agents=("claude", "codex", "pi"),
+        "codegraph", agents=("claude", "pi"),
         command="codegraph", args=["serve", "--mcp"], delegated=True,
-        note="code-intelligence graph; `codegraph install` wires Claude + Codex itself "
+        note="code-intelligence graph; `codegraph install` wires Claude itself "
              "(and writes Claude's auto-allow list), so only pi is projected from here",
     ),
     # `memory` (@modelcontextprotocol/server-memory over ~/.agents/memory/memory.jsonl)
@@ -460,9 +461,8 @@ PI_PACKAGES = (
 )
 
 # --- install channels --------------------------------------------------------
-# claude and codex use their official installers (ADR-0011, "Install channels"):
-# versions stay outside git so each tool's self-update keeps working.
-CODEX_INSTALLER = "https://chatgpt.com/codex/install.sh"
+# claude uses its official installer (ADR-0011, "Install channels"): versions
+# stay outside git so its self-update keeps working.
 
 # pi's install channel, and it is a constraint rather than a preference (ADR-0012).
 # `npm install -g --prefix ~/.local` is the only channel satisfying all three of:
@@ -784,7 +784,7 @@ PI_NPM_PROJECT_SEED = {
 
 # Agent ids that `codegraph install --target` accepts (a bad id makes it print the
 # list). pi is not one of them — it gets codegraph through its native MCP file.
-CODEGRAPH_TARGETS = ("claude", "codex")
+CODEGRAPH_TARGETS = ("claude",)
 
 
 # --- small filesystem / mise helpers ----------------------------------------
@@ -914,11 +914,11 @@ def _link(ctx, link, target, absorb=False):
 
     ``absorb`` handles the one case where a *.backup would lose real content: a
     tool that reads the linked file, appends to it, and writes the result back
-    over the link path — which replaces the symlink with a regular file. codegraph
-    does exactly this to ``~/.codex/AGENTS.md`` (verified on a clean pod: the file
-    it left behind was the shared source plus 803 bytes of its own). When the
-    displaced file starts with the target's content, the addition is folded into
-    the target — the single source keeps it — and the link is restored.
+    over the link path — which replaces the symlink with a regular file. A
+    delegated installer does exactly this to an agent's instruction file (on a
+    clean pod codegraph left the shared source plus 803 bytes of its own). When
+    the displaced file starts with the target's content, the addition is folded
+    into the target — the single source keeps it — and the link is restored.
     """
     if ctx.dry_run:
         logger.info("[DRY-RUN] would link %s -> %s", link, target)
@@ -1007,8 +1007,8 @@ def write_shared_mcp(ctx):
     owner put here is kept, and an unparseable file is moved aside (``.backup``)
     rather than discarded.
 
-    Pi's native MCP path is then symlinked to that shared file, so Pi, Claude,
-    and Codex see the same schema and server set.
+    Pi's native MCP path is then symlinked to that shared file, so Pi sees the
+    same schema and server set as the CLI projections.
     """
     wanted = {s.name: s.block() for s in MCP_SERVERS if "pi" in s.agents}
     if ctx.dry_run:
@@ -1470,7 +1470,7 @@ def write_pi_claude_plugins(ctx):
     Plugin versions are deliberately absent: they are a machine fact in the
     extension's own ``state.json``. Marketplace pinning would be a git ref inside
     ``source``; the bare ``owner/repo`` entries here float the default branch, the
-    same trade the Claude and Codex projections already make.
+    same trade Claude's projection already makes.
     """
     data = {
         "schemaVersion": 1,
@@ -1713,8 +1713,7 @@ class ClaudeAgent(Agent):
         # Found when the (since removed) agentmemory shim carried an env — the
         # only env-carrying entry this path ever had, since codegraph is
         # delegated. No entry carries an env today, so the order matters for the
-        # next one that does. Codex's _mcp_add already names the server first and
-        # was never affected.
+        # next one that does.
         cmd += [server.name]
         for key, value in server.env.items():
             cmd += ["-e", "{}={}".format(key, value)]
@@ -1760,95 +1759,6 @@ class ClaudeAgent(Agent):
         elif self.IMPORT_LINE not in _read(self.SHELL):
             add("config", "prepend '{}' to the existing {} (its content is kept)".format(
                 self.IMPORT_LINE, self.SHELL))
-
-
-class CodexAgent(Agent):
-    id = "codex"
-    binary = "codex"
-    description = "Codex CLI"
-    config_dir = "~/.codex"
-
-    # Codex reads a global AGENTS.md; symlinking it is the whole of its side of
-    # plane ①.
-    INSTRUCTIONS = HOME / ".codex" / "AGENTS.md"
-    # Codex reads $HOME/.agents/skills natively (user scope), so this link is a
-    # compatibility belt for the older per-agent path, not the mechanism.
-    SKILLS = HOME / ".codex" / "skills"
-
-    def install(self, ctx):
-        if shutil.which(self.binary):
-            logger.info("codex CLI already installed; leaving its self-update in charge")
-            return
-        logger.info("installing Codex CLI")
-        # The official installer drops a Rust binary in ~/.local/bin (no Node
-        # dependency). CODEX_NON_INTERACTIVE keeps it from asking to start Codex
-        # or to remove a conflicting npm-managed install mid-bootstrap.
-        ctx.package_manager("scripts").install(
-            ctx,
-            Script(CODEX_INSTALLER, interpreter="sh",
-                   env={"CODEX_NON_INTERACTIVE": "1"}, check=False),
-        )
-
-    def project(self, ctx):
-        _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS)
-        _link(ctx, self.SKILLS, SHARED_SKILLS)
-        codex = self.cli(ctx)
-        if not codex:
-            if not ctx.dry_run:
-                logger.warning("codex CLI not resolvable; skipping its projection")
-            return
-        # Same manifest, Codex's own commands. `codex plugin marketplace add` takes
-        # the same source shapes as Claude's (path, owner/repo[@ref], HTTPS/SSH git
-        # URL), so one entry really does serve both.
-        for market in self._marketplaces():
-            ctx.run_command([codex, "plugin", "marketplace", "add", market.source],
-                            check=False, stdin_devnull=True)
-        # `marketplace add` is a no-op for a marketplace Codex already has, and
-        # unlike Claude's it never refreshes the git snapshot, so a plugin added
-        # to the manifest after the first bootstrap is "not found" forever.
-        # Refresh every snapshot before resolving plugins against them.
-        ctx.run_command([codex, "plugin", "marketplace", "upgrade"],
-                        check=False, stdin_devnull=True)
-        for plugin in self._plugins():
-            ctx.run_command([codex, "plugin", "add", plugin.qualified],
-                            check=False, stdin_devnull=True)
-        for server in self._mcp_servers():
-            ctx.run_command(self._mcp_add(codex, server), check=False, stdin_devnull=True)
-
-    def relink(self, ctx):
-        # codegraph appends its usage block to ~/.codex/AGENTS.md and writes the
-        # result back over the link. Absorb the block into the shared source and
-        # restore the link, so plane ① survives every bootstrap rather than
-        # decaying into a snapshot on the first one.
-        _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS, absorb=True)
-        _link(ctx, self.SKILLS, SHARED_SKILLS)
-
-    @staticmethod
-    def _mcp_add(codex, server):
-        cmd = [codex, "mcp", "add", server.name]
-        if server.url:
-            return cmd + ["--url", server.url]
-        for key, value in server.env.items():
-            cmd += ["--env", "{}={}".format(key, value)]
-        return cmd + ["--"] + [server.command] + server.args
-
-    def plan(self, ctx, add):
-        if shutil.which(self.binary):
-            add("install", "Codex CLI already present — left as is")
-        else:
-            add("install", "Codex CLI from chatgpt.com/codex/install.sh (into ~/.local/bin)")
-        add("config", "{} marketplace(s) + {} plugin(s) into Codex: {}".format(
-            len(self._marketplaces()), len(self._plugins()),
-            ", ".join(p.qualified for p in self._plugins())))
-        for link, target in ((self.INSTRUCTIONS, SHARED_INSTRUCTIONS), (self.SKILLS, SHARED_SKILLS)):
-            if _link_is_current(link, target):
-                continue
-            add("config", "{} -> {}".format(link, target))
-            if link.exists() and not link.is_symlink():
-                add("backup", "{} -> {}.backup (it is a real file/dir, not a link)".format(
-                    link, link.name))
-        for server in self._mcp_servers():
-            add("config", "MCP server '{}' -> codex mcp add".format(server.name))
 
 
 class PiAgent(Agent):
@@ -1948,9 +1858,9 @@ class PiAgent(Agent):
 
         codegraph appends its usage block to an agent's instruction file and writes
         the result back over the path, which replaces the symlink with a regular
-        file. pi is not one of codegraph's targets today, but it reads AGENTS.md the
-        same way Codex does, so this costs one call and removes a whole class of
-        future surprise.
+        file. pi is not one of codegraph's targets today, but it reads AGENTS.md
+        the same way, so this costs one call and removes a whole class of future
+        surprise.
         """
         _link(ctx, self.INSTRUCTIONS, SHARED_INSTRUCTIONS, absorb=True)
         _link(ctx, self.SKILLS, SHARED_SKILLS)
@@ -2046,7 +1956,7 @@ def install_skill_packages(ctx, ids):
             continue
         # --agent is VARIADIC: it consumes every following non-flag argument as
         # one more agent name and does NOT split on commas — verified in the
-        # CLI's own parser, and "claude-code,codex,pi" as one token dies with
+        # CLI's own parser, and "claude-code,pi" as one token dies with
         # `Invalid agents`. So the names are passed as separate arguments.
         ctx.run_command([npx, "-y", "skills", "add", pkg.source, "--global",
                          "--agent", *targets, "--skill", "*", "-y"],
@@ -2060,13 +1970,12 @@ def retire_skills(ctx):
     leaves its canonical directory in SHARED_SKILLS on every machine that
     already applied it. Remove that directory plus any per-skill link an agent's
     own skills dir holds. Claude keeps real symlinks in ``~/.claude/skills``;
-    Codex's and pi's skills dirs are themselves links onto SHARED_SKILLS, so the
-    canonical copy is all they have and nothing else needs touching there.
+    pi's skills dir is itself a link onto SHARED_SKILLS, so the canonical copy
+    is all it has and nothing else needs touching there.
     """
     for name in RETIRED_SKILLS:
         canonical = SHARED_SKILLS / name
         links = [d / name for d in (HOME / ".claude" / "skills",
-                                    HOME / ".codex" / "skills",
                                     HOME / ".pi" / "agent" / "skills")
                  if (d / name).is_symlink()]
         if not (canonical.is_symlink() or canonical.exists() or links):
@@ -2104,10 +2013,11 @@ def provision(ctx, ids, codegraph_installer):
 
     # Project BEFORE delegating to codegraph. Its installer writes usage
     # instructions into the agents' instruction files, so with the links already
-    # in place its Codex write lands *through* ~/.codex/AGENTS.md in the shared
-    # source — where cross-agent content belongs — instead of in a file the link
-    # would then displace. On the first clean-pod run the order was the other way
-    # round and codegraph's text ended up orphaned in AGENTS.md.backup.
+    # in place its write lands *through* the agent's instruction link — e.g.
+    # ~/.pi/agent/AGENTS.md, or ~/.codex/AGENTS.md before Codex was dropped — in
+    # the shared source, where cross-agent content belongs, instead of in a file
+    # the link would then displace. On the first clean-pod run the order was the
+    # other way round and codegraph's text ended up orphaned in AGENTS.md.backup.
     for agent in agents:
         agent.project(ctx)
 
@@ -2123,7 +2033,7 @@ def provision(ctx, ids, codegraph_installer):
 
     # codegraph installs its own MCP server into the agents it knows, which is
     # why MCP_SERVERS marks it delegated. Only the agents actually selected are
-    # named, so a Claude-only run does not configure Codex behind the user's back.
+    # named, so a Claude-only run does not configure pi behind the user's back.
     codegraph = codegraph_installer(ctx)
     targets = [i for i in ids if i in CODEGRAPH_TARGETS]
     if codegraph and targets:
