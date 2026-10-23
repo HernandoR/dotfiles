@@ -70,6 +70,10 @@ bottom = "latest"
 # the packages itself; NO conda/mamba/pixi binary is installed (checked against
 # the backend docs and a scratch install, 2026-09-10).
 "conda:skopeo" = "latest"
+# duckdb: github backend, not the registry's aqua one — aqua still expects the
+# pre-2.0 asset name (duckdb_cli-<os>-<arch>.zip) and fails on 2.0.0, which
+# ships duckdb-cli-<os>-<arch>.tar.gz (checked 2026-10-22, linux-x64).
+"github:duckdb/duckdb" = "latest"
 # 1Password CLI (`op`): vfox plugin fetching 1Password's own release.
 1password = "latest"
 
