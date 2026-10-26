@@ -179,6 +179,13 @@ kind = "file"
 mode = "644"
 seed_from = "mise"
 
+# gh's login state: `gh auth login` / `gh auth switch` rewrite this file, and it
+# holds the OAuth token when no keyring is available, hence 600. Only hosts.yml
+# is linked — gh's config.yml stays free for chezmoi to manage.
+[envlinks.entries.".config/gh/hosts.yml"]
+kind = "file"
+mode = "600"
+
 # --- environment-specific (the former prod/* branch deltas) -------------------
 
 # jcc: intranet-only tool. Its config holds a bearer token and an internal
