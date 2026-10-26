@@ -21,15 +21,18 @@ The rules an agent must not learn the hard way:
 - **Data over code.** A tool or runtime goes in `home/.chezmoidata/mise.toml`
   whenever mise has a backend for it (check `mise registry`); Node packages in
   `node.toml` (nvm, never mise); only OS-level packages in `packages.toml`; a
-  persistent `$HOME` path in `envlinks.toml`. The scripts read those files; do
-  not hardcode an inventory in a script.
+  persistent `$HOME` path in `envlinks.toml`; what DSH is restored with in
+  `dsh.toml` (ADR-0014). The scripts read those files; do not hardcode an
+  inventory in a script.
 - **Machine differences are chezmoi data, not branches.** `env`, `stateRoot`,
   `network`, `agents`, `system` are answered at `chezmoi init` (or via
   `DOTFILE_*` env vars). Gate an environment-only thing with `envs = [...]` in
   `envlinks.toml` or a template condition. `main` is the only branch.
 - **A file a tool rewrites at runtime is never a chezmoi source entry.** It is
   an env-link entry (seeded once, then the tool's). Agent configs, mise's
-  `config.toml`, `~/.claude.json` are the standing examples.
+  `config.toml`, `~/.claude.json` are the standing examples; under `~/.dsh` the
+  app owns the profile, so `scripts/dsh.py` generates the two files it never
+  writes instead (ADR-0014).
 - **Nothing is installed by hand on a machine** — packages, runtimes and agent
   capabilities all go through their files in this repo (README: *Adding
   software*, *Coding agents*).

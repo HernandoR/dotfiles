@@ -79,8 +79,10 @@ The whole run is one Python process (`scripts/bootstrap.py`; the root
    - `run_onchange_after` — **mise tools** (`scripts/runtimes.py`: declare
      what the live config lacks, `mise install`), **Node via nvm**
      (`scripts/node.py`), **OS packages** (`scripts/packages.py`: brew / apt /
-     dnf / yum), **fonts**, and **setup** (`scripts/setup.py`: login shell,
-     agent toolchain, system components) — each only when its inputs changed;
+     dnf / yum), **fonts**, **DSH** (`scripts/dsh.py`: the macOS desktop app's
+     profile, plugins and machine-wide home patch — ADR-0014), and **setup**
+     (`scripts/setup.py`: login shell, agent toolchain, system components) —
+     each only when its inputs changed;
    - `run_after` promotes the first-apply backup transaction to complete only
      after all prior actions succeed.
 
@@ -179,6 +181,8 @@ answers as defaults) or by re-running the bootstrap with the flag.
 | Tools and runtimes (most of the toolset) | `home/.chezmoidata/mise.toml` → `~/.config/mise/config.toml` (seeded, then reconciled: missing tools added, existing versions kept) | mise (`mise use -g`, `mise up`) and `scripts/runtimes.py` |
 | Node ecosystem | `home/.chezmoidata/node.toml` → `~/.nvm` | nvm and `scripts/node.py` |
 | OS-level packages (zsh, GNU userland, git, vim, wget, rsync, tree, xclip) | `home/.chezmoidata/packages.toml` | `scripts/packages.py` (brew / apt / dnf / yum) |
+| The DSH desktop app (macOS) | `home/.chezmoidata/packages.toml` (Homebrew cask) | brew installs it once; the app self-updates |
+| DSH config (desktop profile plugins + the machine-wide home patch) | `home/.chezmoidata/dsh.toml` → generated under `$DSH_HOME` by `scripts/dsh.py` | `scripts/dsh.py`; the app owns every other file under `~/.dsh` |
 | Rime/Squirrel input method | `home/.chezmoidata/rime.toml` + `rime/` → persistent `~/Library/Rime` | `scripts/rime.py` (Wanxiang assets and grammar model) |
 | Agent capabilities | `scripts/agents.py` manifest | the agents' own CLIs, projected by `setup.py` |
 
@@ -289,6 +293,21 @@ CapsLock do not toggle its English mode, and Squirrel's bundled per-application
 English defaults are overridden to Chinese. Wanxiang's mixed-input English
 candidates stay available; use macOS ABC when you need direct English input.
 
+### DSH on macOS → `home/.chezmoidata/dsh.toml`
+
+The DeepSeek Harness desktop app is an OS-level cask entry; its *configuration*
+is not a dotfile. `dsh.toml` is the inventory `scripts/dsh.py` renders into the
+two files the app never writes — the machine-wide home patch
+(`$DSH_HOME/cordis.patch.yml`) and `$DSH_HOME/.env` — and seeds the desktop
+profile's `package.json` / `pnpm-workspace.yaml` add-only, then runs the app's own
+`dsh plugin --profile desktop install`. Add a plugin by adding its exact version
+to `[dsh.profile.plugins]` and its bundle to `bundles`; add a capability as a
+`[[dsh.patch]]` row; add a token-gated MCP server as `[[dsh.mcp]]`. Tokens never
+go here: declared secrets are mirrored from the process environment (so
+`~/.exports.local`) into `$DSH_HOME/.env`. Profile-level preferences the Settings
+UI owns (`ui-*`, `better-sidebar`) are deliberately not restored; the app stays
+the owner of them. Then `just dsh` (ADR-0014).
+
 ### A persistent `$HOME` path → `home/.chezmoidata/envlinks.toml`
 
 ```toml
@@ -297,6 +316,7 @@ kind = "dir"     # or "file"
 mode = "700"     # applied on creation only
 # seed = "..."   # file entries: initial content, on creation only
 # envs = ["mewtant"]   # only in these environments
+# only = "darwin"      # one OS family, for a target that exists only there
 ```
 
 Say why it is mutable in a comment. `just env-links --plan` shows what would
@@ -324,7 +344,11 @@ and [ADR-0012](docs/plans/adr-0012-third-slot-upstream-pi-2026-08-28.md)
 describe: what the agents *have* is a reviewed table there, what each agent *is*
 stays in its own config, which lives on the state root through the env links.
 **DSH** (DeepSeek Harness) is the owner's harness and reads the shared
-`~/.agents` instruction and skills roots directly, so it needs no projection.
+`~/.agents` instruction and skills roots directly, so it needs no entry in that
+manifest. Its own machine-level state is still restored on a new machine, by a
+separate repo-owned path: `home/.chezmoidata/dsh.toml` → `scripts/dsh.py`
+(ADR-0014) — the macOS cask, the `~/.local/bin/dsh` link, the desktop profile's
+plugin set and the machine-wide home patch, with secrets supplied machine-locally.
 Codex was dropped on 2026-10-23 (ADR-0011 update log).
 `setup.py` projects the manifest whenever it changes; the steps that need a
 human (the Lark CLI installer, its app config and OAuth login, nmem) are written
@@ -338,6 +362,7 @@ set `LARK_APP_ID` and `LARK_APP_SECRET` in `~/.exports.local` (or
 
 ```bash
 just agents                         # what the agents have, and who gets what
+just dsh --plan                     # what the DSH restore would change
 ./bootstrap.sh --agents claude,pi
 ```
 
@@ -400,6 +425,15 @@ don't cite them as current design.
   chezmoi source entry. pi's is seeded leaf-by-leaf under ADR-0012's contract;
   Claude's gets two seeded leaves, `env.CLAUDE_CODE_SHELL` and `env.CLAUDE_ENV_FILE`
   (ADR-0011 update log).
+- **`~/.dsh/`** is DSH's own state: the app rewrites `profiles/*/cordis.yml` and
+  the profile patch on launch, and `.credentials.yaml`, sessions and caches are
+  runtime state — never make any of it a chezmoi source entry. Exactly two files
+  are the repo's, and `scripts/dsh.py` generates them from `dsh.toml`:
+  `$DSH_HOME/cordis.patch.yml` and `$DSH_HOME/.env` (0600); it also seeds the
+  desktop profile's `package.json` / `pnpm-workspace.yaml`. Edit the inventory,
+  never the generated targets. Never `brew uninstall --zap deepseek-harness`
+  (its zap list trashes `~/.dsh`), and don't run `dsh plugin` by hand while the
+  desktop app is open.
 - **CN mirror gating:** everything goes through `DOTFILE_NETWORK_ENV`.
 - **`~/.claude/CLAUDE.md`** is the thin Claude-only shell importing
   `~/.agents/AGENTS.md`; cross-agent rules go in the latter.
@@ -410,7 +444,10 @@ There is no test framework. `just check` runs `scripts/check.py`: the data files
 parse and validate, every script compiles and answers `--help`, and chezmoi
 renders the whole tree per environment into a scratch `$HOME` where `zsh -n`,
 `git config --list` and TOML parsing check the results. `./bootstrap.sh
---dry-run --verbose` shows the full plan and chezmoi's diff.
+--dry-run --verbose` shows the full plan and chezmoi's diff. `just dsh
+--print-patch` renders the generated DSH home patch (and must contain no
+secret); `DSH_HOME=$(mktemp -d) just dsh` rehearses the restore against a
+scratch home instead of the live `~/.dsh`.
 
 ## Repository layout
 
@@ -420,8 +457,8 @@ bootstrap.sh      source scripts/uv-bootstrap.sh, exec scripts/bootstrap.py
 Justfile          `just` recipes for the day-to-day commands
 home/
   .chezmoi.toml.tmpl      the per-machine questions (env, stateRoot, network, agents, system)
-  .chezmoidata/           mise.toml, node.toml, packages.toml, envlinks.toml, rime.toml — inventories
-  .chezmoiscripts/        run_before tools/env links; run_onchange mise, node, packages, fonts, setup; final run_after stamp
+  .chezmoidata/           mise.toml, node.toml, packages.toml, envlinks.toml, rime.toml, dsh.toml — inventories
+  .chezmoiscripts/        run_before tools/env links; run_onchange mise, node, packages, fonts, dsh, setup; final run_after stamp
   .chezmoiexternal.toml   the zsh plugins
   dot_zshenv/.zprofile/.zshrc.tmpl, private_dot_config/{zsh,git,starship.toml,mise/conf.d,worktrunk,direnv}/,
   dot_tmux.conf, dot_local/bin/
@@ -432,10 +469,11 @@ scripts/
   env_links.py    the persistent $HOME links      runtimes.py   mise: reconcile + install
   node.py         nvm: Node, pnpm, npm globals    packages.py   OS packages (brew/apt/dnf/yum)
   setup.py        login shell, runtimes, agents, system components
+  dsh.py          DSH desktop profile + home patch (macOS)   rime.py   Wanxiang assets
   agents.py       the ADR-0011 manifest           components.py / managers.py / context.py
   check.py        `just check`
   docker-rootless-pod/, export-mnemopi-banks.py, brew_cask_install.py   standalone helpers
-docs/plans/       ADRs (0013 governs)      docs/rfc/   RFCs (0006 = this migration)
+docs/plans/       ADRs (0013 owns the layout, 0014 the DSH restore)      docs/rfc/   RFCs (0006 = the migration)
 ```
 
 ## Notes

@@ -561,3 +561,16 @@ the one genuine Tier A addition is the agentmemory service unit.
   CLI, `~/.codex` and its plugin cache — is a one-time action rather than
   something apply can do: the projection is add-only, and an env-link entry that
   disappears from the inventory leaves its `$HOME` link in place.
+
+- **2026-10-26 — "DSH needs no projection" is refined, not reversed.**
+  [ADR-0014](adr-0014-dsh-practice-restore-2026-10-26.md) keeps the 2026-10-23
+  conclusion for *this* ADR's manifest: DSH still has no `Agent` subclass and no
+  CLI-projection row, because it reads `~/.agents` directly and its one MCP
+  server is machine-level rather than the shared `MCP_SERVERS` projection. What
+  the 2026-10-23 entry did not cover is the harness's own machine-wide state —
+  the home patch, the desktop profile's plugin set, and the
+  model/provider/web-search settings — which otherwise lives only on the live
+  machine. ADR-0014 restores that state from a reviewed `dsh.toml` by script
+  generation (`scripts/dsh.py`), never by an agent config file, so "no
+  projection" stays true where it was said and gains a named, repo-owned
+  exception beside it.

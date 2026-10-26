@@ -49,6 +49,7 @@ if hasattr(signal, "SIGPIPE"):
 REPO = pathlib.Path(__file__).resolve().parent.parent
 DATA = REPO / "home" / ".chezmoidata"
 HOME = pathlib.Path.home()
+OS = "darwin" if sys.platform == "darwin" else "linux"
 
 
 def log(msg):
@@ -110,7 +111,13 @@ def chezmoi_data():
 
 def applies(entry, env):
     envs = entry.get("envs")
-    return not envs or env in envs
+    if envs and env not in envs:
+        return False
+    # `only` uses the same OS family ids as packages.toml (darwin | linux). A
+    # link whose target only exists on one platform must not be placed on the
+    # other: it could only dangle there, and nothing would ever repair it.
+    only = entry.get("only")
+    return not only or only == OS
 
 
 class Runner:

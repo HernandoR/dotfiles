@@ -1,0 +1,19 @@
+#!/bin/sh
+# DSH is a macOS-only desktop app (ADR-0014). The app owns its $DSH_HOME at
+# runtime, so nothing under it is a chezmoi source entry: this step restores the
+# profile seed, the home patch and $DSH_HOME/.env from the reviewed inventory.
+#   dsh.toml: {{ include ".chezmoidata/dsh.toml" | sha256sum }}
+#   dsh.py: {{ include (joinPath .chezmoi.workingTree "scripts" "dsh.py") | sha256sum }}
+set -eu
+# A stale VIRTUAL_ENV in the caller's shell makes `uv run --script` try to use
+# that venv's interpreter and fail. These are PEP 723 standalone scripts; uv
+# must resolve their interpreter itself.
+unset VIRTUAL_ENV
+{{ if eq .chezmoi.os "darwin" -}}
+export PATH="$HOME/.local/bin:$PATH"
+. "{{ .chezmoi.workingTree }}/scripts/uv-bootstrap.sh"
+command -v uv >/dev/null 2>&1 || { echo "dsh: uv not on PATH — run ./bootstrap.sh first" >&2; exit 1; }
+exec uv run --script "{{ .chezmoi.workingTree }}/scripts/dsh.py"
+{{- else -}}
+exit 0
+{{- end }}

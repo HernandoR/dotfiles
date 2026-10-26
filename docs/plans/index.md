@@ -1,7 +1,7 @@
 # ADR Index
 
 | ID | Title | Status | Date |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | [ADR-0001](adr-0001-dotfiles-staging-and-linking-strategy-2026-06-23.md) | Dotfiles staging-and-linking strategy | accepted | 2026-06-23 |
 | [ADR-0002](adr-0002-optional-node-toolchain-2026-06-23.md) | Optional Node toolchain (nvm + Node LTS + pnpm) | accepted | 2026-06-23 |
 | [ADR-0003](adr-0003-package-manager-install-abstraction-2026-06-25.md) | PackageManager install abstraction for optional components | accepted | 2026-06-25 |
@@ -15,3 +15,4 @@
 | [ADR-0011](adr-0011-multi-agent-toolchain-single-source-2026-08-04.md) | Multi-agent toolchain — one manifest projected by CLI; instructions single-sourced | accepted (memory + third slot → ADR-0012) | 2026-08-04 |
 | [ADR-0012](adr-0012-third-slot-upstream-pi-2026-08-28.md) | The third agent slot is upstream pi, chosen for interoperability and paid for in extensions | accepted | 2026-08-28 |
 | [ADR-0013](adr-0013-chezmoi-mise-nvm-uv-2026-09-09.md) | chezmoi owns the dotfiles, mise the tools, nvm the Node ecosystem; Python stays as `uv run` scripts | accepted (updated 2026-09-10) | 2026-09-09 |
+| [ADR-0014](adr-0014-dsh-practice-restore-2026-10-26.md) | DeepSeek Harness is restored from the repo — cask app, bundle CLI link, one generated home patch | accepted | 2026-10-26 |
