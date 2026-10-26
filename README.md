@@ -326,9 +326,15 @@ stays in its own config, which lives on the state root through the env links.
 **DSH** (DeepSeek Harness) is the owner's harness and reads the shared
 `~/.agents` instruction and skills roots directly, so it needs no projection.
 Codex was dropped on 2026-10-23 (ADR-0011 update log).
-`setup.py` projects the manifest whenever it changes; the two steps that need a
-human (the Lark CLI installer) are written to
-`~/.local/share/dotfiles/post-login-setup.sh` — run `dotfiles-postsetup` once.
+`setup.py` projects the manifest whenever it changes; the steps that need a
+human (the Lark CLI installer, its app config and OAuth login, nmem) are written
+to `~/.local/share/dotfiles/post-login-setup.sh` — run `dotfiles-postsetup` once.
+
+The Lark login requests only the scope allowlist in
+`home/.chezmoidata/lark.toml`; never run a bare `lark-cli auth login`, which
+grants every business domain. The app credentials stay out of this public repo:
+set `LARK_APP_ID` and `LARK_APP_SECRET` in `~/.exports.local` (or
+`LARK_OPT_OUT=1` on a machine without Lark).
 
 ```bash
 just agents                         # what the agents have, and who gets what

@@ -51,6 +51,17 @@ DEFERRED_AGENT_SETUP = pathlib.Path.home() / ".local/share/dotfiles/post-login-s
 # why nmem is here and not in agents.MCP_SERVERS: the manifest must stay committable.
 NMEM_DEFAULT_URL = "https://mem.lzhen.fun:9443"
 
+# Lark CLI wiring: brand, language and the user-token scope allowlist. The app ID
+# and secret are per-organisation and this repo is public, so they come from
+# $LARK_APP_ID / $LARK_APP_SECRET in ~/.exports.local, like nmem's token.
+LARK_DATA = REPO_DIR / "home" / ".chezmoidata" / "lark.toml"
+
+
+def _lark_settings():
+    import tomllib
+
+    return tomllib.loads(LARK_DATA.read_text())["lark"]
+
 
 # --- steps -------------------------------------------------------------------------
 
@@ -196,6 +207,8 @@ def write_deferred_setup(ctx, agent_ids):
     if ctx.dry_run:
         logger.info("[DRY-RUN] would write %s", deferred)
         return
+    lark = _lark_settings()
+    lark_scopes = " ".join(lark["scopes"])
     lines = [
         "#!/usr/bin/env bash",
         "# Interactive agent extras (written by scripts/setup.py): the Lark CLI and nmem.",
@@ -221,6 +234,55 @@ def write_deferred_setup(ctx, agent_ids):
         "else",
         r'  echo "npx missing (mise node?); skipping Lark CLI install"',
         "fi",
+        "",
+        "# --- Lark CLI app + user login (home/.chezmoidata/lark.toml) ------------------",
+        "# The app ID/secret come from ~/.exports.local; the login asks only for the",
+        "# scope allowlist — a bare `lark-cli auth login` would grant every domain.",
+        "# An existing token is never logged out here: one holding scopes beyond the",
+        "# allowlist only gets a warning, since dropping it is the user's call.",
+        f'_lark_scopes="{lark_scopes}"',
+        'if [ -n "${LARK_OPT_OUT:-}" ]; then',
+        '  echo "lark: LARK_OPT_OUT is set — skipping the Lark app config and login."',
+        "elif ! command -v lark-cli >/dev/null 2>&1; then",
+        '  echo "lark: lark-cli not on PATH; skipping the Lark app config and login"',
+        "  _keep_deferred=1",
+        "else",
+        "  # Already configured: for $LARK_APP_ID when set, else for whichever app it is.",
+        '  if lark-cli config show 2>/dev/null | grep -q "\\"appId\\": \\"${LARK_APP_ID:-cli_}"; then',
+        "    _lark_ready=1",
+        '  elif [ -z "${LARK_APP_ID:-}" ] || [ -z "${LARK_APP_SECRET:-}" ]; then',
+        '    echo "lark: LARK_APP_ID / LARK_APP_SECRET are not set — leaving lark-cli unconfigured."',
+        '    echo "lark: set both in ~/.exports.local, open a new shell and re-run: dotfiles-postsetup"',
+        '    echo "lark: on a machine that will never use Lark, export LARK_OPT_OUT=1 to silence this for good"',
+        "    _keep_deferred=1",
+        f'  elif printf "%s" "${{LARK_APP_SECRET}}" | lark-cli config init --app-id "${{LARK_APP_ID}}" \\',
+        f'      --brand {lark["brand"]} --lang {lark["lang"]} --app-secret-stdin >/dev/null; then',
+        '    echo "lark: lark-cli configured for app ${LARK_APP_ID}"',
+        "    _lark_ready=1",
+        "  else",
+        '    echo "lark: lark-cli config init failed; check LARK_APP_ID / LARK_APP_SECRET"',
+        "    _keep_deferred=1",
+        "  fi",
+        '  if [ -n "${_lark_ready:-}" ]; then',
+        '    if lark-cli auth check --scope "${_lark_scopes}" >/dev/null 2>&1; then',
+        "      # Logged in with every allowed scope; flag anything granted beyond it.",
+        '      _lark_extra="$(lark-cli auth status 2>/dev/null | ALLOWED="${_lark_scopes}" node -e \'',
+        '        let s = ""; process.stdin.on("data", d => s += d).on("end", () => {',
+        '          const allowed = new Set(process.env.ALLOWED.split(" "));',
+        '          const user = (JSON.parse(s).identities || {}).user || {};',
+        '          console.log((user.scope || "").split(" ").filter(x => x && !allowed.has(x)).length);',
+        "        });' 2>/dev/null)\"",
+        '      if [ "${_lark_extra:-0}" -gt 0 ] 2>/dev/null; then',
+        '        echo "lark: the user token holds ${_lark_extra} scopes beyond the allowlist in lark.toml;"',
+        '        echo "lark: to drop them: lark-cli auth logout, then re-run dotfiles-postsetup"',
+        "      fi",
+        "    elif ! lark-cli auth login --scope \"${_lark_scopes}\"; then",
+        '      echo "lark: auth login did not complete; re-run dotfiles-postsetup to retry"',
+        "      _keep_deferred=1",
+        "    fi",
+        "  fi",
+        "fi",
+        "unset _lark_scopes _lark_ready _lark_extra",
         "",
         "# --- nmem (hosted memory; replaces the retired local `memory` MCP server) ---",
         "# Token-gated on purpose: with no $NMEM_API_KEY there is nothing to authenticate",
@@ -274,7 +336,7 @@ def write_deferred_setup(ctx, agent_ids):
         'unset _nmem_url',
         "",
         'if [ -n "${_keep_deferred:-}" ]; then',
-        r'  echo "post-login setup: kept at ${BASH_SOURCE[0]} — rerun dotfiles-postsetup once the nmem issue above is resolved"',
+        r'  echo "post-login setup: kept at ${BASH_SOURCE[0]} — rerun dotfiles-postsetup once the lark/nmem issues above are resolved"',
         "else",
         '  rm -f "${BASH_SOURCE[0]}"',
         "fi",

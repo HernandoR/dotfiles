@@ -114,6 +114,17 @@ def check_data():
             fail(f"rime.toml: {key} must be a SHA-256 hex digest")
     ok("rime.toml: pinned Wanxiang scheme and grammar model")
 
+    lark = tomllib.loads((DATA / "lark.toml").read_text()).get("lark", {})
+    scopes = lark.get("scopes", [])
+    if not (lark.get("brand") and lark.get("lang") and scopes):
+        fail("lark.toml: needs brand, lang and a scopes list")
+    if len(set(scopes)) != len(scopes):
+        fail("lark.toml: duplicate scopes")
+    bad = [s for s in scopes if not re.fullmatch(r"[\w.]+(:[\w.]+)*", s)]
+    if bad:
+        fail(f"lark.toml: malformed scopes: {', '.join(bad)}")
+    ok(f"lark.toml: {len(scopes)} allowed user scopes")
+
 
 def check_scripts():
     print("scripts")

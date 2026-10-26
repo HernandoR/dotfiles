@@ -1,0 +1,66 @@
+# Lark CLI (lark-cli) — app wiring and the user-token scope allowlist, read by
+# scripts/setup.py into the deferred post-login script (dotfiles-postsetup).
+#
+# The app ID and secret are NOT here: this repo is public. Put them in
+# ~/.exports.local as LARK_APP_ID / LARK_APP_SECRET; LARK_OPT_OUT=1 skips the
+# whole step on a machine that never uses Lark. ~/.lark-cli itself is an
+# env-link (envlinks.toml), so the config and token survive container rebuilds.
+#
+# `scopes` is what `lark-cli auth login --scope` requests. A plain
+# `lark-cli auth login` (or `--domain`) asks for every business domain —
+# mail send, chat read/write, approvals, document sharing — so never use it.
+# Kept: docs / sheets / slides / mindnote / base read-write, wiki, whiteboard,
+# drive organisation; calendar, meetings and minutes read-only.
+# Dropped on purpose: mail, im, approval, okr, task, document-permission and
+# secure-label writes, wiki membership, deletes in drive, export/download.
+[lark]
+brand = "lark"
+lang = "zh_cn"
+scopes = [
+  "auth:user.id:read",
+  "base:app:copy", "base:app:create", "base:app:read", "base:app:update",
+  "base:appmode:create", "base:appmode:read", "base:appmode_block:create",
+  "base:appmode_block:read", "base:appmode_block:update", "base:appmode_page:create",
+  "base:appmode_page:delete", "base:appmode_page:read", "base:appmode_page:update",
+  "base:block:create", "base:block:delete", "base:block:read", "base:block:update",
+  "base:dashboard:create", "base:dashboard:delete", "base:dashboard:read",
+  "base:dashboard:update", "base:field:create", "base:field:delete", "base:field:read",
+  "base:field:update", "base:form:create", "base:form:delete", "base:form:read",
+  "base:form:update", "base:history:read", "base:record:create", "base:record:delete",
+  "base:record:read", "base:record:update", "base:role:create", "base:role:delete",
+  "base:role:read", "base:role:update", "base:table:create", "base:table:delete",
+  "base:table:read", "base:table:update", "base:template:read", "base:view:read",
+  "base:view:write_only", "base:workflow:create", "base:workflow:read",
+  "base:workflow:update", "base:workspace:create", "base:workspace:read",
+  "base:workspace:update",
+  "board:whiteboard:node:create", "board:whiteboard:node:read",
+  "calendar:calendar.event:read", "calendar:calendar.free_busy:read",
+  "calendar:calendar:read",
+  "contact:user.base:readonly", "contact:user.basic_profile:readonly",
+  "docs:document.comment:create", "docs:document.comment:delete",
+  "docs:document.comment:read", "docs:document.comment:update",
+  "docs:document.comment:write_only", "docs:document.content:read",
+  "docs:document.media:download", "docs:document.media:upload", "docs:document:copy",
+  "docs:document:import", "docs:permission.member:retrieve",
+  "docs:permission.setting:read", "docs:secure_label:readonly",
+  "docx:document", "docx:document:create", "docx:document:readonly",
+  "docx:document:write_only",
+  "drive:drive.metadata:readonly", "drive:file:upload",
+  "mindnote:node:create", "mindnote:node:read",
+  "minutes:minutes.artifacts:read", "minutes:minutes.basic:read",
+  "minutes:minutes.search:read", "minutes:minutes:readonly",
+  "offline_access",
+  "search:docs:read",
+  "sheets:spreadsheet.meta:read", "sheets:spreadsheet.meta:write_only",
+  "sheets:spreadsheet:create", "sheets:spreadsheet:read",
+  "sheets:spreadsheet:write_only",
+  "slides:presentation:create", "slides:presentation:read",
+  "slides:presentation:screenshot", "slides:presentation:update",
+  "slides:presentation:write_only",
+  "space:document:move", "space:document:retrieve", "space:document:shortcut",
+  "space:folder:create",
+  "vc:meeting.meetingevent:read", "vc:meeting.search:read", "vc:note:read",
+  "vc:record:readonly",
+  "wiki:member:retrieve", "wiki:node:copy", "wiki:node:create", "wiki:node:move",
+  "wiki:node:read", "wiki:node:retrieve", "wiki:space:read", "wiki:space:retrieve",
+]
