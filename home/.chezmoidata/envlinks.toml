@@ -84,7 +84,7 @@ seed = """
 # The bearer token is per-account, so it can only live here — never in the repo.
 # With NMEM_API_KEY unset, `dotfiles-postsetup` writes no nmem config at all; it
 # also keeps ~/.local/share/dotfiles/post-login-setup.sh around and the zsh
-# "interactive agent extras pending" reminder firing on every shell, so you can
+# "post-login setup pending" reminder firing on every shell, so you can
 # set the key later and re-run dotfiles-postsetup. NMEM_API_URL is optional:
 # leave it commented to use the default endpoint below.
 #
@@ -97,6 +97,15 @@ seed = """
 # export NMEM_API_KEY="nmem_…"
 # export NMEM_API_URL="https://mem.lzhen.fun:9443"
 # export NMEM_OPT_OUT=1
+
+# --- gh / hf (no token here) --------------------------------------------------
+# Do NOT export GH_TOKEN, GITHUB_TOKEN or HF_TOKEN here. `gh auth login` and
+# `hf auth login` (run once by `dotfiles-postsetup`, harmless to re-run) store the
+# credential in ~/.config/gh/hosts.yml and ~/.cache/huggingface/{token,stored_tokens};
+# all three are env links on the state root, so the login survives a container
+# rebuild. An exported token silently overrides that login (and HF_TOKEN is what
+# pi's provider check reads), which is why the post-login script stops and asks
+# for the export to be removed when it finds one.
 """
 
 [envlinks.entries.".path.local"]
@@ -183,6 +192,23 @@ seed_from = "mise"
 # holds the OAuth token when no keyring is available, hence 600. Only hosts.yml
 # is linked — gh's config.yml stays free for chezmoi to manage.
 [envlinks.entries.".config/gh/hosts.yml"]
+kind = "file"
+mode = "600"
+
+# hf's login state: `hf auth login` (the device flow scripts/setup.py runs in the
+# post-login script) writes the token to $HF_HOME/token and keeps the refresh /
+# named-account records in $HF_HOME/stored_tokens; HF_HOME is
+# ~/.cache/huggingface by default on every platform. Both are linked and 600, so
+# the login survives a container rebuild like gh's. The rest of HF_HOME is the
+# model/dataset cache and stays local — persisting it is a per-machine choice.
+# Only the DEFAULT location is linked: a machine that sets HF_HOME or
+# XDG_CACHE_HOME resolves these files elsewhere and needs its own entry (the
+# env says so in ~/.exports.local; see `hf auth login`).
+[envlinks.entries.".cache/huggingface/token"]
+kind = "file"
+mode = "600"
+
+[envlinks.entries.".cache/huggingface/stored_tokens"]
 kind = "file"
 mode = "600"
 

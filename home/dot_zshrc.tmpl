@@ -83,10 +83,10 @@ fi
 [ -e "$HOME/.iterm2_shell_integration.zsh" ] && source "$HOME/.iterm2_shell_integration.zsh"
 {{- end }}
 
-# One-line hint while the interactive agent extras (the Lark CLI installer)
-# are still pending — run them with `dotfiles-postsetup`.
+# One-line hint while the interactive post-login setup (gh, hf, and with agents
+# the Lark CLI) is still pending — run it with `dotfiles-postsetup`.
 if [ -f "$HOME/.local/share/dotfiles/post-login-setup.sh" ]; then
-  print -P "%F{yellow}dotfiles:%f interactive agent extras pending — run %F{cyan}dotfiles-postsetup%f"
+  print -P "%F{yellow}dotfiles:%f post-login setup pending — run %F{cyan}dotfiles-postsetup%f"
 fi
 
 # --- prompt, runtimes, direnv -------------------------------------------------------

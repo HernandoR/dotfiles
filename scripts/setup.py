@@ -196,14 +196,17 @@ def setup_agents(ctx, agent_ids):
 
 def write_deferred_setup(ctx, agent_ids):
     """Write the interactive remainder to ~/.local/share/dotfiles/post-login-setup.sh
-    instead of running it: both steps can stop and ask (an OAuth login, a
+    instead of running it: every step there can stop and ask (an OAuth login, a
     package-manager picker), which a bootstrap must never do. The user invokes it
     once via the `dotfiles-postsetup` zsh function; it self-removes on success and
-    zsh prints a one-line reminder while the file is there. No privilege."""
+    zsh prints a one-line reminder while the file is there. No privilege.
+
+    gh and hf authenticate through their own CLI, which stores the credential
+    under the state root (gh's hosts.yml and huggingface_hub's token files are
+    env links in envlinks.toml) instead of through a GH_TOKEN / HF_TOKEN export.
+    Those logins are written on every machine; the agent extras (the Lark CLI
+    and nmem) only when agents are provisioned."""
     deferred = DEFERRED_AGENT_SETUP
-    if not agent_ids:
-        logger.info("no agents selected; not writing %s", deferred)
-        return
     if ctx.dry_run:
         logger.info("[DRY-RUN] would write %s", deferred)
         return
@@ -211,10 +214,15 @@ def write_deferred_setup(ctx, agent_ids):
     lark_scopes = " ".join(lark["scopes"])
     lines = [
         "#!/usr/bin/env bash",
-        "# Interactive agent extras (written by scripts/setup.py): the Lark CLI and nmem.",
-        "# Run manually via",
-        "# the `dotfiles-postsetup` shell function (needs a TTY); self-removes on",
-        "# success. The Lark CLI needs npx (node from nvm).",
+        "# Interactive post-login setup (written by scripts/setup.py): the gh and hf",
+        "# logins, plus — when agents are provisioned — the Lark CLI and nmem. Run it",
+        "# via the `dotfiles-postsetup` shell function (needs a TTY); it self-removes",
+        "# on success. The Lark CLI needs npx (node from nvm).",
+        "#",
+        "# Credentials come from each tool's own login flow, stored on the state root",
+        "# through the env links (gh's hosts.yml, huggingface_hub's token files) — not",
+        "# from GH_TOKEN / HF_TOKEN exports. An exported token still wins over the",
+        "# login, so it is called out below and this script is kept for a re-run.",
         "#",
         "# Everything that can run unattended — marketplaces, plugins, MCP servers,",
         "# pi's declarative MCP/marketplace files and its",
@@ -225,6 +233,51 @@ def write_deferred_setup(ctx, agent_ids):
         "# works from a bare bash subshell too. mise shims cover the rest.",
         'export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" || true',
         '[ -d "$HOME/.local/share/mise/shims" ] && export PATH="$HOME/.local/share/mise/shims:$PATH"',
+        "",
+        "# --- gh: GitHub CLI login --------------------------------------------------",
+        "# `gh auth login` stores the OAuth credential in ~/.config/gh/hosts.yml (an",
+        "# env link), so it survives a container rebuild. --web is the device flow",
+        "# (prints a one-time code), and --git-protocol https matches the credential",
+        "# helper in home/private_dot_config/git/config.tmpl.",
+        "if [ -n \"${GH_TOKEN:-}${GITHUB_TOKEN:-}\" ]; then",
+        '  echo "gh: GH_TOKEN or GITHUB_TOKEN is exported — it overrides any CLI login."',
+        '  echo "gh: delete that export from ~/.exports.local, open a new shell and re-run dotfiles-postsetup"',
+        "  _keep_deferred=1",
+        "elif ! command -v gh >/dev/null 2>&1; then",
+        '  echo "gh: gh is not on PATH (it is a mise tool) — skipping the GitHub login"',
+        "elif gh auth status >/dev/null 2>&1; then",
+        '  echo "gh: already logged in"',
+        "elif gh auth login --hostname github.com --git-protocol https --web; then",
+        '  echo "gh: logged in"',
+        "else",
+        '  echo "gh: gh auth login did not complete; re-run dotfiles-postsetup to retry"',
+        "  _keep_deferred=1",
+        "fi",
+        "",
+        "# --- hf: Hugging Face CLI login --------------------------------------------",
+        "# `hf auth login` is the device flow too; it writes the token to $HF_HOME",
+        "# (~/.cache/huggingface/token, plus stored_tokens), both env links. HF_TOKEN",
+        "# is still what pi's provider check reads (scripts/agents.py) and it beats the",
+        "# login everywhere, so a leftover export is worth an explicit warning.",
+        'if [ -n "${HF_TOKEN:-}" ]; then',
+        '  echo "hf: HF_TOKEN is exported — it overrides the CLI login for every tool."',
+        '  echo "hf: delete that export from ~/.exports.local, open a new shell and re-run dotfiles-postsetup"',
+        "  _keep_deferred=1",
+        "elif ! command -v hf >/dev/null 2>&1; then",
+        '  echo "hf: hf is not on PATH (mise installs it: pipx:huggingface_hub) — skipping the Hugging Face login"',
+        "elif hf auth whoami >/dev/null 2>&1; then",
+        '  echo "hf: already logged in"',
+        "elif hf auth login; then",
+        '  echo "hf: logged in"',
+        "else",
+        '  echo "hf: hf auth login did not complete; re-run dotfiles-postsetup to retry"',
+        "  _keep_deferred=1",
+        "fi",
+        "",
+        "# The agent extras below (the Lark CLI and nmem) only run when agents were",
+        "# provisioned; scripts/setup.py bakes that decision in as this flag.",
+        f"_dotfiles_agents={'1' if agent_ids else '0'}",
+        'if [ "$_dotfiles_agents" = 1 ]; then',
         "",
         "# --- Lark CLI (needs npx / node from nvm) ----------------------------------",
         "# Its installer asks which agents to wire and drops the skills into",
@@ -335,8 +388,11 @@ def write_deferred_setup(ctx, agent_ids):
         "fi",
         'unset _nmem_url',
         "",
+        "fi",
+        'unset _dotfiles_agents',
+        "",
         'if [ -n "${_keep_deferred:-}" ]; then',
-        r'  echo "post-login setup: kept at ${BASH_SOURCE[0]} — rerun dotfiles-postsetup once the lark/nmem issues above are resolved"',
+        r'  echo "post-login setup: kept at ${BASH_SOURCE[0]} — rerun dotfiles-postsetup once the issues above are resolved"',
         "else",
         '  rm -f "${BASH_SOURCE[0]}"',
         "fi",
@@ -344,8 +400,8 @@ def write_deferred_setup(ctx, agent_ids):
     deferred.parent.mkdir(parents=True, exist_ok=True)
     deferred.write_text("\n".join(lines) + "\n")
     deferred.chmod(0o755)
-    logger.info("interactive agent extras (Lark/nmem) written -> %s (run: dotfiles-postsetup)",
-                deferred)
+    logger.info("interactive post-login setup (gh, hf%s) written -> %s (run: dotfiles-postsetup)",
+                ", Lark/nmem" if agent_ids else "", deferred)
 
 
 def run_system(ctx, spec):
@@ -392,9 +448,9 @@ def build_plan(ctx, system_spec, agent_ids):
         items.append((section, text, privileged))
 
     agents.plan_items(ctx, agent_ids, add)
-    if agent_ids:
-        add("config", f"interactive agent extras (Lark/nmem) -> {DEFERRED_AGENT_SETUP} "
-                      "(run later via dotfiles-postsetup)")
+    extras = ", Lark/nmem" if agent_ids else ""
+    add("config", f"interactive post-login setup (gh, hf{extras}) -> {DEFERRED_AGENT_SETUP} "
+                  "(run later via dotfiles-postsetup)")
 
     if system_spec:
         if ctx.priv == "none":
@@ -499,7 +555,8 @@ def main():
     if agent_ids:
         setup_runtimes(ctx)
         setup_agents(ctx, agent_ids)
-        write_deferred_setup(ctx, agent_ids)
+    # Always written: the gh and hf logins are not agent extras.
+    write_deferred_setup(ctx, agent_ids)
     if system_spec:
         run_system(ctx, system_spec)
     logger.info("setup complete.")

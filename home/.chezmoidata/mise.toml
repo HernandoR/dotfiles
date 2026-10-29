@@ -51,6 +51,12 @@ cargo-binstall = "latest"
 # nmem: the Nowledge Mem CLI (memory search/add, thread sync). PyPI only; the
 # pipx backend installs it through uv. The MCP wiring is scripts/setup.py's.
 "pipx:nmem-cli" = "latest"
+# hf: the Hugging Face CLI (huggingface_hub). PyPI only; since 2.x the `hf`
+# console script ships in the base package, so no extras are needed (verified
+# installing huggingface_hub 2.3.0 with the pipx backend, 2026-10-29). Its login
+# is scripts/setup.py's post-login step; the credential lives in
+# ~/.cache/huggingface (env links), not in an HF_TOKEN export.
+"pipx:huggingface_hub" = "latest"
 
 # --- shell and prompt ---
 starship = "latest"

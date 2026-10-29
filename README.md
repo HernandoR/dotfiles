@@ -327,8 +327,18 @@ stays in its own config, which lives on the state root through the env links.
 `~/.agents` instruction and skills roots directly, so it needs no projection.
 Codex was dropped on 2026-10-23 (ADR-0011 update log).
 `setup.py` projects the manifest whenever it changes; the steps that need a
-human (the Lark CLI installer, its app config and OAuth login, nmem) are written
-to `~/.local/share/dotfiles/post-login-setup.sh` — run `dotfiles-postsetup` once.
+human (the gh and hf logins, and with agents the Lark CLI installer, its app
+config and OAuth login, and nmem) are written to
+`~/.local/share/dotfiles/post-login-setup.sh` — run `dotfiles-postsetup` once.
+
+**Auth is a CLI login, not an exported token.** `gh` and `hf` are logged in by
+that script with their own commands (`gh auth login --web`, `hf auth login`);
+the credential then lives in `~/.config/gh/hosts.yml` and
+`~/.cache/huggingface/{token,stored_tokens}`, which are env links on the state
+root, so a container rebuild does not log you out. Do **not** export
+`GH_TOKEN` / `GITHUB_TOKEN` / `HF_TOKEN` in `~/.exports.local`: a token
+overrides the login everywhere, `HF_TOKEN` is also what pi's provider check
+reads (ADR-0012), and `dotfiles-postsetup` stops and says so when it finds one.
 
 The Lark login requests only the scope allowlist in
 `home/.chezmoidata/lark.toml`; never run a bare `lark-cli auth login`, which

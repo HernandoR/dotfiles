@@ -168,8 +168,9 @@ function tre() {
 	tree -aC -I '.git|node_modules|bower_components' --dirsfirst "$@" | less -FRNX;
 }
 
-# Run the interactive agent extras written by scripts/setup.py — the Lark CLI
-# installer needs a TTY, so it is NOT run automatically;
+# Run the interactive post-login setup written by scripts/setup.py — the gh and
+# hf logins and, with agents, the Lark CLI installer. All of them need a TTY, so
+# they are NOT run automatically;
 # invoke this once when you are ready to authorize. Everything unattended
 # (marketplaces, plugins, MCP servers, the shared memory store, pi's declarative
 # files and settings preset) is already applied by the bootstrap itself
