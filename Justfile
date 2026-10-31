@@ -78,6 +78,12 @@ setup *ARGS:
 agents:
     uv run --script scripts/agents.py
 
+# The DSH restore step (ADR-0014): the macOS desktop app's profile, plugins and
+# the machine-wide home patch, generated from .chezmoidata/dsh.toml.
+# `just dsh --plan` lists the changes; `--print-patch` shows the generated patch.
+dsh *ARGS:
+    uv run --script scripts/dsh.py {{ ARGS }}
+
 # Pull the repo, re-apply, upgrade the three self-installed tools, move mise
 # tools within their ranges.
 update:

@@ -9,3 +9,4 @@
 | [RFC-0005](rfc-0005-third-slot-agent-back-to-upstream-pi-2026-08-28.md) | The third slot returns to upstream pi — ecosystem interoperability over a fork's feature surface | Resolved | 2026-08-28 | [ADR-0012](../plans/adr-0012-third-slot-upstream-pi-2026-08-28.md) |
 | [RFC-0006](rfc-0006-chezmoi-zoi-mise-uv-2026-09-09.md) | Leave Nix + Home Manager for chezmoi + zoi + mise + `uv run` scripts | Resolved | 2026-09-09 | [ADR-0013](../plans/adr-0013-chezmoi-mise-nvm-uv-2026-09-09.md) |
 | [RFC-0007](rfc-0007-chezmoi-one-liner-entry-point-2026-09-10.md) | Make chezmoi's own one-liner a supported second entry point | Resolved | 2026-09-10 | [ADR-0013](../plans/adr-0013-chezmoi-mise-nvm-uv-2026-09-09.md) (updated) |
+| [RFC-0008](rfc-0008-dsh-practice-restore-2026-10-26.md) | Restore the owner's DeepSeek Harness practice — cask app, bundle CLI link, generated home patch | Resolved | 2026-10-26 | [ADR-0014](../plans/adr-0014-dsh-practice-restore-2026-10-26.md) |

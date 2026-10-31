@@ -1,0 +1,155 @@
+# DSH (DeepSeek Harness) restore data — ADR-0014.
+#
+# DSH is the owner's agent harness, installed as the official `deepseek-harness`
+# cask (packages.toml) and macOS-only on purpose. The app OWNS $DSH_HOME at
+# runtime: it rewrites profiles/<name>/cordis.yml on every boot and pnpm owns the
+# profile's node_modules/pnpm-lock.yaml. So nothing under $DSH_HOME is a chezmoi
+# source entry (ADR-0013's ownership rule, restated in ADR-0014). This file is
+# the reviewed inventory `scripts/dsh.py` restores instead; change the values
+# here, never the generated files.
+#
+# What is restored, and only what is "capability" rather than an app-owned
+# preference:
+#   - the profile seed (bundle order, exact plugin versions, workspace settings);
+#   - the home patch  $DSH_HOME/cordis.patch.yml  (composed AFTER every profile
+#     patch, machine-wide — the app never writes it);
+#   - the MCP server that has no bundle of its own (an `insert:` row);
+#   - the machine-local secrets, into $DSH_HOME/.env (0600), referenced from the
+#     patch through `!!js process.env.<NAME>` so no token is ever in the repo.
+#
+# DELIBERATELY NOT restored: the app-owned UI preferences `ui-chat`,
+# `ui-settings`, `ui-settings-account` and `better-sidebar` stay in the app's
+# Settings and in the profile's own cordis.patch.yml. They are per-app state, not
+# machine capability, and copying them here would drag every Settings toggle
+# into the repo. Likewise `$DSH_HOME/.credentials.yaml` and the token VALUE are
+# never copied.
+
+[dsh]
+app = "/Applications/DeepSeek Harness.app"
+# The CLI is a launcher INSIDE the bundle; ~/.local/bin/dsh is the env link to it
+# (envlinks.toml). Relative to `app` so the inventory has one absolute path.
+cli = "Contents/Resources/runtime/cli/bin/dsh"
+
+# Machine-local secrets (ADR-0011's rule for NMEM_API_KEY): the value can only
+# come from ~/.exports.local, so scripts/dsh.py copies it from the process
+# environment into $DSH_HOME/.env (0600). The generated patch carries the
+# `process.env.<NAME>` reference only — never a bearer value.
+[[dsh.secrets]]
+name = "NMEM_API_KEY"
+why = "nowledge-mem MCP bearer token; never in the repo"
+[[dsh.secrets]]
+name = "OPENCODE_API_KEY"
+why = "opencode provider key referenced by llm-pi-ai apiKeyEnv"
+
+# --- the profile seed -------------------------------------------------------
+# `name` is the directory under $DSH_HOME/profiles; `package` is package.json's
+# npm name. scripts/dsh.py creates the profile when it is missing (otherwise
+# `dsh plugin --profile <name> install` refuses on a fresh machine) and merges
+# ADD-ONLY into an existing one: unknown fields and existing dependencies
+# survive, the declared versions below are reconciled to these exact values, the
+# app's bundle order is kept, and missing bundles are appended in this order.
+[dsh.profile]
+name = "desktop"
+package = "dsh-profile-desktop"
+bundles = [
+  "@deepseek-ai/dsh-base",
+  "@deepseek-ai/dsh-web-app",
+  "@deepseek-ai/dsh-experimental-agent-team-profile",
+  "@deepseek-ai/dsh-experimental-auto-review",
+  "dsh-better-sidebar",
+  "dshmarket",
+  "@changfenhuang/dsh-genui",
+  "dsh-context",
+  "@linxin666/dsh-remote-web-ui",
+  "@wxg-prc-cpg/browser-skill-dsh-plugin",
+  "@deepseek-ai/dsh-experimental-tool-worktree",
+  "@deepseek-ai/dsh-experimental-ralph-bundle",
+  "@deepseek-ai/dsh-experimental-session-titles-bundle",
+]
+
+# Exact npm versions for every bundle that is an npm package. The rest are the
+# app's built-in bundles and have no version to pin.
+[dsh.profile.plugins]
+"@changfenhuang/dsh-genui" = "0.14.0"
+"@linxin666/dsh-remote-web-ui" = "0.4.8"
+"@wxg-prc-cpg/browser-skill-dsh-plugin" = "0.3.3"
+"dsh-better-sidebar" = "0.28.0"
+"dsh-context" = "0.75.1"
+"dshmarket" = "1.70.2"
+
+# profiles/desktop/pnpm-workspace.yaml — seeded ONLY when missing; after that
+# pnpm and the app own it (`dsh plugin add` rewrites it). The values are the
+# upstream defaults the built-in bundles need plus the one allowBuilds carve-out
+# the profiler chose and the minimumReleaseAge exception dsh-context needs.
+[dsh.profile.workspace]
+packages = ["."]
+nodeLinker = "hoisted"
+autoInstallPeers = false
+minimumReleaseAgeExclude = ["dsh-context@0.75.1"]
+
+[dsh.profile.workspace.allowBuilds]
+"@deepseek-ai/dsh-subprocess-local@0.2.0-rc.2" = true
+"@google/genai@2.21.0" = true
+"koffi@3.1.1" = true
+"node-pty@1.2.0-beta.15" = true
+"protobufjs@7.6.6" = true
+"cloudflared" = true
+
+# --- the home patch: capability, not app-owned preference --------------------
+# Each row is a loader patch entry (id-targeted config override) rendered into
+# $DSH_HOME/cordis.patch.yml. `render_patch()` in scripts/dsh.py turns these into
+# the YAML the app composes after every profile patch.
+[[dsh.patch]]
+id = "agent-default-model"
+name = "@deepseek-ai/dsh-agent-default-model"
+[dsh.patch.config]
+provider = "opencode"
+model = "deepseek-v4.1-flash"
+reasoningEffort = "high"
+
+[[dsh.patch]]
+id = "llm-pi-ai"
+name = "@deepseek-ai/dsh-llm-pi-ai"
+[dsh.patch.config.providers.opencode]
+apiKeyEnv = "OPENCODE_API_KEY"
+
+[[dsh.patch]]
+id = "subagent-model-selection-settings"
+name = "@deepseek-ai/dsh-tool-subagent/model-selection-settings"
+[dsh.patch.config]
+enabled = true
+allowedModels = [
+  { provider = "deepseek-account", model = "deepseek-flash" },
+  { provider = "deepseek-official", model = "deepseek-flash" },
+  { provider = "opencode", model = "claude-haiku-5-5" },
+  { provider = "opencode", model = "qwen3.8-flash" },
+  { provider = "opencode", model = "deepseek-v4.1-flash" },
+  { provider = "opencode", model = "glm-5.3-flash" },
+  { provider = "opencode", model = "kimi-k3" },
+]
+
+[[dsh.patch]]
+id = "web"
+name = "@deepseek-ai/dsh-web"
+[dsh.patch.config]
+searchProvider = "deepseek-search-api"
+fetchProvider = "deepseek-fetch-api"
+
+# --- MCP servers that ship no bundle ---------------------------------------
+# A bare patch row with a new id is skipped by the loader, so the server joins
+# the composed tree through a real `insert:` list at the root (rendered by
+# scripts/dsh.py). A server whose `tokenEnv` is known in neither the process
+# environment nor $DSH_HOME/.env is omitted with a warning — never `Bearer None`.
+[[dsh.mcp]]
+id = "nowledge-mem-mcp"
+serverName = "nowledge_mem"
+transport = "streamable-http"
+url = "https://mem.lzhen.fun:9443/mcp"
+tokenEnv = "NMEM_API_KEY"
+failOnStartupError = false
+toolCallTimeoutMs = 60000
+
+[dsh.mcp.headers]
+APP = "DeepSeek Harness"
+"X-Nmem-Tool-Set" = "external-agent"
+"X-Nowledge-Tool-Schema-Profile" = "slim"

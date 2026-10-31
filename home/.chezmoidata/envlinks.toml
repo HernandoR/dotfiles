@@ -13,6 +13,8 @@
 #   1. Say WHY it is mutable — the "why" keeps the inventory auditable.
 #   2. `envs` restricts an entry to named environments (the old prod/* deltas);
 #      omit it for every environment.
+#   3. `only = "darwin" | "linux"` restricts an entry to one OS family — for a
+#      target that only exists there (an app-bundle path). Omit it otherwise.
 
 # --- agents (ADR-0011: all three rewrite their own config at runtime) ---------
 
@@ -249,3 +251,10 @@ envs = ["mewtant"]
 [envlinks.links.".local/bin/jcc"]
 target = "/fsx/hernando/local/bin/jcc"
 envs = ["mewtant"]
+
+# DSH's CLI is a launcher INSIDE the desktop app bundle (ADR-0014), so the target
+# only exists where the cask is installed — macOS. `only` keeps a headless Linux
+# host from getting a link that could only dangle.
+[envlinks.links.".local/bin/dsh"]
+target = "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh"
+only = "darwin"

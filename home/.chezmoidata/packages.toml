@@ -116,3 +116,21 @@ dnf = ""
 mise = ""
 cask = true
 probe_darwin = ["/Library/Input Methods/Squirrel.app"]
+
+# DeepSeek Harness (DSH), the owner's agent harness, as the official
+# homebrew/cask GUI app. macOS only on purpose: the cask is an arm64 bundle that
+# self-updates (`auto_updates=true`, so brew never chases it), and Linux hosts
+# are headless — there is no desktop app to install there, and the CLI is not a
+# registry package (it lives inside the bundle). The cask's `zap` trashes
+# ~/.dsh, so never `brew uninstall --zap` it. Probe the bundle, not `bin`: the
+# CLI is a symlink INTO it (~/.local/bin/dsh, envlinks.toml), placed by ADR-0014.
+[[packages]]
+name = "deepseek-harness"
+bin = "dsh"
+brew = "deepseek-harness"
+apt = ""
+dnf = ""
+mise = ""
+cask = true
+only = "darwin"
+probe_darwin = ["/Applications/DeepSeek Harness.app"]

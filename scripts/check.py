@@ -6,7 +6,8 @@
 
 There is no test framework; this is what stands in for one:
 
-  1. the four data files parse and every entry has what the scripts need;
+  1. the inventories parse and every entry has what the scripts need, and the
+     DSH home patch renders without a secret in it;
   2. every script compiles and answers --help;
   3. chezmoi renders the whole source tree into a scratch $HOME (no scripts, no
      externals, no network) with each known environment's data, and the results
@@ -15,6 +16,7 @@ There is no test framework; this is what stands in for one:
 
 Exit status is non-zero on the first failure. Needs `chezmoi` and `zsh` on PATH.
 """
+import importlib.util
 import os
 import pathlib
 import py_compile
@@ -70,9 +72,13 @@ def check_data():
             fail(f"envlinks.{name}: seed on a dir entry")
         if e.get("target", "").startswith("/"):
             fail(f"envlinks.{name}: target must be relative to the state root")
+        if e.get("only") not in (None, "linux", "darwin"):
+            fail(f"envlinks.{name}: only must be linux|darwin")
     for name, l in env.get("links", {}).items():
         if not l.get("target", "").startswith("/"):
             fail(f"envlinks.links.{name}: target must be absolute")
+        if l.get("only") not in (None, "linux", "darwin"):
+            fail(f"envlinks.links.{name}: only must be linux|darwin")
     ok(f"envlinks.toml: {len(env.get('entries', {}))} entries, {len(env.get('links', {}))} plain links")
 
     mise = tomllib.loads((DATA / "mise.toml").read_text())["mise"]
@@ -113,6 +119,66 @@ def check_data():
         if rime.get(key) and not re.fullmatch(r"[0-9a-f]{64}", rime[key]):
             fail(f"rime.toml: {key} must be a SHA-256 hex digest")
     ok("rime.toml: pinned Wanxiang scheme and grammar model")
+
+    dsh = tomllib.loads((DATA / "dsh.toml").read_text()).get("dsh", {})
+    if not str(dsh.get("app", "")).startswith("/"):
+        fail("dsh.toml: dsh.app must be the absolute app bundle path")
+    if not dsh.get("cli") or str(dsh["cli"]).startswith("/"):
+        fail("dsh.toml: dsh.cli must be relative to dsh.app (the CLI lives inside the bundle)")
+    dsh_profile = dsh.get("profile", {})
+    for key in ("name", "package"):
+        if not dsh_profile.get(key):
+            fail(f"dsh.toml: dsh.profile.{key} is required")
+    bundles = dsh_profile.get("bundles", [])
+    if not bundles or len(set(bundles)) != len(bundles):
+        fail("dsh.toml: dsh.profile.bundles must be a non-empty, duplicate-free ordered list")
+    for plugin, version in dsh_profile.get("plugins", {}).items():
+        if not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", str(version)):
+            fail(f"dsh.toml: plugin {plugin!r} must pin an exact version, got {version!r}")
+    for secret in dsh.get("secrets", []):
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", str(secret.get("name", ""))):
+            fail(f"dsh.toml: secret name {secret.get('name')!r} is not an env var name")
+    patch_ids = [row.get("id") for row in dsh.get("patch", [])]
+    if len(set(patch_ids)) != len(patch_ids):
+        fail("dsh.toml: duplicate dsh.patch ids")
+    for row in dsh.get("patch", []):
+        if not row.get("id") or not row.get("name"):
+            fail(f"dsh.toml: every dsh.patch row needs an id and a name, got {row!r}")
+    for server in dsh.get("mcp", []):
+        if not server.get("id") or not server.get("serverName") or not server.get("transport"):
+            fail(f"dsh.toml: every dsh.mcp row needs id, serverName and transport, got {server!r}")
+    ok(f"dsh.toml: {len(bundles)} bundles, {len(dsh_profile.get('plugins', {}))} pinned plugins, "
+       f"{len(dsh.get('patch', []))} patch rows, {len(dsh.get('mcp', []))} MCP server(s)")
+
+
+def check_dsh_patch():
+    print("dsh home patch")
+    data = tomllib.loads((DATA / "dsh.toml").read_text())["dsh"]
+    spec = importlib.util.spec_from_file_location("dotfiles_dsh", SCRIPTS / "dsh.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    token_env = next((server["tokenEnv"] for server in data.get("mcp", []) if server.get("tokenEnv")), None)
+    if token_env is None:
+        fail("dsh.toml: no token-gated MCP server to exercise")
+        return
+    known = module.render_patch(data, {token_env})
+    unknown = module.render_patch(data, set())
+    if re.search(r"nmem_[A-Za-z0-9_-]{8,}", known):
+        fail("dsh home patch: a bearer value leaked into the rendered patch")
+    if f"process.env.{token_env}" not in known:
+        fail("dsh home patch: the token-gated server does not read the environment")
+    if "nowledge_mem" not in known:
+        fail("dsh home patch: the token-gated server is missing when the token is known")
+    if "nowledge_mem" in unknown:
+        fail("dsh home patch: the token-gated server is emitted without a token (Bearer None)")
+    if "{{" in known:
+        fail("dsh home patch: unrendered template syntax")
+    # The app's patch parser rejects a bare tag scalar followed by `+ …`; the whole
+    # JS expression must be ONE single-quoted scalar (verified against the app).
+    if f"""!!js '"Bearer " + process.env.{token_env}'""" not in known:
+        fail("dsh home patch: the token expression must be one single-quoted !!js scalar")
+    ok(f"dsh home patch: {len(data.get('patch', []))} rows + {len(data.get('mcp', []))} MCP insert; "
+       "token referenced but never embedded, and omitted without it")
 
     lark = tomllib.loads((DATA / "lark.toml").read_text()).get("lark", {})
     scopes = lark.get("scopes", [])
@@ -245,6 +311,7 @@ def main():
         print(__doc__.strip())
         return
     check_data()
+    check_dsh_patch()
     check_scripts()
     check_bootstrap_contract()
     check_render()
